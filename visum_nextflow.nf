@@ -22,7 +22,7 @@ process kraken_cell_filtering {
 
     script:
     """
-    echo "${fasta}   ${sampleID}" > "${sampleID}.out"
+    echo "${fasta}   ${sampleID}" #> "${sampleID}.out"
     """
 }
 
