@@ -24,10 +24,7 @@ process NORMALIZE_FASTA {
     tuple val(prefix), val(type), path(fasta)
 
   output:
-    tuple val(prefix),
-          val(type),
-          path("${prefix}.normalized.fasta"),
-          path("${prefix}.header_map.tsv")
+    tuple val(prefix), val(type), path("${prefix}.normalized.fasta"), path("${prefix}.header_map.tsv")
 
   script:
   """
@@ -160,22 +157,70 @@ process RUN_GENOMAD {
     path genomad_db
 
   output:
-    tuple val(prefix), path("${prefix}.genomad.evidence.tsv")
-    path("${prefix}.genomad.review")
+    tuple val(prefix),
+          val(type),
+          path(norm_fasta),
+          path(header_map),
+          path(proteins_faa),
+          path("${prefix}.genomad.review"),
+          path("${prefix}.genomad_virus_summary.tsv"),
+          path("${prefix}.genomad_plasmid_summary.tsv")
 
   script:
   """
-  mkdir -p ${prefix}.genomad.review
-
-  # Example invocation (you’ll fill in your real options)
-  # genomad end-to-end --cleanup --threads ${params.threads} ${norm_fasta} ${prefix}.genomad.review ${genomad_db}
-
-  # Placeholder evidence file for now
-  echo -e "contig\\ttool\\tscore" > ${prefix}.genomad.evidence.tsv
+  set -euo pipefail
+  base="${norm_fasta.baseName}"
+  outdir="${prefix}.genomad.review"
+  genomad end-to-end --cleanup --threads ${params.threads} ${norm_fasta} "\$outdir" ${genomad_db}
+  summary_dir="\$outdir/\${base}_summary"
+  virus_src="\$summary_dir/\${base}_virus_summary.tsv"
+  plasmid_src="\$summary_dir/\${base}_plasmid_summary.tsv"
+  # Fail early with a helpful message if outputs aren't where we expect.
+  test -s "\$virus_src"   || { echo "[ERROR] Missing virus summary: \$virus_src" >&2; ls -R "\$outdir" >&2; exit 1; }
+  test -s "\$plasmid_src" || { echo "[ERROR] Missing plasmid summary: \$plasmid_src" >&2; ls -R "\$outdir" >&2; exit 1; }
+  # Copy into stable filenames so Nextflow outputs are simple/robust
+  cp "\$virus_src"   ${prefix}.genomad_virus_summary.tsv
+  cp "\$plasmid_src" ${prefix}.genomad_plasmid_summary.tsv
   """
 }
 
+process PROCESS_GENOMAD {
 
+  tag "$prefix"
+
+  conda 'bioconda::python=3.11 pandas'
+
+  publishDir { "${params.outdir}/${prefix}/genomad" }, mode: 'copy'
+
+  input:
+    tuple val(prefix),
+          val(type),
+          path(norm_fasta),
+          path(header_map),
+          path(proteins_faa),
+          path(genomad_review),
+          path(virus_summary),
+          path(plasmid_summary)
+    path ictv_csv
+
+  output:
+    tuple val(prefix),
+          val(type),
+          path(norm_fasta),
+          path(header_map),
+          path(proteins_faa),
+          path(genomad_review),
+          path(virus_summary),
+          path(plasmid_summary),
+          path("${prefix}.genomad.vsum.csv")
+
+  script:
+  """
+  set -euo pipefail
+
+  python3 ${projectDir}/fixgenomadv0.1.py --genomad ${virus_summary} --ictv ${ictv_csv} --out ${prefix}.genomad.vsum.csv --threads ${params.threads} --fallback taxonkit
+  """
+}
 
 
 workflow {
@@ -298,6 +343,18 @@ if( GENOMAD_DB_PATH.exists() ) {
 ch_orf.view { p, t, nf, map, faa ->
   "ORF    sample=${p}\ttype=${t}\tfaa=${faa.name}\tnorm_fasta=${nf.name}"
 }
+
+def branched = ch_orf.branch(
+  dna: { p, t, nf, hm, faa -> t == 'dna' },
+  rna: { p, t, nf, hm, faa -> t == 'rna' }
+)
+
+  ch_genomadraw = RUN_GENOMAD(ch_orf, ch_genomad_db)
+
+ch_genomad.view { p,t,nf,hm,faa,review,vs,ps ->
+  "GENOMAD sample=${p}\tvirus_summary=${vs.name}\tplasmid_summary=${ps.name}"
+}
+
 
 
 
