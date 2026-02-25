@@ -125,6 +125,25 @@ process ORF_PREDICTION {
   """
 }
 
+process CHECKV_DB {
+
+  tag "checkv_db"
+
+  conda 'bioconda::checkv'
+
+  publishDir { "${params.dbdir}/checkv" }, mode: 'copy'
+
+  output:
+    path("checkv_db")
+
+  script:
+  """
+  set -euo pipefail
+  mkdir -p checkv_db
+  checkv download_database checkv_db
+  """
+}
+
 process GENOMAD_DB {
 
   tag "genomad_db"
@@ -141,6 +160,39 @@ process GENOMAD_DB {
   """
   mkdir -p genomad_db
   genomad download-database genomad_db
+  """
+}
+
+process RUN_CHECKV {
+
+  tag "$prefix"
+
+  conda 'bioconda::checkv'
+
+  publishDir { "${params.outdir}/${prefix}/checkv" }, mode: 'copy'
+
+  input:
+    tuple val(prefix), val(type), path(norm_fasta), path(header_map), path(proteins_faa)
+    path checkv_db
+
+  output:
+    tuple val(prefix), val("checkv"), path("${prefix}.checkv_quality_summary.tsv")
+
+  script:
+  """
+  set -euo pipefail
+
+  outdir="${prefix}.checkv.review"
+  mkdir -p "\$outdir"
+
+  checkv end_to_end ${norm_fasta} "\$outdir" -t ${params.threads} -d ${checkv_db}
+
+  # If checkv produced the summary, copy it to stable name; else create header-only
+  if [ -f "\$outdir/quality_summary.tsv" ]; then
+    cp "\$outdir/quality_summary.tsv" ${prefix}.checkv_quality_summary.tsv
+  else
+    echo -e "contig_id\\tcheckv_quality\\tcompleteness\\tcontamination\\tmethod\\twarnings" > ${prefix}.checkv_quality_summary.tsv
+  fi
   """
 }
 
@@ -204,21 +256,17 @@ process PROCESS_GENOMAD {
     path ictv_csv
 
   output:
-    tuple val(prefix),
-          val(type),
-          path(norm_fasta),
-          path(header_map),
-          path(proteins_faa),
-          path(genomad_review),
-          path(virus_summary),
-          path(plasmid_summary),
-          path("${prefix}.genomad.vsum.csv")
+    tuple val(prefix), val("genomad"), path("${prefix}.genomad.vsum.csv")
 
   script:
   """
   set -euo pipefail
 
-  python3 ${projectDir}/fixgenomadv0.1.py --genomad ${virus_summary} --ictv ${ictv_csv} --out ${prefix}.genomad.vsum.csv --threads ${params.threads} --fallback taxonkit
+  python3 ${projectDir}/bin/fixgenomadv0.2.py --genomad ${virus_summary} --ictv ${params.ictv_csv} --out ${prefix}.genomad.vsum.csv --fallback ictv
+
+  if [ ! -s ${prefix}.genomad.vsum.csv ]; then
+    echo "seqid,d__Domain,r__Realm,k__Kingdom,p__Phylum,c__Class,o__Order,f__Family,g__Genus,s__Species" > ${prefix}.genomad.vsum.csv
+  fi
   """
 }
 
@@ -315,7 +363,21 @@ workflow {
   */
   ch_samples.view { p, t, f -> "SAMPLE=${p}\tTYPE=${t}\tFASTA=${f}" }
 
-// stable final location you want to use in all runs
+// CHECKV DB
+if( !file(params.ictv_csv).exists() )
+    error "ICTV CSV not found: ${params.ictv_csv}"
+
+def CHECKV_DB_PATH = file("${params.dbdir}/checkv/checkv_db")
+
+Channel ch_checkv_db
+
+if( CHECKV_DB_PATH.exists() ) {
+  ch_checkv_db = Channel.value(CHECKV_DB_PATH)
+} else {
+  ch_checkv_db = CHECKV_DB().map { it -> CHECKV_DB_PATH }
+}
+
+// GENOMAD DB
 def GENOMAD_DB_PATH = file("${params.dbdir}/genomad/genomad_db")
 
 Channel ch_genomad_db
@@ -349,13 +411,51 @@ def branched = ch_orf.branch(
   rna: { p, t, nf, hm, faa -> t == 'rna' }
 )
 
-  ch_genomadraw = RUN_GENOMAD(ch_orf, ch_genomad_db)
+ch_checkv_ev = RUN_CHECKV(ch_orf, ch_checkv_db)
 
-ch_genomad.view { p,t,nf,hm,faa,review,vs,ps ->
+ch_genomad_raw = RUN_GENOMAD(ch_orf, ch_genomad_db)
+
+ch_genomad_raw.view { p,t,nf,hm,faa,review,vs,ps ->
   "GENOMAD sample=${p}\tvirus_summary=${vs.name}\tplasmid_summary=${ps.name}"
 }
 
+ch_genomad_ev = PROCESS_GENOMAD(ch_genomad_raw, ictv_csv_ch)
 
 
+
+// BELOW IS THE TEMPLATE TO MERGE EVIDENCE FROM ALL PROGRAMS RAN ON FASTA FILE
+
+// core tuple from ORF stage: (prefix, type, norm_fasta, header_map, proteins_faa)
+ch_core = ch_orf.map { p, t, nf, hm, faa -> tuple(p, t, nf, hm, faa) }
+
+// gather all evidence records (prefix, tool, file)
+ch_all_evidence = ch_genomad_ev
+  // .mix(ch_checkv_ev)
+  // .mix(ch_virsorter_ev)
+  // .mix(ch_diamond_ev)
+  .groupTuple(by: 0)
+
+ch_all_evidence.view { prefix, tools, files ->
+  "EVIDENCE prefix=${prefix}\ttools=${tools}\tfiles=${files.collect{ it.name }}"
+}
+
+// convert grouped evidence lists -> map
+ch_ev_map = ch_all_evidence.map { prefix, tools, files ->
+  def m = [:]
+  tools.eachWithIndex { t, i -> m[t] = files[i] }
+  tuple(prefix, m)
+}
+
+ch_ev_map.view { prefix, m ->
+  "EV_MAP  prefix=${prefix}\tkeys=${m.keySet().sort()}"
+}
+
+// join core + evidence map -> viSUM inputs
+ch_vsum_in = ch_core.join(ch_ev_map)
+  .map { core, ev ->
+    def (p, t, nf, hm, faa) = core
+    def (_, m) = ev
+    tuple(p, t, nf, hm, faa, m)
+  }
 
 }
