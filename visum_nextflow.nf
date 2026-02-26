@@ -144,6 +144,25 @@ process CHECKV_DB {
   """
 }
 
+process DEEP6_DB {
+
+  tag "deep6_db"
+
+  // git is needed to clone; python not strictly needed here
+  conda 'conda-forge::git'
+
+  publishDir { "${params.dbdir}/deep6" }, mode: 'copy'
+
+  output:
+    path("Deep6")
+
+  script:
+  """
+  set -euo pipefail
+  git clone --depth 1 https://github.com/janfelix/Deep6.git Deep6
+  """
+}
+
 process GENOMAD_DB {
 
   tag "genomad_db"
@@ -196,6 +215,104 @@ process RUN_CHECKV {
   """
 }
 
+process RUN_DEEP6 {
+
+  tag "$prefix"
+
+  /*
+    Deep6 README lists deps like numpy/pandas/h5py/biopython/scipy/keras/tensorflow/scikit-learn. :contentReference[oaicite:3]{index=3}
+    You may want to pin versions later once you test on your system.
+  */
+  conda 'conda-forge::python=3.10 conda-forge::numpy conda-forge::pandas conda-forge::h5py conda-forge::biopython conda-forge::scipy conda-forge::scikit-learn conda-forge::tensorflow conda-forge::keras'
+
+  publishDir { "${params.outdir}/${prefix}/deep6" }, mode: 'copy'
+
+  input:
+    tuple val(prefix), val(type), path(norm_fasta), path(header_map), path(proteins_faa)
+    path deep6_db
+
+  output:
+    tuple val(prefix), val("deep6"), path("${prefix}.${params.deep6_minlen}bp_deep6_evidence.csv")
+
+  when:
+    type == 'rna'
+
+  script:
+  """
+  set -euo pipefail
+
+  # -------- model dir (user override or default to repo Models/) ----------
+  MODEL_DIR="${params.deep6_model}"
+  if [ -z "${MODEL_DIR}" ] || [ "${MODEL_DIR}" = "null" ]; then
+    MODEL_DIR="${deep6_db}/Models"
+  fi
+
+  outdir="${prefix}.deep6.review"
+  mkdir -p "$outdir"
+
+  # -------- run deep6 ----------
+  python3 ${deep6_db}/Master/deep6.py -i ${norm_fasta} -l ${params.deep6_minlen} -m "$MODEL_DIR" -o "$outdir"
+
+# -------- locate prediction output ----------
+  pred_file=$(ls "$outdir"/*_predict_${params.deep6_minlen}bp_deep6.txt 2>/dev/null || true)
+
+  RAW_TSV="${prefix}.${params.deep6_minlen}bp_deep6_scores_raw.tsv"
+  RAW_CSV="${prefix}.${params.deep6_minlen}bp_deep6_scores_raw.csv"
+  CLEAN_CSV="${prefix}.${params.deep6_minlen}bp_deep6_scores_clean.csv"
+  EVID="${prefix}.${params.deep6_minlen}bp_deep6_evidence.csv"
+  CONF="${prefix}.${params.deep6_minlen}bp_deep6_confident_predictions.csv"
+
+  # Always create evidence header (so Nextflow output exists)
+  echo "seqid,d__Domain,r__Realm,k__Kingdom,p__Phylum,c__Class,o__Order,f__Family,g__Genus,s__Species" > "$EVID"
+
+  # If deep6 produced predictions, copy them; else create header-only raw.tsv
+  if [ -n "$pred_file" ] && [ -s "$pred_file" ]; then
+    cp "$pred_file" "$RAW_TSV"
+  else
+    # Deep6 standard header per repo output: name length duplo euk mono pro ribo vari
+    printf "name\tlength\tduplo\teuk\tmono\tpro\tribo\tvari\n" > "$RAW_TSV"
+  fi
+
+  # Convert tsv -> csv (overwrite, don't append)
+  sed 's/\t/,/g' "$RAW_TSV" > "$RAW_CSV"
+
+  # If RAW_CSV has more than header, run your scoring/cleaning
+  # (NR>1 means at least 1 data row)
+  if awk 'NR>1{exit 0} END{exit 1}' "$RAW_CSV"; then
+    python3 ${projectDir}/bin/deep6_compare_all_vs_allv0.1.py "$RAW_CSV" "${prefix}_deep6_sanity_check.csv" "$CLEAN_CSV"
+    # Build confident predictions + evidence
+    # Assumes CLEAN_CSV format: seqid,length,score,realm,flag (as you described)
+    echo "seqid,length,score,realm,flag" > "$CONF"
+    # pull unique seqids (skip header)
+    awk -F "," 'NR>1{print $1}' "$CLEAN_CSV" | sort -u > sample.list
+    while read -r x; do
+      top=$(grep -w "$x" "$CLEAN_CSV" | awk -F "," '{print $3}' | head -n 1)
+      # guard if missing
+      if [ -z "$top" ]; then
+        continue
+      fi
+      # if top > 0.7 keep it
+      if (( $(echo "$top > 0.7" | bc -l) )); then
+        grep -w "$x" "$CLEAN_CSV" >> "$CONF"
+        # realm is column 4
+        realm=$(grep -w "$x" "$CLEAN_CSV" | awk -F "," '{print $4}' | head -n 1)
+        # Map realm -> taxonomy line using your mapping file
+        # deep6lines.txt should include entries like: ribo;d__Viruses,r__Riboviria,k__unclassified,...
+        line=$(grep -w "^${realm};" ${projectDir}/bin/deep6lines.txt | awk -F ";" '{print $2}' | head -n 1)
+        # if mapping missing, default to viruses/unclassified
+        if [ -z "$line" ]; then
+          line="d__Viruses,r__unclassified,k__unclassified,p__unclassified,c__unclassified,o__unclassified,f__unclassified,g__unclassified,s__unclassified"
+        fi
+        echo "${x},${line}" >> "$EVID"
+      fi
+    done < sample.list
+  else
+    # no data rows -> evidence stays header-only
+    :
+  fi
+  """
+}
+
 process RUN_GENOMAD {
 
   tag "$prefix"
@@ -236,7 +353,7 @@ process RUN_GENOMAD {
   """
 }
 
-process PROCESS_GENOMAD {
+process GENOMAD_PROCESSING {
 
   tag "$prefix"
 
@@ -377,6 +494,17 @@ if( CHECKV_DB_PATH.exists() ) {
   ch_checkv_db = CHECKV_DB().map { it -> CHECKV_DB_PATH }
 }
 
+//DEEP6 DB / SETUP
+def DEEP6_DB_PATH = file(params.deep6_dir)
+
+Channel ch_deep6_db
+
+if( DEEP6_DB_PATH.exists() ) {
+  ch_deep6_db = Channel.value(DEEP6_DB_PATH)
+} else {
+  ch_deep6_db = DEEP6_DB().map { it -> DEEP6_DB_PATH }
+}
+
 // GENOMAD DB
 def GENOMAD_DB_PATH = file("${params.dbdir}/genomad/genomad_db")
 
@@ -411,17 +539,18 @@ def branched = ch_orf.branch(
   rna: { p, t, nf, hm, faa -> t == 'rna' }
 )
 
+// CHECKV PROCESSES
 ch_checkv_ev = RUN_CHECKV(ch_orf, ch_checkv_db)
 
-ch_genomad_raw = RUN_GENOMAD(ch_orf, ch_genomad_db)
+// DEEP6 PROCESSES
 
+
+// GENOMAD PROCESSES
+ch_genomad_raw = RUN_GENOMAD(ch_orf, ch_genomad_db)
 ch_genomad_raw.view { p,t,nf,hm,faa,review,vs,ps ->
   "GENOMAD sample=${p}\tvirus_summary=${vs.name}\tplasmid_summary=${ps.name}"
 }
-
-ch_genomad_ev = PROCESS_GENOMAD(ch_genomad_raw, ictv_csv_ch)
-
-
+ch_genomad_ev = GENOMAD_PROCESSING(ch_genomad_raw, ictv_csv_ch)
 
 // BELOW IS THE TEMPLATE TO MERGE EVIDENCE FROM ALL PROGRAMS RAN ON FASTA FILE
 
