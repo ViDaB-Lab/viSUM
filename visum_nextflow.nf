@@ -129,18 +129,40 @@ process CHECKV_DB {
 
   tag "checkv_db"
 
-  conda 'bioconda::checkv'
-
-  publishDir { "${params.dbdir}/checkv" }, mode: 'copy'
+  conda 'bioconda::checkv conda-forge::rsync'
 
   output:
-    path("checkv_db")
+    path("checkv_db")  // symlink to final DB dir
 
   script:
   """
   set -euo pipefail
-  mkdir -p checkv_db
-  checkv download_database checkv_db
+
+  DB_DEST="${params.dbdir}/checkv/checkv_db"
+  SENTINEL="\${DB_DEST}/.db_complete"
+
+  mkdir -p "\${DB_DEST}"
+
+  # Already installed
+  if [[ -f "\${SENTINEL}" ]]; then
+    ln -sfn "\${DB_DEST}" checkv_db
+    exit 0
+  fi
+
+  tmpdir="\$(mktemp -d)"
+  trap 'rm -rf "\$tmpdir"' EXIT
+
+  # Download into temp first to avoid partial DB in final location
+  checkv download_database "\$tmpdir/checkv_db"
+
+  # Sync into place (robust across filesystems)
+  rsync -a --delete "\$tmpdir/checkv_db/" "\${DB_DEST}/"
+
+  # Mark complete
+  date -Iseconds > "\${SENTINEL}"
+
+  # Emit symlink output
+  ln -sfn "\${DB_DEST}" checkv_db
   """
 }
 
@@ -148,18 +170,40 @@ process DEEP6_DB {
 
   tag "deep6_db"
 
-  // git is needed to clone; python not strictly needed here
-  conda 'conda-forge::git'
-
-  publishDir { "${params.dbdir}/deep6" }, mode: 'copy'
+  conda 'conda-forge::git conda-forge::rsync'
 
   output:
-    path("Deep6")
+    path("Deep6")   // symlink to final Deep6 repo dir
 
   script:
   """
   set -euo pipefail
-  git clone --depth 1 https://github.com/janfelix/Deep6.git Deep6
+
+  DB_DEST="${params.deep6_dir}"
+  SENTINEL="\${DB_DEST}/.db_complete"
+
+  mkdir -p "\${DB_DEST}"
+
+  # Already installed
+  if [[ -f "\${SENTINEL}" ]]; then
+    ln -sfn "\${DB_DEST}" Deep6
+    exit 0
+  fi
+
+  tmpdir="\$(mktemp -d)"
+  trap 'rm -rf "\$tmpdir"' EXIT
+
+  # Clone into temp first (avoid partial repo in final location)
+  git clone --depth 1 https://github.com/janfelix/Deep6.git "\$tmpdir/Deep6"
+
+  # Sync into place
+  rsync -a --delete "\$tmpdir/Deep6/" "\${DB_DEST}/"
+
+  # Mark complete
+  date -Iseconds > "\${SENTINEL}"
+
+  # Emit symlink output
+  ln -sfn "\${DB_DEST}" Deep6
   """
 }
 
@@ -167,18 +211,40 @@ process GENOMAD_DB {
 
   tag "genomad_db"
 
-  conda 'bioconda::genomad'
-
-  // put the db in a stable location outside work/
-  publishDir { "${params.dbdir}/genomad" }, mode: 'copy'
+  conda 'bioconda::genomad conda-forge::rsync'
 
   output:
-    path("genomad_db")
+    path("genomad_db")  // symlink to final DB dir
 
   script:
   """
-  mkdir -p genomad_db
-  genomad download-database genomad_db
+  set -euo pipefail
+
+  DB_DEST="${params.dbdir}/genomad/genomad_db"
+  SENTINEL="\${DB_DEST}/.db_complete"
+
+  mkdir -p "\${DB_DEST}"
+
+  # If already complete, just emit the symlink output
+  if [[ -f "\${SENTINEL}" ]]; then
+    ln -sfn "\${DB_DEST}" genomad_db
+    exit 0
+  fi
+
+  tmpdir="\$(mktemp -d)"
+  trap 'rm -rf "\$tmpdir"' EXIT
+
+  # Download into temp first to avoid partial DB in final location
+  genomad download-database "\$tmpdir/genomad_db"
+
+  # Move into place (robust across filesystems)
+  rsync -a --delete "\$tmpdir/genomad_db/" "\${DB_DEST}/"
+
+  # Mark complete only after successful sync
+  date -Iseconds > "\${SENTINEL}"
+
+  # Emit symlink output for Nextflow
+  ln -sfn "\${DB_DEST}" genomad_db
   """
 }
 
@@ -186,18 +252,83 @@ process VIRSORTER2_DB {
 
   tag "virsorter2_db"
 
-  conda 'bioconda::virsorter=2.2.4'
-
-  publishDir { "${params.dbdir}/virsorter2" }, mode: 'copy'
+  conda 'bioconda::virsorter=2.2.4 conda-forge::rsync'
 
   output:
-    path("db")
+    path("db")  // symlink to real db dir
 
   script:
   """
   set -euo pipefail
-  rm -rf db
-  virsorter setup -d db -j ${params.threads}
+
+  DB_DEST="${params.vs2_dir}"
+  SENTINEL="\${DB_DEST}/.db_complete"
+
+  mkdir -p "\${DB_DEST}"
+
+  if [[ -f "\${SENTINEL}" ]]; then
+    ln -sfn "\${DB_DEST}" db
+    exit 0
+  fi
+
+  tmpdir="\$(mktemp -d)"
+  trap 'rm -rf "\$tmpdir"' EXIT
+
+  virsorter setup -d "\$tmpdir/db" -j ${params.threads}
+
+  rsync -a --delete "\$tmpdir/db/" "\${DB_DEST}/"
+  date -Iseconds > "\${SENTINEL}"
+
+  ln -sfn "\${DB_DEST}" db
+  """
+}
+
+process CENOTETAKER3_DB {
+
+  tag "cenote_taker3_db"
+
+  conda 'bioconda::cenote-taker3=3.* conda-forge::rsync'
+
+  output:
+    path("db")   // a symlink pointing to the real DB directory
+
+  script:
+    def hhFlags = params.ct3_use_hhsuite
+      ? "--hhCDD T --hhPFAM T --hhPDB T"
+      : ""
+
+  """
+  set -euo pipefail
+
+  DB_DEST="${params.ct3_dir}"
+  SENTINEL="\${DB_DEST}/.db_complete"
+
+  mkdir -p "\${DB_DEST}"
+
+  # If already complete, just emit the symlink output
+  if [[ -f "\${SENTINEL}" ]]; then
+    ln -sfn "\${DB_DEST}" db
+    exit 0
+  fi
+
+  tmpdir="\$(mktemp -d)"
+  trap 'rm -rf "\$tmpdir"' EXIT
+
+  # Download into a temp dir first, then move into place to avoid partial installs
+  get_ct3_dbs -o "\$tmpdir/db" \
+    --hmm T \
+    --hallmark_tax T \
+    --refseq_tax T \
+    --mmseqs_cdd T \
+    --domain_list T \
+    ${hhFlags}
+
+  # Move into place (rsync is safer than mv across filesystems)
+  rsync -a --delete "\$tmpdir/db/" "\${DB_DEST}/"
+
+  date -Iseconds > "\${SENTINEL}"
+
+  ln -sfn "\${DB_DEST}" db
   """
 }
 
@@ -464,6 +595,75 @@ process RUN_VIRSORTER2 {
   """
 }
 
+process RUN_CENOTETAKER3 {
+
+  tag "$prefix"
+
+  conda 'bioconda::cenote-taker3=3.*'
+
+  publishDir { "${params.outdir}/${prefix}/ct3" }, mode: 'copy'
+
+  input:
+    tuple val(prefix), val(type), path(norm_fasta), path(header_map), path(proteins_faa)
+    path ct3_db
+
+  output:
+    tuple val(prefix),
+          val(type),
+          path("${prefix}.ct3.review"),
+          path("${prefix}.ct3_virus_summary.tsv")
+
+  script:
+  """
+  set -euo pipefail
+
+  # Point CT3 to the shared database directory
+  export CENOTE_DBS="${ct3_db}"
+
+  outdir="${prefix}.ct3.review"
+  mkdir -p "\$outdir"
+  run_title="${prefix}"
+
+  # Run CT3 (adjust flags here to match your intended CT3 workflow)
+  # You may need to change the subcommand/flags depending on your CT3 usage.
+  # The goal is: produce {run_title}_virus_summary.tsv in the output folder.
+  cenote-taker3 -c ${norm_fasta} -r "\$run_title" -p ${params.prophage} -t ${params.threads} --caller ${params.ct3_caller} -hh ${params.ct3_hh} --taxdb ${params.ct3_taxdb} -db ${params.ct3_domaindb} --minimum_length_circular ${params.ct3_minlen_circ} --circ_minimum_hallmark_genes ${params.ct3_cir_minhall} --minimum_length_linear ${params.ct3_minlen_lin} --lin_minimum_hallmark_genes ${params.ct3_lin_minhall} -o "\$outdir" --genbank ${params.ct3_genb}
+
+  # Locate virus summary
+  vs="\$outdir/\${run_title}_virus_summary.tsv"
+  test -f "\$vs" || { echo "[ERROR] Missing CT3 virus summary: \$vs" >&2; ls -R "\$outdir" >&2; exit 1; }
+
+  cp "\$vs" ${prefix}.ct3_virus_summary.tsv
+  """
+}
+
+process CENOTETAKER3_PROCESSING {
+
+  tag "$prefix"
+
+  conda 'bioconda::python=3.11 pandas'
+
+  publishDir { "${params.outdir}/${prefix}/ct3" }, mode: 'copy'
+
+  input:
+    tuple val(prefix), val(type), path(ct3_review), path(ct3_virus_summary)
+
+  output:
+    tuple val(prefix), val("ct3"), path("${prefix}.ct3_evidence.csv")
+
+  script:
+  """
+  set -euo pipefail
+
+  python3 ${projectDir}/bin/fixct3v0.2.py --ct3 ${ct3_virus_summary} --ictv ${params.ictv_csv} --out ${prefix}.ct3_evidence.csv --fallback ictv
+
+  # Safety net
+  if [ ! -s ${prefix}.ct3_evidence.csv ]; then
+    echo "seqid,d__Domain,r__Realm,k__Kingdom,p__Phylum,c__Class,o__Order,f__Family,g__Genus,s__Species,ct3_virion_hallmark_count,ct3_rep_hallmark_count,ct3_RDRP_hallmark_count" > ${prefix}.ct3_evidence.csv
+  fi
+  """
+}
+
 workflow {
 
   /*
@@ -556,10 +756,11 @@ workflow {
   */
   ch_samples.view { p, t, f -> "SAMPLE=${p}\tTYPE=${t}\tFASTA=${f}" }
 
-  // CHECKV DB
+  // CHECK if ICTV list is present
   if( !file(params.ictv_csv).exists() )
       error "ICTV CSV not found: ${params.ictv_csv}"
 
+  // CHECKV DB
   def CHECKV_DB_PATH = file("${params.dbdir}/checkv/checkv_db")
 
   Channel ch_checkv_db
@@ -571,40 +772,53 @@ workflow {
   }
 
   // DEEP6 DB / SETUP
-  def DEEP6_DB_PATH = file(params.deep6_dir)
+  def DEEP6_DB_PATH     = file(params.deep6_dir)
+  def DEEP6_DB_SENTINEL = file("${params.deep6_dir}/.db_complete")
 
   Channel ch_deep6_db
 
-  if( DEEP6_DB_PATH.exists() ) {
+  if( DEEP6_DB_SENTINEL.exists() ) {
     ch_deep6_db = Channel.value(DEEP6_DB_PATH)
   } else {
     ch_deep6_db = DEEP6_DB().map { it -> DEEP6_DB_PATH }
   }
 
   // GENOMAD DB
-  def GENOMAD_DB_PATH = file("${params.dbdir}/genomad/genomad_db")
+  def GENOMAD_DB_PATH     = file("${params.dbdir}/genomad/genomad_db")
+  def GENOMAD_DB_SENTINEL = file("${params.dbdir}/genomad/genomad_db/.db_complete")
 
   Channel ch_genomad_db
 
-  if( GENOMAD_DB_PATH.exists() ) {
-    // DB already present: just point to it
+  if( GENOMAD_DB_SENTINEL.exists() ) {
     ch_genomad_db = Channel.value(GENOMAD_DB_PATH)
   } else {
-    // DB missing: run download once
     ch_genomad_db = GENOMAD_DB().map { it -> GENOMAD_DB_PATH }
   }
 
   // VIRSORTER2 DB
-
-  def VS2_DB_PATH = file(params.vs2_dir)
+  def VS2_DB_PATH     = file(params.vs2_dir)
+  def VS2_DB_SENTINEL = file("${params.vs2_dir}/.db_complete")
 
   Channel ch_vs2_db
 
-  if( VS2_DB_PATH.exists() ) {
+  if( VS2_DB_SENTINEL.exists() ) {
     ch_vs2_db = Channel.value(VS2_DB_PATH)
   } else {
     ch_vs2_db = VIRSORTER2_DB().map { it -> VS2_DB_PATH }
-  } 
+  }
+
+  // CENOTE-TAKER3 DB
+  def CT3_DB_PATH     = file(params.ct3_dir)
+  def CT3_DB_SENTINEL = file("${params.ct3_dir}/.db_complete")
+
+  Channel ch_ct3_db
+
+  if( CT3_DB_SENTINEL.exists() ) {
+    ch_ct3_db = Channel.value(CT3_DB_PATH)
+  } else {
+    ch_ct3_db = CENOTETAKER3_DB().map { it -> CT3_DB_PATH }
+  }
+
 
   // ---------- NORMALIZE ----------
   ch_norm = NORMALIZE_FASTA(ch_samples)
@@ -643,7 +857,9 @@ workflow {
   // VIRSORTER2 PROCESSES
   ch_vs2_ev = RUN_VIRSORTER2(ch_orf, ch_vs2_db)
 
-
+  // CENOTETAKER3 PROCESSES
+  ch_ct3_raw = RUN_CENOTETAKER3(ch_orf, ch_ct3_db)
+  ch_ct3_ev  = PROCESS_CENOTETAKER3(ch_ct3_raw)
 
 // BELOW IS THE TEMPLATE TO MERGE EVIDENCE FROM ALL PROGRAMS RAN ON FASTA FILE
 
