@@ -182,6 +182,25 @@ process GENOMAD_DB {
   """
 }
 
+process VIRSORTER2_DB {
+
+  tag "virsorter2_db"
+
+  conda 'bioconda::virsorter=2.2.4'
+
+  publishDir { "${params.dbdir}/virsorter2" }, mode: 'copy'
+
+  output:
+    path("db")
+
+  script:
+  """
+  set -euo pipefail
+  rm -rf db
+  virsorter setup -d db -j ${params.threads}
+  """
+}
+
 process RUN_CHECKV {
 
   tag "$prefix"
@@ -241,21 +260,20 @@ process RUN_DEEP6 {
   """
   set -euo pipefail
 
-  # -------- model dir (user override or default to repo Models/) ----------
   MODEL_DIR="${params.deep6_model}"
   if [ -z "${MODEL_DIR}" ] || [ "${MODEL_DIR}" = "null" ]; then
     MODEL_DIR="${deep6_db}/Models"
   fi
-
   outdir="${prefix}.deep6.review"
   mkdir -p "$outdir"
 
-  # -------- run deep6 ----------
+  #run deep6 
   python3 ${deep6_db}/Master/deep6.py -i ${norm_fasta} -l ${params.deep6_minlen} -m "$MODEL_DIR" -o "$outdir"
 
-# -------- locate prediction output ----------
+  # locate prediction output 
   pred_file=$(ls "$outdir"/*_predict_${params.deep6_minlen}bp_deep6.txt 2>/dev/null || true)
 
+  # setting file names
   RAW_TSV="${prefix}.${params.deep6_minlen}bp_deep6_scores_raw.tsv"
   RAW_CSV="${prefix}.${params.deep6_minlen}bp_deep6_scores_raw.csv"
   CLEAN_CSV="${prefix}.${params.deep6_minlen}bp_deep6_scores_clean.csv"
@@ -387,6 +405,64 @@ process GENOMAD_PROCESSING {
   """
 }
 
+process RUN_VIRSORTER2 {
+
+  tag "$prefix"
+
+  conda 'bioconda::virsorter=2.2.4'
+
+  publishDir { "${params.outdir}/${prefix}/virsorter2" }, mode: 'copy'
+
+  input:
+    tuple val(prefix), val(type), path(norm_fasta), path(header_map), path(proteins_faa)
+    path vs2_db
+
+  output:
+    tuple val(prefix), val("virsorter2"), path("${prefix}.virsorter2_evidence.csv")
+
+  script:
+  """
+  set -euo pipefail
+
+  outdir="${prefix}.virsorter2.review"
+  mkdir -p "\$outdir"
+
+  # Choose groups based on type (RNA-only vs broader DNA set)
+  if [ "${type}" = "rna" ]; then
+    GROUPS="${params.vs2_groups_rna}"
+  else
+    GROUPS="${params.vs2_groups_dna}"
+  fi
+
+  # VirSorter2 quick run pattern (run workflow, writes final-viral-score.tsv) 
+  virsorter run -w "\$outdir" -i ${norm_fasta} --min-length ${params.vs2_min_length} --min-score ${params.vs2_min_score} --include-groups "\$GROUPS" -j ${params.threads} all
+
+  # Copy the key output to a stable name for evidence aggregation :contentReference[oaicite:4]{index=4}
+  if [ -f "\$outdir/final-viral-score.tsv" ]; then
+    cp "\$outdir/final-viral-score.tsv" ${prefix}.virsorter2.final-viral-score.tsv
+  else
+    # Header-only safety net if VS2 produced nothing (keeps pipeline unbreakable)
+    printf "seqname\\tmax_score\\tmax_group\\n" > ${prefix}.virsorter2.final-viral-score.tsv
+  fi
+
+  RAW="${prefix}.virsorter2.final-viral-score.tsv"
+  EVID="${prefix}.virsorter2_evidence.csv"
+
+  echo "seqid,vs2_tag,vs2_score,vs2_group,vs2_is_viral" > "\$EVID"
+
+  if [ -s "\$RAW" ]; then
+    awk -F "\t" '
+    NR>1 {
+      split(\$1, a, /\|\|/)
+      seqid = a[1]
+      tag   = (length(a)>1 ? a[2] : "full")
+      score = \$7
+      group = \$8
+      print seqid","tag","score","group",1
+  }' "\$RAW" >> "\$EVID"
+  fi
+  """
+}
 
 workflow {
 
@@ -480,43 +556,55 @@ workflow {
   */
   ch_samples.view { p, t, f -> "SAMPLE=${p}\tTYPE=${t}\tFASTA=${f}" }
 
-// CHECKV DB
-if( !file(params.ictv_csv).exists() )
-    error "ICTV CSV not found: ${params.ictv_csv}"
+  // CHECKV DB
+  if( !file(params.ictv_csv).exists() )
+      error "ICTV CSV not found: ${params.ictv_csv}"
 
-def CHECKV_DB_PATH = file("${params.dbdir}/checkv/checkv_db")
+  def CHECKV_DB_PATH = file("${params.dbdir}/checkv/checkv_db")
 
-Channel ch_checkv_db
+  Channel ch_checkv_db
+  
+  if( CHECKV_DB_PATH.exists() ) {
+    ch_checkv_db = Channel.value(CHECKV_DB_PATH)
+  } else {
+    ch_checkv_db = CHECKV_DB().map { it -> CHECKV_DB_PATH }
+  }
 
-if( CHECKV_DB_PATH.exists() ) {
-  ch_checkv_db = Channel.value(CHECKV_DB_PATH)
-} else {
-  ch_checkv_db = CHECKV_DB().map { it -> CHECKV_DB_PATH }
-}
+  // DEEP6 DB / SETUP
+  def DEEP6_DB_PATH = file(params.deep6_dir)
 
-//DEEP6 DB / SETUP
-def DEEP6_DB_PATH = file(params.deep6_dir)
+  Channel ch_deep6_db
 
-Channel ch_deep6_db
+  if( DEEP6_DB_PATH.exists() ) {
+    ch_deep6_db = Channel.value(DEEP6_DB_PATH)
+  } else {
+    ch_deep6_db = DEEP6_DB().map { it -> DEEP6_DB_PATH }
+  }
 
-if( DEEP6_DB_PATH.exists() ) {
-  ch_deep6_db = Channel.value(DEEP6_DB_PATH)
-} else {
-  ch_deep6_db = DEEP6_DB().map { it -> DEEP6_DB_PATH }
-}
+  // GENOMAD DB
+  def GENOMAD_DB_PATH = file("${params.dbdir}/genomad/genomad_db")
 
-// GENOMAD DB
-def GENOMAD_DB_PATH = file("${params.dbdir}/genomad/genomad_db")
+  Channel ch_genomad_db
 
-Channel ch_genomad_db
+  if( GENOMAD_DB_PATH.exists() ) {
+    // DB already present: just point to it
+    ch_genomad_db = Channel.value(GENOMAD_DB_PATH)
+  } else {
+    // DB missing: run download once
+    ch_genomad_db = GENOMAD_DB().map { it -> GENOMAD_DB_PATH }
+  }
 
-if( GENOMAD_DB_PATH.exists() ) {
-  // DB already present: just point to it
-  ch_genomad_db = Channel.value(GENOMAD_DB_PATH)
-} else {
-  // DB missing: run download once
-  ch_genomad_db = GENOMAD_DB().map { it -> GENOMAD_DB_PATH }
-}
+  // VIRSORTER2 DB
+
+  def VS2_DB_PATH = file(params.vs2_dir)
+
+  Channel ch_vs2_db
+
+  if( VS2_DB_PATH.exists() ) {
+    ch_vs2_db = Channel.value(VS2_DB_PATH)
+  } else {
+    ch_vs2_db = VIRSORTER2_DB().map { it -> VS2_DB_PATH }
+  } 
 
   // ---------- NORMALIZE ----------
   ch_norm = NORMALIZE_FASTA(ch_samples)
@@ -526,31 +614,36 @@ if( GENOMAD_DB_PATH.exists() ) {
     "NORM   sample=${p}\ttype=${t}\tnorm_fasta=${nf.name}\tmap=${map.name}"
   }
 
-// ---------- ORF PREDICTION ----------
-(ch_orf, ch_orf_gff, ch_orf_fna) = ORF_PREDICTION(ch_norm)
+  // ---------- ORF PREDICTION ----------
+  (ch_orf, ch_orf_gff, ch_orf_fna) = ORF_PREDICTION(ch_norm)
 
-// Debug: show the *main* tuple stream that will feed downstream tools
-ch_orf.view { p, t, nf, map, faa ->
-  "ORF    sample=${p}\ttype=${t}\tfaa=${faa.name}\tnorm_fasta=${nf.name}"
-}
+  // Debug: show the *main* tuple stream that will feed downstream tools
+  ch_orf.view { p, t, nf, map, faa ->
+    "ORF    sample=${p}\ttype=${t}\tfaa=${faa.name}\tnorm_fasta=${nf.name}"
+  }
 
-def branched = ch_orf.branch(
-  dna: { p, t, nf, hm, faa -> t == 'dna' },
-  rna: { p, t, nf, hm, faa -> t == 'rna' }
-)
+  def branched = ch_orf.branch(
+    dna: { p, t, nf, hm, faa -> t == 'dna' },
+    rna: { p, t, nf, hm, faa -> t == 'rna' }
+  )
 
-// CHECKV PROCESSES
-ch_checkv_ev = RUN_CHECKV(ch_orf, ch_checkv_db)
+  // CHECKV PROCESSES
+  ch_checkv_ev = RUN_CHECKV(ch_orf, ch_checkv_db)
 
-// DEEP6 PROCESSES
+  // DEEP6 PROCESSES
+  ch_deep6_ev = RUN_DEEP6(branched.rna, ch_deep6_db)
+
+  // GENOMAD PROCESSES
+  ch_genomad_raw = RUN_GENOMAD(ch_orf, ch_genomad_db)
+  ch_genomad_raw.view { p,t,nf,hm,faa,review,vs,ps ->
+    "GENOMAD sample=${p}\tvirus_summary=${vs.name}\tplasmid_summary=${ps.name}"
+  }
+  ch_genomad_ev = GENOMAD_PROCESSING(ch_genomad_raw, ictv_csv_ch)
+
+  // VIRSORTER2 PROCESSES
+  ch_vs2_ev = RUN_VIRSORTER2(ch_orf, ch_vs2_db)
 
 
-// GENOMAD PROCESSES
-ch_genomad_raw = RUN_GENOMAD(ch_orf, ch_genomad_db)
-ch_genomad_raw.view { p,t,nf,hm,faa,review,vs,ps ->
-  "GENOMAD sample=${p}\tvirus_summary=${vs.name}\tplasmid_summary=${ps.name}"
-}
-ch_genomad_ev = GENOMAD_PROCESSING(ch_genomad_raw, ictv_csv_ch)
 
 // BELOW IS THE TEMPLATE TO MERGE EVIDENCE FROM ALL PROGRAMS RAN ON FASTA FILE
 
