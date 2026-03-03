@@ -332,6 +332,59 @@ process CENOTETAKER3_DB {
   """
 }
 
+process VITAP_DB {
+
+  tag "vitap_db:${params.vitap_db_label}"
+
+  // VITAP provides its own CLI; include rsync for safe atomic copy
+  conda 'bioconda::vitap=1.10 conda-forge::rsync'
+
+  output:
+    path("DB_${params.vitap_db_label}")
+
+  script:
+  """
+  set -euo pipefail
+
+  LABEL="${params.vitap_db_label}"
+  VMR="${params.vitap_vmr_csv}"
+
+  DBROOT="${params.vitap_dir}"
+  DEST="\${DBROOT}/DB_\${LABEL}"
+  SENTINEL="\${DEST}/.db_complete"
+
+  mkdir -p "\${DBROOT}"
+
+  # If already complete, just emit a symlink as the process output
+  if [[ -f "\${SENTINEL}" ]]; then
+    ln -s "\${DEST}" "DB_\${LABEL}"
+    exit 0
+  fi
+
+  # Build in a temp directory first to avoid leaving partial DBs in the shared dbdir
+  tmpdir="\$(mktemp -d)"
+  trap 'rm -rf "\$tmpdir"' EXIT
+
+  cp "\${VMR}" "\$tmpdir/vmr.csv"
+  cd "\$tmpdir"
+
+  # Non-interactive: auto-continue at the Y/N prompt
+  printf "Y\\n" | VITAP upd --vmr vmr.csv -o VMR_reformat.csv -d "\${LABEL}"
+
+  # VITAP should produce DB_<LABEL> in the working dir
+  [[ -d "DB_\${LABEL}" ]] || { echo "[ERROR] Expected DB_\${LABEL} was not created." >&2; ls -lah >&2; exit 1; }
+
+  # Copy into shared dbdir atomically/safely
+  mkdir -p "\${DEST}"
+  rsync -a --delete "DB_\${LABEL}/" "\${DEST}/"
+
+  date -Iseconds > "\${SENTINEL}"
+
+  # Emit a stable path as the process output
+  ln -s "\${DEST}" "DB_\${LABEL}"
+  """
+}
+
 process RUN_CHECKV {
 
   tag "$prefix"
@@ -664,6 +717,86 @@ process CENOTETAKER3_PROCESSING {
   """
 }
 
+process RUN_VITAP {
+
+  tag "$prefix"
+
+  conda 'bioconda::vitap=1.10 conda-forge::rsync'
+
+  publishDir { "${params.outdir}/${prefix}/vitap" }, mode: 'copy'
+
+  input:
+    tuple val(prefix), val(type), path(norm_fasta), path(header_map), path(proteins_faa)
+    path vitap_db
+
+  output:
+    tuple val(prefix),
+          val(type),
+          path(norm_fasta),
+          path(header_map),
+          path(proteins_faa),
+          path("${prefix}.vitap.review"),
+          path("${prefix}.vitap_best_determined_lineages.tsv")
+
+  script:
+  """
+  set -euo pipefail
+
+  outdir="${prefix}.vitap.review"
+  mkdir -p "\$outdir"
+
+  # Run VITAP assignment
+  VITAP assignment -i ${norm_fasta} -d ${vitap_db} -o "\$outdir"
+
+  # VITAP writes: <outdir>/best_determined_lineages.tsv
+  raw="\$outdir/best_determined_lineages.tsv"
+
+  # Always produce the file (even if empty) so downstream doesn't break
+  if [[ -s "\$raw" ]]; then
+    cp "\$raw" ${prefix}.vitap_best_determined_lineages.tsv
+  else
+    # create empty-but-valid tsv with header
+    echo -e "Genome_ID\\tlineage\\tlineage_score/participation_index\\tConfidence_level" > ${prefix}.vitap_best_determined_lineages.tsv
+  fi
+  """
+}
+
+process PROCESS_VITAP {
+
+  tag "$prefix"
+
+  conda 'bioconda::python=3.11 pandas'
+
+  publishDir { "${params.outdir}/${prefix}/vitap" }, mode: 'copy'
+
+  input:
+    tuple val(prefix),
+          val(type),
+          path(norm_fasta),
+          path(header_map),
+          path(proteins_faa),
+          path(vitap_review),
+          path(vitap_lineages)
+    path ictv_csv
+
+  output:
+    tuple val(prefix),
+          val("vitap"),
+          path("${prefix}.vitap_evidence.csv")
+
+  script:
+  """
+  set -euo pipefail
+
+  OUT="${prefix}.vitap_evidence.csv"
+
+  # Always create output with header so pipeline never breaks
+  echo "seqid,d__Domain,r__Realm,k__Kingdom,p__Phylum,c__Class,o__Order,f__Family,g__Genus,s__Species,vitap_pi,vitap_confidence" > "\$OUT"
+
+  python3 ${projectDir}/bin/fixvitapv0.4.py --vitap ${vitap_lineages} --header_map ${header_map} --out ${prefix}.vitap_evidence.csv --fallback none
+  """
+}
+
 workflow {
 
   /*
@@ -820,6 +953,18 @@ workflow {
   }
 
 
+  // VITAP DB / SETUP
+  def VITAP_DB_PATH     = file("${params.vitap_dir}/DB_${params.vitap_db_label}")
+  def VITAP_DB_SENTINEL = file("${params.vitap_dir}/DB_${params.vitap_db_label}/.db_complete")
+
+  Channel ch_vitap_db
+
+  if( VITAP_DB_SENTINEL.exists() ) {
+    ch_vitap_db = Channel.value(VITAP_DB_PATH)
+  } else {
+    ch_vitap_db = VITAP_DB().map { it -> VITAP_DB_PATH }
+  }
+
   // ---------- NORMALIZE ----------
   ch_norm = NORMALIZE_FASTA(ch_samples)
 
@@ -861,6 +1006,11 @@ workflow {
   ch_ct3_raw = RUN_CENOTETAKER3(ch_orf, ch_ct3_db)
   ch_ct3_ev  = PROCESS_CENOTETAKER3(ch_ct3_raw)
 
+  // VITAP PROCESSES
+  ch_vitap_raw = RUN_VITAP(ch_orf, ch_vitap_db)
+  ch_vitap_ev  = PROCESS_VITAP(ch_vitap_raw, ictv_csv_ch)
+
+
 // BELOW IS THE TEMPLATE TO MERGE EVIDENCE FROM ALL PROGRAMS RAN ON FASTA FILE
 
 // core tuple from ORF stage: (prefix, type, norm_fasta, header_map, proteins_faa)
@@ -868,9 +1018,10 @@ ch_core = ch_orf.map { p, t, nf, hm, faa -> tuple(p, t, nf, hm, faa) }
 
 // gather all evidence records (prefix, tool, file)
 ch_all_evidence = ch_genomad_ev
-  // .mix(ch_checkv_ev)
-  // .mix(ch_virsorter_ev)
-  // .mix(ch_diamond_ev)
+  .mix(ch_checkv_ev)
+  .mix(ch_deep6_ev)
+  .mix(ch_vs2_ev)
+  .mix(ch_ct3_ev)
   .groupTuple(by: 0)
 
 ch_all_evidence.view { prefix, tools, files ->
