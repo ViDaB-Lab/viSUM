@@ -385,6 +385,60 @@ process VITAP_DB {
   """
 }
 
+process VICAT_DB {
+
+  tag "vicat_db:${params.vicat_db_label}"
+
+  // VITAP provides its own CLI; include rsync for safe atomic copy
+  conda 'bioconda::vitap=1.10 conda-forge::rsync'
+
+  output:
+    path("DB_${params.vicat_db_label}")
+
+  script:
+  """
+  set -euo pipefail
+
+  LABEL="${params.vicat_db_label}"
+
+  DBROOT="${params.vicat_dir}"
+  DEST="\${DBROOT}/DB_\${LABEL}"
+  SENTINEL="\${DEST}/.db_complete"
+
+  mkdir -p "\${DBROOT}"
+
+  # If already complete, just emit a symlink as the process output
+  if [[ -f "\${SENTINEL}" ]]; then
+    ln -s "\${DEST}" "DB_\${LABEL}"
+    exit 0
+  fi
+
+  # Build in a temp directory first to avoid leaving partial DBs in the shared dbdir
+  tmpdir="\$(mktemp -d)"
+  trap 'rm -rf "\$tmpdir"' EXIT
+
+  cd "\$tmpdir"
+
+  #download the proteins fasta file
+  wget -c https://www.meta-virome.org/Data/Downloads/IMGVR5_UViG.faa.gz
+  pigz -p ${params.threads} -d IMGVR5_UViG.faa.gz
+  
+  #download metadata file
+  wget -c https://www.meta-virome.org/DownloadUvigMetadata 
+  mv DownloadUvigMetadata ./DownloadUvigMetadata.gz
+  gunzip DownloadUvigMetadata.gz
+
+  # Copy into shared dbdir atomically/safely
+  mkdir -p "\${DEST}"
+  rsync -a --delete "DB_\${LABEL}/" "\${DEST}/"
+
+  date -Iseconds > "\${SENTINEL}"
+
+  # Emit a stable path as the process output
+  ln -s "\${DEST}" "DB_\${LABEL}"
+  """
+}
+
 process RUN_CHECKV {
 
   tag "$prefix"
@@ -677,9 +731,6 @@ process RUN_CENOTETAKER3 {
   mkdir -p "\$outdir"
   run_title="${prefix}"
 
-  # Run CT3 (adjust flags here to match your intended CT3 workflow)
-  # You may need to change the subcommand/flags depending on your CT3 usage.
-  # The goal is: produce {run_title}_virus_summary.tsv in the output folder.
   cenote-taker3 -c ${norm_fasta} -r "\$run_title" -p ${params.prophage} -t ${params.threads} --caller ${params.ct3_caller} -hh ${params.ct3_hh} --taxdb ${params.ct3_taxdb} -db ${params.ct3_domaindb} --minimum_length_circular ${params.ct3_minlen_circ} --circ_minimum_hallmark_genes ${params.ct3_cir_minhall} --minimum_length_linear ${params.ct3_minlen_lin} --lin_minimum_hallmark_genes ${params.ct3_lin_minhall} -o "\$outdir" --genbank ${params.ct3_genb}
 
   # Locate virus summary
