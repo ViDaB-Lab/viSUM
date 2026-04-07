@@ -385,6 +385,48 @@ process VITAP_DB {
   """
 }
 
+process GIANTHUNTER_DB {
+
+  tag "gianthunter_db"
+
+  conda 'conda-forge::wget conda-forge::unzip conda-forge::rsync'
+
+  output:
+    path("gianthunter_db")
+
+  script:
+  """
+  set -euo pipefail
+
+  DB_DEST="${params.dbdir}/gianthunter_db"
+  SENTINEL="\${DB_DEST}/.db_complete"
+
+  mkdir -p "\${DB_DEST}"
+
+  # If DB is already complete, just expose it to Nextflow
+  if [[ -f "\${SENTINEL}" ]]; then
+    ln -sfn "\${DB_DEST}" gianthunter_db
+    exit 0
+  fi
+
+  tmpdir=\$(mktemp -d)
+  trap 'rm -rf "\$tmpdir"' EXIT
+
+  cd "\$tmpdir"
+  wget -O gianthunter_db_v1.zip https://github.com/FuchuanQu/GiantHunter/releases/download/v2.0/gianthunter_db_v1.zip
+  unzip gianthunter_db_v1.zip
+
+  # Sync extracted DB into final destination
+  rsync -a --delete "\$tmpdir/gianthunter_db_v1/" "\${DB_DEST}/"
+
+  # Mark completion only after successful sync
+  date -Iseconds > "\${SENTINEL}"
+
+  # Expose stable path to Nextflow
+  ln -sfn "\${DB_DEST}" gianthunter_db
+  """
+}
+
 process VICAT_DB {
 
   tag "vicat_db:${params.vicat_db_label}"
@@ -848,6 +890,46 @@ process PROCESS_VITAP {
   """
 }
 
+process PROCESS_VIRBOT {
+
+  tag "$prefix"
+
+  conda 'bioconda::python=3.11 pandas'
+
+  publishDir { "${params.outdir}/${prefix}/virbot" }, mode: 'copy'
+
+  input:
+    tuple val(prefix),
+          val(type),
+          path(norm_fasta),
+          path(header_map),
+          path(proteins_faa),
+          path(vitap_review),
+          path(vitap_lineages)
+    path ictv_csv
+
+  output:
+    tuple val(prefix),
+          val("virbot"),
+          path("${prefix}.pos_contig_score.csv")
+
+  script:
+  """
+  set -euo pipefail
+
+  OUT="${prefix}.pos_contig_score.csv"
+
+  # Always create output with header so pipeline never breaks
+  echo "seqid,d__Domain,r__Realm,k__Kingdom,p__Phylum,c__Class,o__Order,f__Family,g__Genus,s__Species,vitap_pi,vitap_confidence" > "\$OUT"
+
+  python3 ${projectDir}/bin/fixvitapv0.4.py --vitap ${vitap_lineages} --header_map ${header_map} --out ${prefix}.vitap_evidence.csv --fallback none
+  """
+}
+
+
+
+
+
 workflow {
 
   /*
@@ -1004,7 +1086,7 @@ workflow {
   }
 
 
-  // VITAP DB / SETUP
+  // VITAP DB 
   def VITAP_DB_PATH     = file("${params.vitap_dir}/DB_${params.vitap_db_label}")
   def VITAP_DB_SENTINEL = file("${params.vitap_dir}/DB_${params.vitap_db_label}/.db_complete")
 
@@ -1015,6 +1097,18 @@ workflow {
   } else {
     ch_vitap_db = VITAP_DB().map { it -> VITAP_DB_PATH }
   }
+
+  // GIANTHUNTER DB
+  def GIANTHUNTER_DB_PATH     = file("${params.gianthunter_dir}/gianthunter_db")
+  def GIANTHUNTER_DB_SENTINEL = file("${params.gianthunter_dir}/gianthunter_db/.db_complete")
+
+  Channel ch_gianthunter_db
+
+  if( GIANTHUNTER_DB_SENTINEL.exists() ) {
+    ch_gianthunter_db = Channel.value(GIANTHUNTER_DB_PATH)
+  } else {
+    ch_gianthunter_db = GIANTHUNTER_DB().map { it -> GIANTHUNTER_DB_PATH }
+  } 
 
   // ---------- NORMALIZE ----------
   ch_norm = NORMALIZE_FASTA(ch_samples)
