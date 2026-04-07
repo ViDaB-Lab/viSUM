@@ -398,7 +398,7 @@ process GIANTHUNTER_DB {
   """
   set -euo pipefail
 
-  DB_DEST="${params.dbdir}/gianthunter_db"
+  DB_DEST="${params.gianthunter_dir}"
   SENTINEL="\${DB_DEST}/.db_complete"
 
   mkdir -p "\${DB_DEST}"
@@ -890,13 +890,57 @@ process PROCESS_VITAP {
   """
 }
 
-process PROCESS_VIRBOT {
+process RUN_GIANTHUNTER {
+
+  tag "${prefix}"
+
+  conda "${projectDir}/bin/gianthunter.yml"
+
+  publishDir { "${params.outdir}/${prefix}/GiantHunter" }, mode: 'copy'
+
+  input:
+    tuple val(prefix), val(type), path(norm_fasta), path(header_map), path(proteins_faa)
+    path(gianthunter_db)
+
+  output:
+    tuple val(prefix),
+          val(type),
+          path(norm_fasta),
+          path(header_map),
+          path(proteins_faa),
+          path("${prefix}.vitap.review"),
+          path("${prefix}.vitap_best_determined_lineages.tsv")
+
+
+  script:
+  """
+  set -euo pipefail
+
+  outdir="${prefix}_gianthunter"
+  mkdir -p "\$outdir"
+
+  GiantHunter --contigs ${fasta} --dbdir ${gianthunter_db} --out "\$outdir"
+  raw="./${prefix}_gianthunter/gianthunter"
+
+  raw="\$outdir/final_prediction/gianthunter_prediction.tsv"
+
+  # Always produce the file (even if empty) so downstream doesn't break
+  if [[ -s "\$raw" ]]; then
+    cp "\$raw" ${prefix}_gianthunter_prediction.tsv
+  else
+    # create empty-but-valid tsv with header
+    echo -e "Accession\\tLength\\tGiantVirus\\tPotentialLineage\\tScore" > ${prefix}_gianthunter_prediction.tsv
+  fi
+ """
+}
+
+process PROCESS_GIANTHUNTER {
 
   tag "$prefix"
 
   conda 'bioconda::python=3.11 pandas'
 
-  publishDir { "${params.outdir}/${prefix}/virbot" }, mode: 'copy'
+  publishDir { "${params.outdir}/${prefix}/GiantHunter" }, mode: 'copy'
 
   input:
     tuple val(prefix),
@@ -910,19 +954,98 @@ process PROCESS_VIRBOT {
 
   output:
     tuple val(prefix),
-          val("virbot"),
+          val("vitap"),
+          path("${prefix}.vitap_evidence.csv")
+
+  script:
+  """
+  set -euo pipefail
+
+  OUT="${prefix}.gianthunter_evidence.csv"
+
+  # Always create output with header so pipeline never breaks
+  echo "seqid,d__Domain,r__Realm,k__Kingdom,p__Phylum,c__Class,o__Order,f__Family,g__Genus,s__Species,vitap_pi,vitap_confidence" > "\$OUT"
+
+  awk -F "\t" '
+BEGIN {
+    ranks[1]="d__"; ranks[2]="k__"; ranks[3]="p__";
+    ranks[4]="c__"; ranks[5]="o__"; ranks[6]="f__";
+    ranks[7]="g__"; ranks[8]="s__"
+}
+$4 ~ /Viruses/ {
+    gsub(/superkingdom:/, "d__", $4)
+    gsub(/kingdom:/, "k__", $4)
+    gsub(/phylum:/, "p__", $4)
+    gsub(/class:/, "c__", $4)
+    gsub(/order:/, "o__", $4)
+    gsub(/family:/, "f__", $4)
+    gsub(/genus:/, "g__", $4)
+    gsub(/species:/, "s__", $4)
+
+    n = split($4, raw, ";")
+    count = 0
+    for (i = 1; i <= n; i++) {
+        if (raw[i] ~ /^(d__|k__|p__|c__|o__|f__|g__|s__)/) {
+            parts[++count] = raw[i]
+        }
+    }
+
+    for (i = count+1; i <= 8; i++) {
+        parts[i] = ranks[i] "unclassified"
+    }
+
+    lineage = parts[1]
+    for (i = 2; i <= 8; i++) lineage = lineage ";" parts[i]
+
+    print $1 "," lineage "," $5
+}
+' gianthunter_prediction.tsv > gianthunter_vharmony.csv
+  """
+}
+
+
+process RUN_VIRBOT {
+
+  tag "$prefix"
+
+  conda 'bioconda::virbot conda-forge::python=3.8'
+  publishDir { "${params.outdir}/${prefix}/virbot" }, mode: 'copy'
+
+  input:
+    tuple val(prefix), val(type), path(norm_fasta), path(header_map), path(proteins_faa)
+    path virbot_db
+
+  output:
+    tuple val(prefix),
+          val(type),
+          path(norm_fasta),
+          path(header_map),
+          path(proteins_faa),
+          path("${prefix}.virbot.review"),
           path("${prefix}.pos_contig_score.csv")
 
   script:
   """
   set -euo pipefail
 
-  OUT="${prefix}.pos_contig_score.csv"
+  outdir="${prefix}.virbot.review"
+  mkdir -p "\$outdir"
 
-  # Always create output with header so pipeline never breaks
-  echo "seqid,d__Domain,r__Realm,k__Kingdom,p__Phylum,c__Class,o__Order,f__Family,g__Genus,s__Species,vitap_pi,vitap_confidence" > "\$OUT"
+  # Run virbot
 
-  python3 ${projectDir}/bin/fixvitapv0.4.py --vitap ${vitap_lineages} --header_map ${header_map} --out ${prefix}.vitap_evidence.csv --fallback none
+  python VirBot.py -i ${norm_fasta} -o "\$outdir" -d ${virbot_db} [--sen] --threads ${params.threads}
+ 
+
+  # virbot writes: <outdir>/pos_contig_score.csv
+  raw="\$outdir/pos_contig_score.csv"
+
+  # Always produce the file (even if empty) so downstream doesn't break
+  if [[ -s "\$raw" ]]; then
+    cp "\$raw" ${prefix}.pos_contig_score.csv
+  else
+    # create empty-but-valid tsv with header
+    echo -e "Genome_ID\\tlineage\\tlineage_score/participation_index\\tConfidence_level" > ${prefix}.pos_contig_score.csv
+  fi
   """
 }
 
@@ -1099,8 +1222,8 @@ workflow {
   }
 
   // GIANTHUNTER DB
-  def GIANTHUNTER_DB_PATH     = file("${params.gianthunter_dir}/gianthunter_db")
-  def GIANTHUNTER_DB_SENTINEL = file("${params.gianthunter_dir}/gianthunter_db/.db_complete")
+  def GIANTHUNTER_DB_PATH     = file("${params.gianthunter_dir}")
+  def GIANTHUNTER_DB_SENTINEL = file("${params.gianthunter_dir}/.db_complete")
 
   Channel ch_gianthunter_db
 
@@ -1109,6 +1232,8 @@ workflow {
   } else {
     ch_gianthunter_db = GIANTHUNTER_DB().map { it -> GIANTHUNTER_DB_PATH }
   } 
+
+
 
   // ---------- NORMALIZE ----------
   ch_norm = NORMALIZE_FASTA(ch_samples)
@@ -1154,6 +1279,10 @@ workflow {
   // VITAP PROCESSES
   ch_vitap_raw = RUN_VITAP(ch_orf, ch_vitap_db)
   ch_vitap_ev  = PROCESS_VITAP(ch_vitap_raw, ictv_csv_ch)
+
+  // GIANTHUNTER PROCESSES
+  ch_gianthunter_raw = RUN_GIANTHUNTER(ch_orf, ch_gianthunter_db)
+  ch_gianthunter_ev = PROCESS_GIANTHUNTER(ch_gianthunter_raw)
 
 
 // BELOW IS THE TEMPLATE TO MERGE EVIDENCE FROM ALL PROGRAMS RAN ON FASTA FILE
