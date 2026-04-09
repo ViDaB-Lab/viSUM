@@ -1,0 +1,13 @@
+name: virbot
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - prodigal=2.6.3
+  - hmmer=3.3.2
+  - diamond=2.0.15
+  - pandas=1.5.2
+  - pip
+  - pip:
+      - git+https://github.com/GreyGuoweiChen/VirBot.git

@@ -1,4 +1,5 @@
 #!/usr/bin/env nextflow
+nextflow.enable.dsl=2
 /*
  * ==========================================================
  *  viSUM (DSL2)
@@ -8,10 +9,8 @@
  * ==========================================================
  */
 
-nextflow.enable.dsl=2
 
-#!/usr/bin/env nextflow
-nextflow.enable.dsl=2
+
 
 process NORMALIZE_FASTA {
 
@@ -783,7 +782,7 @@ process RUN_CENOTETAKER3 {
   """
 }
 
-process CENOTETAKER3_PROCESSING {
+process PROCESS_CENOTETAKER3 {
 
   tag "$prefix"
 
@@ -908,9 +907,7 @@ process RUN_GIANTHUNTER {
           path(norm_fasta),
           path(header_map),
           path(proteins_faa),
-          path("${prefix}.vitap.review"),
-          path("${prefix}.vitap_best_determined_lineages.tsv")
-
+          path("${prefix}_gianthunter_prediction.tsv"),
 
   script:
   """
@@ -948,14 +945,13 @@ process PROCESS_GIANTHUNTER {
           path(norm_fasta),
           path(header_map),
           path(proteins_faa),
-          path(vitap_review),
-          path(vitap_lineages)
-    path ictv_csv
+          path(gianthunter_pred),
+
 
   output:
     tuple val(prefix),
-          val("vitap"),
-          path("${prefix}.vitap_evidence.csv")
+          val("gianthunter"),
+          path("${prefix}.gianthunter_evidence.csv")
 
   script:
   """
@@ -967,12 +963,12 @@ process PROCESS_GIANTHUNTER {
   echo "seqid,d__Domain,r__Realm,k__Kingdom,p__Phylum,c__Class,o__Order,f__Family,g__Genus,s__Species,vitap_pi,vitap_confidence" > "\$OUT"
 
   awk -F "\t" '
-BEGIN {
+  BEGIN {
     ranks[1]="d__"; ranks[2]="k__"; ranks[3]="p__";
     ranks[4]="c__"; ranks[5]="o__"; ranks[6]="f__";
     ranks[7]="g__"; ranks[8]="s__"
-}
-$4 ~ /Viruses/ {
+  }
+  $4 ~ /Viruses/ {
     gsub(/superkingdom:/, "d__", $4)
     gsub(/kingdom:/, "k__", $4)
     gsub(/phylum:/, "p__", $4)
@@ -998,17 +994,17 @@ $4 ~ /Viruses/ {
     for (i = 2; i <= 8; i++) lineage = lineage ";" parts[i]
 
     print $1 "," lineage "," $5
-}
-' gianthunter_prediction.tsv > gianthunter_vharmony.csv
+  }
+  '   ${gianthunter_pred} > "\$OUT"
   """
 }
-
 
 process RUN_VIRBOT {
 
   tag "$prefix"
 
-  conda 'bioconda::virbot conda-forge::python=3.8'
+  conda "${projectDir}/bin/virbot.yml"
+  
   publishDir { "${params.outdir}/${prefix}/virbot" }, mode: 'copy'
 
   input:
@@ -1048,8 +1044,6 @@ process RUN_VIRBOT {
   fi
   """
 }
-
-
 
 
 
@@ -1233,7 +1227,14 @@ workflow {
     ch_gianthunter_db = GIANTHUNTER_DB().map { it -> GIANTHUNTER_DB_PATH }
   } 
 
+  // VirBot database path check
+  def VIRBOT_DB_PATH = file(params.virbot_db_dir)
 
+  if( !VIRBOT_DB_PATH.exists() ) {
+    error "VirBot database directory not found: ${params.virbot_db_dir}"
+  }
+
+  Channel ch_virbot_db = Channel.value(VIRBOT_DB_PATH)
 
   // ---------- NORMALIZE ----------
   ch_norm = NORMALIZE_FASTA(ch_samples)
@@ -1284,6 +1285,8 @@ workflow {
   ch_gianthunter_raw = RUN_GIANTHUNTER(ch_orf, ch_gianthunter_db)
   ch_gianthunter_ev = PROCESS_GIANTHUNTER(ch_gianthunter_raw)
 
+  // VIRBOT PROCESSSES
+
 
 // BELOW IS THE TEMPLATE TO MERGE EVIDENCE FROM ALL PROGRAMS RAN ON FASTA FILE
 
@@ -1296,6 +1299,8 @@ ch_all_evidence = ch_genomad_ev
   .mix(ch_deep6_ev)
   .mix(ch_vs2_ev)
   .mix(ch_ct3_ev)
+  .mix(ch_vitap_ev)
+  .mix(ch_gianthunter_ev)
   .groupTuple(by: 0)
 
 ch_all_evidence.view { prefix, tools, files ->
