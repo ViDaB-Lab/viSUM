@@ -4,6 +4,207 @@ vHARMONY will install all databases by itself (except for virbot)
 
 Estimate of space the person will need with all the db's downloaded. Manipulate params.db
 
+vcontact3 is really useful for clustering viruses sure, but it's limited in its approaches. It uses gene similarity, it doesn't actually call something viral from scratch. It's agreat too for downstream analysis. 
+
+
+To make it so that VITAP checks for the latest ICTV database before running:
+
+================================================================
+
+In the config file:
+
+// VITAP
+vitap_use_latest = false
+
+// reproducible default: pinned local CSV
+vitap_vmr_csv    = "${projectDir}/assets/msl40_3_1_26.csv"
+
+// optional exact ICTV XLSX URL for "latest" mode
+vitap_vmr_url    = ""
+
+// DB naming + location
+vitap_db_label   = "VMR_MSL40"
+vitap_dir        = "${params.dbdir}/vitap"
+
+================================================================
+In the .nf
+
+process PREP_VITAP_VMR {
+
+  tag "vitap_vmr:${params.vitap_db_label}"
+
+  conda 'conda-forge::python conda-forge::wget bioconda::xlsx2csv'
+
+  output:
+    path("vitap_input.csv")
+
+  script:
+  """
+  set -euo pipefail
+
+  USE_LATEST="${params.vitap_use_latest}"
+  PINNED_CSV="${params.vitap_vmr_csv}"
+  VMR_URL="${params.vitap_vmr_url}"
+
+  if [[ "\${USE_LATEST}" == "true" ]]; then
+
+    if [[ -z "\${VMR_URL}" ]]; then
+      echo "[ERROR] --vitap_use_latest true requires --vitap_vmr_url to be set to the exact ICTV .xlsx URL" >&2
+      exit 1
+    fi
+
+    wget -O current_vmr.xlsx "\${VMR_URL}"
+    xlsx2csv current_vmr.xlsx > full_vmr.csv
+
+    python - <<'PY'
+import csv
+
+wanted = [
+    "Virus GENBANK accession",
+    "Realm",
+    "Kingdom",
+    "Phylum",
+    "Class",
+    "Order",
+    "Family",
+    "Genus",
+    "Species",
+]
+
+with open("full_vmr.csv", newline="", encoding="utf-8") as f:
+    reader = csv.DictReader(f)
+    if reader.fieldnames is None:
+        raise SystemExit("Could not read headers from converted ICTV CSV")
+
+    missing = [c for c in wanted if c not in reader.fieldnames]
+    if missing:
+        raise SystemExit(f"Missing expected columns: {missing}")
+
+    with open("vitap_input.csv", "w", newline="", encoding="utf-8") as out:
+        writer = csv.DictWriter(out, fieldnames=wanted)
+        writer.writeheader()
+        for row in reader:
+            writer.writerow({k: row.get(k, "") for k in wanted})
+PY
+
+  else
+    cp "\${PINNED_CSV}" vitap_input.csv
+  fi
+  """
+}
+
+================================================================
+
+In the .nf file:
+
+Keep the process with a few twicks:
+
+process VITAP_DB {
+
+  tag "vitap_db:${params.vitap_db_label}"
+
+  conda 'bioconda::vitap=1.10 conda-forge::rsync'
+
+  input:
+    path(vmr_csv)
+
+  output:
+    path("DB_${params.vitap_db_label}")
+
+  script:
+  """
+  set -euo pipefail
+
+  LABEL="${params.vitap_db_label}"
+
+  DBROOT="${params.vitap_dir}"
+  DEST="\${DBROOT}/DB_\${LABEL}"
+  SENTINEL="\${DEST}/.db_complete"
+
+  mkdir -p "\${DBROOT}"
+
+  # If already complete, just emit a symlink as the process output
+  if [[ -f "\${SENTINEL}" ]]; then
+    ln -s "\${DEST}" "DB_\${LABEL}"
+    exit 0
+  fi
+
+  # Build in temp dir first
+  tmpdir="\$(mktemp -d)"
+  trap 'rm -rf "\$tmpdir"' EXIT
+
+  cp "${vmr_csv}" "\$tmpdir/vmr.csv"
+  cd "\$tmpdir"
+
+  # Non-interactive: auto-continue at the Y/N prompt
+  printf "Y\\n" | VITAP upd --vmr vmr.csv -o VMR_reformat.csv -d "\${LABEL}"
+
+  [[ -d "DB_\${LABEL}" ]] || {
+    echo "[ERROR] Expected DB_\${LABEL} was not created." >&2
+    ls -lah >&2
+    exit 1
+  }
+
+  # Safer staged install into shared DB dir
+  stage="\${DBROOT}/.DB_\${LABEL}.staging.\$\$"
+  rm -rf "\${stage}"
+  mkdir -p "\${stage}"
+
+  rsync -a --delete "DB_\${LABEL}/" "\${stage}/"
+  date -Iseconds > "\${stage}/.db_complete"
+
+  rm -rf "\${DEST}"
+  mv "\${stage}" "\${DEST}"
+
+  # Emit stable path as process output
+  ln -s "\${DEST}" "DB_\${LABEL}"
+  """
+}
+==================================================================================
+
+Then in the workflow: 
+
+workflow {
+  vitap_vmr = PREP_VITAP_VMR()
+  vitap_db  = VITAP_DB(vitap_vmr)
+}
+
+==================================================================================
+
+Now in the script add something like:
+
+nextflow run main.nf --vitap_use_latest false
+
+or 
+
+nextflow run main.nf --vitap_use_latest true --vitap_db_label VMR_MSL41
+
+================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Do not go gentle into that good night
+
 
 
 
