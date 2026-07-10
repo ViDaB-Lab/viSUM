@@ -480,6 +480,47 @@ process VICAT_DB {
   """
 }
 
+process VCONTACT3_DB {
+
+  tag "vcontact3_db"
+
+  conda 'bioconda::vcontact3 conda-forge::rsync'
+
+  output:
+    path("vcontact3_db")
+
+  script:
+  """
+  set -euo pipefail
+
+  DB_DEST="${params.vcontact3_db_dir}"
+  SENTINEL="\${DB_DEST}/.db_complete"
+
+  mkdir -p "\${DB_DEST}"
+
+  if [[ -f "\${SENTINEL}" ]]; then
+    ln -sfn "\${DB_DEST}" vcontact3_db
+    exit 0
+  fi
+
+  tmpdir="\$(mktemp -d)"
+  trap 'rm -rf "\$tmpdir"' EXIT
+
+  vcontact3 prepare_databases --get-version latest --set-location "\$tmpdir/db"
+
+  rsync -a --delete "\$tmpdir/db/" "\${DB_DEST}/"
+
+  if [[ ! -d "\${DB_DEST}" ]]; then
+    echo "ERROR: vConTACT3 database setup failed" >&2
+    exit 1
+  fi
+
+  date -Iseconds > "\${SENTINEL}"
+
+  ln -sfn "\${DB_DEST}" vcontact3_db
+  """
+}
+
 process RUN_CHECKV {
 
   tag "$prefix"
@@ -1045,6 +1086,46 @@ process RUN_VIRBOT {
   """
 }
 
+process RUN_CAT {
+
+  tag "$prefix"
+
+  conda "${projectDir}/bin/cat.yml"
+
+  publishDir { "${params.outdir}/${prefix}/CAT" }, mode: 'copy'
+
+  input:
+    tuple val(prefix), val(type), path(norm_fasta), path(header_map), path(proteins_faa)
+    path cat_db
+    path cat_repo
+
+  output:
+    tuple val(prefix),
+          val(type),
+          path(norm_fasta),
+          path(header_map),
+          path(proteins_faa),
+          path("${prefix}.cat_review"),
+          path("${prefix}.cat_lineage.tsv")
+
+  script:
+  """
+  set -euo pipefail
+
+  outdir="${prefix}.cat_review"
+  mkdir -p "\$outdir"
+
+  CAT_pack contigs -i ${proteins_faa} -d ${cat_db} -o "/$outdir" -t ${params.threads}
+  raw="\$outdir/contig_annotations.tsv"
+
+  if [[ -s "\$raw" ]]; then
+    cp "\$raw" ${prefix}.cat_lineage.tsv
+  else
+    # create empty-but-valid tsv with header
+    echo -e "contig_id\\tlineage\\tscore\\tannotation_method\\tannotation_source\\tannotation_accession" > ${prefix}.cat_lineage.tsv
+  fi
+  """
+}
 
 
 workflow {
@@ -1202,7 +1283,6 @@ workflow {
     ch_ct3_db = CENOTETAKER3_DB().map { it -> CT3_DB_PATH }
   }
 
-
   // VITAP DB 
   def VITAP_DB_PATH     = file("${params.vitap_dir}/DB_${params.vitap_db_label}")
   def VITAP_DB_SENTINEL = file("${params.vitap_dir}/DB_${params.vitap_db_label}/.db_complete")
@@ -1227,15 +1307,31 @@ workflow {
     ch_gianthunter_db = GIANTHUNTER_DB().map { it -> GIANTHUNTER_DB_PATH }
   } 
 
-  // VirBot database path check
-  def VIRBOT_DB_PATH = file(params.virbot_db_dir)
+  // VirBot  repo and database path check
+  def VIRBOT_REPO_PATH = file(params.virbot_repo_dir)
+  if( !VIRBOT_REPO_PATH.exists() ) {
+    error "VirBot repo directory not found: ${params.virbot_repo_dir}"
+  }
 
+  def VIRBOT_DB_PATH = file(params.virbot_db_dir)
   if( !VIRBOT_DB_PATH.exists() ) {
     error "VirBot database directory not found: ${params.virbot_db_dir}"
   }
 
-  Channel ch_virbot_db = Channel.value(VIRBOT_DB_PATH)
+  Channel ch_virbot_repo = Channel.value(VIRBOT_REPO_PATH)
+  Channel ch_virbot_db   = Channel.value(VIRBOT_DB_PATH)
 
+  // VCONTACT3 DB
+  def VCONTACT3_DB_PATH     = file(params.vcontact3_db_dir)
+  def VCONTACT3_DB_SENTINEL = file("${params.vcontact3_db_dir}/.db_complete")
+
+  Channel ch_vcontact3_db
+
+  if( VCONTACT3_DB_SENTINEL.exists() ) {
+    ch_vcontact3_db = Channel.value(VCONTACT3_DB_PATH)
+  } else {
+    ch_vcontact3_db = VCONTACT3_DB().map { it -> VCONTACT3_DB_PATH }
+  }
   // ---------- NORMALIZE ----------
   ch_norm = NORMALIZE_FASTA(ch_samples)
 
