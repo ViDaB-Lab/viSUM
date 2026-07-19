@@ -6,6 +6,7 @@ include { NORMALIZE_FASTA } from './modules/local/normalize_fasta'
 include { PREPARE_GENOMAD_DATABASE } from './modules/local/genomad_database'
 include { RUN_GENOMAD } from './modules/local/run_genomad'
 include { STANDARDIZE_GENOMAD } from './modules/local/standardize_genomad'
+include { PREPARE_VIRSORTER2_DATABASE } from './modules/local/virsorter2_database'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -177,6 +178,30 @@ workflow {
 
         STANDARDIZE_GENOMAD.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
+        }
+    }
+
+    if( params.run_virsorter2 ) {
+        def userSuppliedDatabase = params.virsorter2_db != null
+        def virsorter2DatabasePath = userSuppliedDatabase
+            ? file(params.virsorter2_db).toString()
+            : file("${params.dbdir}/virsorter2/db").toString()
+        def virsorter2DatabaseSource = userSuppliedDatabase
+            ? 'user-supplied'
+            : 'viSUM-managed'
+
+        ch_virsorter2_database_request = Channel.of(
+            tuple(
+                virsorter2DatabasePath,
+                virsorter2DatabaseSource,
+                params.virsorter2_auto_download
+            )
+        )
+
+        PREPARE_VIRSORTER2_DATABASE(ch_virsorter2_database_request)
+
+        PREPARE_VIRSORTER2_DATABASE.out.database.view { database, metadata ->
+            "VIRSORTER2_DB database=${database} metadata=${metadata.name}"
         }
     }
 }
