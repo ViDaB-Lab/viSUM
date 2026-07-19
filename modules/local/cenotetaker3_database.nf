@@ -32,28 +32,57 @@ process PREPARE_CENOTETAKER3_DATABASE {
     AUTO_DOWNLOAD="${auto_download}"
     HMM_DB_VERSION="${hmm_database_version}"
 
+    report_missing_file() {
+        local required_file="\$1"
+        local report_errors="\$2"
+
+        if [[ "\$report_errors" == 'true' ]]; then
+            echo "Validation failed: missing or empty required file: \$required_file" >&2
+        fi
+    }
+
     validate_mmseqs_database() {
         local database_prefix="\$1"
+        local report_errors="\$2"
 
-        [[ -s "\$database_prefix" ]] || return 1
-        [[ -s "\${database_prefix}.dbtype" ]] || return 1
+        [[ -s "\$database_prefix" ]] || {
+            report_missing_file "\$database_prefix" "\$report_errors"
+            return 1
+        }
+        [[ -s "\${database_prefix}.dbtype" ]] || {
+            report_missing_file "\${database_prefix}.dbtype" "\$report_errors"
+            return 1
+        }
     }
 
     validate_taxonomy_database() {
         local database_prefix="\$1"
+        local report_errors="\$2"
 
-        validate_mmseqs_database "\$database_prefix" || return 1
-        [[ -s "\${database_prefix}_mapping" ]] || return 1
-        [[ -s "\${database_prefix}_taxonomy" ]] || return 1
+        validate_mmseqs_database "\$database_prefix" "\$report_errors" || return 1
+        [[ -s "\${database_prefix}_mapping" ]] || {
+            report_missing_file "\${database_prefix}_mapping" "\$report_errors"
+            return 1
+        }
+        [[ -s "\${database_prefix}_taxonomy" ]] || {
+            report_missing_file "\${database_prefix}_taxonomy" "\$report_errors"
+            return 1
+        }
     }
 
     validate_database() {
         local candidate="\$1"
+        local report_errors="\${2:-false}"
         local hmm_name
-        local hmm_extension
+        local required_hmm
+        local domain_list
 
-        [[ -d "\$candidate" ]] || return 1
-        [[ -r "\$candidate" ]] || return 1
+        if [[ ! -d "\$candidate" || ! -r "\$candidate" ]]; then
+            if [[ "\$report_errors" == 'true' ]]; then
+                echo "Validation failed: database directory is missing or unreadable: \$candidate" >&2
+            fi
+            return 1
+        fi
 
         for hmm_name in \
             Virion_HMMs \
@@ -61,18 +90,24 @@ process PREPARE_CENOTETAKER3_DATABASE {
             RDRP_HMMs \
             Useful_Annotation_HMMs \
             phrogs_for_ct; do
-            for hmm_extension in h3f h3i h3m h3p; do
-                [[ -s "\$candidate/hmmscan_DBs/\$HMM_DB_VERSION/\${hmm_name}.\${hmm_extension}" ]] \
-                    || return 1
-            done
+            required_hmm="\$candidate/hmmscan_DBs/\$HMM_DB_VERSION/\${hmm_name}.h3m"
+            [[ -s "\$required_hmm" ]] || {
+                report_missing_file "\$required_hmm" "\$report_errors"
+                return 1
+            }
         done
 
         validate_taxonomy_database \
-            "\$candidate/mmseqs_DBs/ct3_hallmark.taxDB" || return 1
+            "\$candidate/mmseqs_DBs/ct3_hallmark.taxDB" "\$report_errors" || return 1
         validate_taxonomy_database \
-            "\$candidate/mmseqs_DBs/refseq_virus_prot_taxDB" || return 1
-        validate_mmseqs_database "\$candidate/mmseqs_DBs/CDD" || return 1
-        [[ -s "\$candidate/viral_cdds_and_pfams_191028.txt" ]] || return 1
+            "\$candidate/mmseqs_DBs/refseq_virus_prot_taxDB" "\$report_errors" || return 1
+        validate_mmseqs_database \
+            "\$candidate/mmseqs_DBs/CDD" "\$report_errors" || return 1
+        domain_list="\$candidate/viral_cdds_and_pfams_191028.txt"
+        [[ -s "\$domain_list" ]] || {
+            report_missing_file "\$domain_list" "\$report_errors"
+            return 1
+        }
     }
 
     write_metadata() {
@@ -107,6 +142,7 @@ process PREPARE_CENOTETAKER3_DATABASE {
         if ! validate_database "\$DB_DEST"; then
             echo "ERROR: The user-supplied Cenote-Taker 3 database is missing, unreadable, or incomplete:" >&2
             echo "       \$DB_DEST" >&2
+            validate_database "\$DB_DEST" true || true
             echo "Expected CT3 HMM database \$HMM_DB_VERSION, hallmark and RefSeq taxonomy databases," >&2
             echo "the MMseqs2 CDD database, and the viral domain list." >&2
             echo "Automatic setup was not attempted because --ct3_db was supplied." >&2
@@ -139,6 +175,7 @@ process PREPARE_CENOTETAKER3_DATABASE {
     if [[ -e "\$DB_DEST" && ! -f "\$INSTALLING_MARKER" ]]; then
         echo "ERROR: A managed Cenote-Taker 3 database path exists but failed validation:" >&2
         echo "       \$DB_DEST" >&2
+        validate_database "\$DB_DEST" true || true
         echo "viSUM will not overwrite a directory it cannot identify as its own interrupted installation." >&2
         exit 1
     fi
@@ -175,6 +212,7 @@ process PREPARE_CENOTETAKER3_DATABASE {
     # so the installed files must be checked even when the command exits zero.
     if ! validate_database "\$DB_DEST"; then
         echo "ERROR: Cenote-Taker 3 database setup completed, but the database failed validation." >&2
+        validate_database "\$DB_DEST" true || true
         echo "The installation marker was retained so viSUM can safely retry this managed setup." >&2
         exit 1
     fi
