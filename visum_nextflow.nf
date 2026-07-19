@@ -930,8 +930,7 @@ process PROCESS_GIANTHUNTER {
           path(norm_fasta),
           path(header_map),
           path(proteins_faa),
-          path(gianthunter_pred),
-
+          path(gianthunter_pred)
 
   output:
     tuple val(prefix),
