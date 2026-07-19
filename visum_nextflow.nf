@@ -16,6 +16,8 @@ process NORMALIZE_FASTA {
 
   tag "$prefix"
 
+  conda 'conda-forge::python=3.11'
+
   // Per-sample outputs go here
   publishDir { "${params.outdir}/${prefix}/prep" }, mode: 'copy'
 
@@ -27,69 +29,11 @@ process NORMALIZE_FASTA {
 
   script:
   """
-  python3 - << 'PY'
-  import sys
-
-  prefix = ${prefix!r}
-  in_fa  = ${fasta!r}
-  out_fa = f"{prefix}.normalized.fasta"
-  out_map= f"{prefix}.header_map.tsv"
-
-  def fasta_reader(fp):
-    header = None
-    seq_chunks = []
-    for line in fp:
-      line = line.rstrip("\\n")
-      if not line:
-        continue
-      if line.startswith(">"):
-        if header is not None:
-          yield header, "".join(seq_chunks)
-        header = line[1:]  # keep full header (without >)
-        seq_chunks = []
-      else:
-        seq_chunks.append(line.strip())
-    if header is not None:
-      yield header, "".join(seq_chunks)
-
-  n = 0
-  seen_new = set()
-
-  with open(in_fa, "r", encoding="utf-8", errors="replace") as fin, \\
-       open(out_fa, "w", encoding="utf-8") as fout, \\
-       open(out_map, "w", encoding="utf-8") as fmap:
-
-    # TSV header
-    fmap.write("prefix\\tnew_id\\toriginal_id\\toriginal_header\\tlength\\n")
-
-    for header, seq in fasta_reader(fin):
-      if header is None:
-        continue
-
-      n += 1
-      new_id = f"{prefix}__c{n:06d}"
-
-      # Safety check (should never collide unless n resets)
-      if new_id in seen_new:
-        raise RuntimeError(f"Duplicate new_id generated: {new_id}")
-      seen_new.add(new_id)
-
-      # original_id: first token of header (common FASTA convention)
-      original_id = header.split()[0] if header.strip() else ""
-
-      # Write normalized fasta
-      fout.write(f">{new_id}\\n")
-      # wrap sequence to 80 chars for readability
-      for i in range(0, len(seq), 80):
-        fout.write(seq[i:i+80] + "\\n")
-
-      # Mapping row
-      fmap.write(f"{prefix}\\t{new_id}\\t{original_id}\\t{header}\\t{len(seq)}\\n")
-
-  if n == 0:
-    raise RuntimeError(f"No FASTA records found in {in_fa}")
-
-  PY
+  python3 "${projectDir}/bin/normalize_fasta.py" \
+    --input "${fasta}" \
+    --sample-id "${prefix}" \
+    --output-fasta "${prefix}.normalized.fasta" \
+    --output-map "${prefix}.header_map.tsv"
   """
 }
 
