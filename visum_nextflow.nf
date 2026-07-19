@@ -9,6 +9,7 @@ include { STANDARDIZE_GENOMAD } from './modules/local/standardize_genomad'
 include { PREPARE_VIRSORTER2_DATABASE } from './modules/local/virsorter2_database'
 include { RUN_VIRSORTER2 } from './modules/local/run_virsorter2'
 include { STANDARDIZE_VIRSORTER2 } from './modules/local/standardize_virsorter2'
+include { PREPARE_CENOTETAKER3_DATABASE } from './modules/local/cenotetaker3_database'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -236,6 +237,31 @@ workflow {
 
         STANDARDIZE_VIRSORTER2.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
+        }
+    }
+
+    if( params.run_cenotetaker3 ) {
+        def userSuppliedDatabase = params.ct3_db != null
+        def cenotetaker3DatabasePath = userSuppliedDatabase
+            ? file(params.ct3_db).toString()
+            : file("${params.dbdir}/cenotetaker3/ct3_DBs").toString()
+        def cenotetaker3DatabaseSource = userSuppliedDatabase
+            ? 'user-supplied'
+            : 'viSUM-managed'
+
+        ch_cenotetaker3_database_request = Channel.of(
+            tuple(
+                cenotetaker3DatabasePath,
+                cenotetaker3DatabaseSource,
+                params.ct3_auto_download,
+                params.ct3_hmm_db_version
+            )
+        )
+
+        PREPARE_CENOTETAKER3_DATABASE(ch_cenotetaker3_database_request)
+
+        PREPARE_CENOTETAKER3_DATABASE.out.database.view { database, metadata ->
+            "CENOTETAKER3_DB database=${database} metadata=${metadata.name}"
         }
     }
 }
