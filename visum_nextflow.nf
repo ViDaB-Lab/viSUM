@@ -3,6 +3,7 @@
 nextflow.enable.dsl = 2
 
 include { NORMALIZE_FASTA } from './modules/local/normalize_fasta'
+include { PREPARE_GENOMAD_DATABASE } from './modules/local/genomad_database'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -120,5 +121,29 @@ workflow {
 
     NORMALIZE_FASTA.out.normalized_records.view { prefix, type, fasta, headerMap ->
         "NORMALIZED sample=${prefix} type=${type} fasta=${fasta.name} map=${headerMap.name}"
+    }
+
+    if( params.run_genomad ) {
+        def userSuppliedDatabase = params.genomad_db != null
+        def genomadDatabasePath = userSuppliedDatabase
+            ? file(params.genomad_db).toString()
+            : file("${params.dbdir}/genomad/genomad_db").toString()
+        def genomadDatabaseSource = userSuppliedDatabase
+            ? 'user-supplied'
+            : 'viSUM-managed'
+
+        ch_genomad_database_request = Channel.of(
+            tuple(
+                genomadDatabasePath,
+                genomadDatabaseSource,
+                params.genomad_auto_download
+            )
+        )
+
+        PREPARE_GENOMAD_DATABASE(ch_genomad_database_request)
+
+        PREPARE_GENOMAD_DATABASE.out.database.view { database, metadata ->
+            "GENOMAD_DB database=${database} metadata=${metadata.name}"
+        }
     }
 }

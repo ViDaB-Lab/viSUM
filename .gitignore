@@ -1,2 +1,5 @@
 # Persistent Nextflow Conda/Mamba environment cache
 .conda/
+
+# Persistent databases are installed locally and must not be committed
+databases/
