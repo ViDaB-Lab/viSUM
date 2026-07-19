@@ -48,7 +48,13 @@ process PREPARE_VIRSORTER2_DATABASE {
     write_metadata() {
         local action="\$1"
         local virsorter2_version
-        virsorter2_version=\$(virsorter --version 2>&1 | head -n 1)
+        virsorter2_version=\$(
+            python3 -c 'import virsorter; print(virsorter.__version__)' 2>/dev/null \
+                || true
+        )
+        if [[ -z "\$virsorter2_version" ]]; then
+            virsorter2_version='unknown'
+        fi
 
         printf 'database_path\tdatabase_source\tvalidation\tinstallation_action\tvirsorter2_version\n' \
             > virsorter2_database_metadata.tsv
