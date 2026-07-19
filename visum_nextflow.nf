@@ -892,7 +892,7 @@ process RUN_GIANTHUNTER {
           path(norm_fasta),
           path(header_map),
           path(proteins_faa),
-          path("${prefix}_gianthunter_prediction.tsv"),
+          path("${prefix}_gianthunter_prediction.tsv")
 
   script:
   """
