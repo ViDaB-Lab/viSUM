@@ -7,6 +7,7 @@ include { PREPARE_GENOMAD_DATABASE } from './modules/local/genomad_database'
 include { RUN_GENOMAD } from './modules/local/run_genomad'
 include { STANDARDIZE_GENOMAD } from './modules/local/standardize_genomad'
 include { PREPARE_VIRSORTER2_DATABASE } from './modules/local/virsorter2_database'
+include { RUN_VIRSORTER2 } from './modules/local/run_virsorter2'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -202,6 +203,20 @@ workflow {
 
         PREPARE_VIRSORTER2_DATABASE.out.database.view { database, metadata ->
             "VIRSORTER2_DB database=${database} metadata=${metadata.name}"
+        }
+
+        ch_virsorter2_database = PREPARE_VIRSORTER2_DATABASE.out.database
+            .map { database, metadata -> database }
+            .first()
+
+        RUN_VIRSORTER2(
+            NORMALIZE_FASTA.out.normalized_records,
+            ch_virsorter2_database
+        )
+
+        RUN_VIRSORTER2.out.results.view {
+            prefix, type, review, score, boundary, viralFasta, metadata ->
+                "VIRSORTER2 sample=${prefix} type=${type} score=${score.name} output=${review.name}"
         }
     }
 }
