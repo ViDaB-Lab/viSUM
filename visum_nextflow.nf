@@ -1394,7 +1394,7 @@ ch_ev_map.view { prefix, m ->
 ch_vsum_in = ch_core.join(ch_ev_map)
   .map { core, ev ->
     def (p, t, nf, hm, faa) = core
-    def (_, m) = ev
+    def (evidencePrefix, m) = ev
     tuple(p, t, nf, hm, faa, m)
   }
 
