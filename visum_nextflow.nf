@@ -4,6 +4,7 @@ nextflow.enable.dsl = 2
 
 include { NORMALIZE_FASTA } from './modules/local/normalize_fasta'
 include { PREPARE_GENOMAD_DATABASE } from './modules/local/genomad_database'
+include { RUN_GENOMAD } from './modules/local/run_genomad'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -144,6 +145,19 @@ workflow {
 
         PREPARE_GENOMAD_DATABASE.out.database.view { database, metadata ->
             "GENOMAD_DB database=${database} metadata=${metadata.name}"
+        }
+
+        ch_genomad_database = PREPARE_GENOMAD_DATABASE.out.database
+            .map { database, metadata -> database }
+            .first()
+
+        RUN_GENOMAD(
+            NORMALIZE_FASTA.out.normalized_records,
+            ch_genomad_database
+        )
+
+        RUN_GENOMAD.out.results.view { prefix, type, review, virusSummary, virusFasta, virusGenes, virusProteins, plasmidSummary, metadata ->
+            "GENOMAD sample=${prefix} type=${type} virus_summary=${virusSummary.name} output=${review.name}"
         }
     }
 }
