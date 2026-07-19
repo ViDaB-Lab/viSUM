@@ -1131,6 +1131,36 @@ process RUN_CAT {
 workflow {
 
   /*
+    Sample prefixes become part of sequence IDs and output filenames.
+    Reject unsafe prefixes rather than silently changing them.
+  */
+  def validatePrefix = { rawPrefix, source ->
+    if( rawPrefix == null || rawPrefix.toString().isEmpty() )
+      error "Missing sample prefix (${source})."
+
+    def prefix = rawPrefix.toString()
+    def allowedPattern = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
+    if( !(prefix ==~ allowedPattern) ) {
+      def invalidChars = prefix.replaceAll(/[A-Za-z0-9._-]/, '').toList().unique().join(' ')
+      def suggestion = prefix.replaceAll(/[^A-Za-z0-9._-]/, '_')
+
+      if( !(suggestion ==~ /^[A-Za-z0-9].*/) )
+        suggestion = "sample${suggestion}"
+
+      def detail = invalidChars
+        ? " Invalid character(s): '${invalidChars}'."
+        : " The first character must be a letter or number."
+
+      error "Invalid sample prefix '${prefix}' (${source}).${detail} " +
+            "Use only letters, numbers, periods, underscores, and hyphens; " +
+            "the first character must be a letter or number. Suggested prefix: '${suggestion}'."
+    }
+
+    return prefix
+  }
+
+  /*
     -----------------------------
     Decide mode + validate inputs
     -----------------------------
@@ -1167,7 +1197,8 @@ workflow {
     if( !fasta.exists() )
       error "Input FASTA not found: ${params.input}"
 
-    ch_samples = Channel.of( tuple(params.prefix, t, fasta) )
+    def prefix = validatePrefix(params.prefix, '--prefix')
+    ch_samples = Channel.of( tuple(prefix, t, fasta) )
   }
 
   /*
@@ -1195,12 +1226,14 @@ workflow {
       .splitCsv(header: true, sep: ',')   // expects header: prefix,type,fasta
       .map { row ->
 
-        def prefix = row.prefix?.toString()?.trim()
+        def prefix = row.prefix?.toString()
         def type   = row.type?.toString()?.trim()?.toLowerCase()
         def rel    = row.fasta?.toString()?.trim()
 
         if( !prefix || !type || !rel )
           error "CSV must have columns prefix,type,fasta with non-empty values. Bad row: ${row}"
+
+        prefix = validatePrefix(prefix, "prefix_many row")
 
         if( !(type in ['dna','rna']) )
           error "Invalid type for prefix=${prefix}: '${type}' (must be dna or rna)"
