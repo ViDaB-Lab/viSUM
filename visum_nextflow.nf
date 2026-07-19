@@ -525,17 +525,17 @@ process RUN_DEEP6 {
   set -euo pipefail
 
   MODEL_DIR="${params.deep6_model}"
-  if [ -z "${MODEL_DIR}" ] || [ "${MODEL_DIR}" = "null" ]; then
+  if [ -z "\${MODEL_DIR}" ] || [ "\${MODEL_DIR}" = "null" ]; then
     MODEL_DIR="${deep6_db}/Models"
   fi
   outdir="${prefix}.deep6.review"
-  mkdir -p "$outdir"
+  mkdir -p "\$outdir"
 
   #run deep6 
-  python3 ${deep6_db}/Master/deep6.py -i ${norm_fasta} -l ${params.deep6_minlen} -m "$MODEL_DIR" -o "$outdir"
+  python3 ${deep6_db}/Master/deep6.py -i ${norm_fasta} -l ${params.deep6_minlen} -m "\$MODEL_DIR" -o "\$outdir"
 
   # locate prediction output 
-  pred_file=$(ls "$outdir"/*_predict_${params.deep6_minlen}bp_deep6.txt 2>/dev/null || true)
+  pred_file=\$(ls "\$outdir"/*_predict_${params.deep6_minlen}bp_deep6.txt 2>/dev/null || true)
 
   # setting file names
   RAW_TSV="${prefix}.${params.deep6_minlen}bp_deep6_scores_raw.tsv"
@@ -545,47 +545,47 @@ process RUN_DEEP6 {
   CONF="${prefix}.${params.deep6_minlen}bp_deep6_confident_predictions.csv"
 
   # Always create evidence header (so Nextflow output exists)
-  echo "seqid,d__Domain,r__Realm,k__Kingdom,p__Phylum,c__Class,o__Order,f__Family,g__Genus,s__Species" > "$EVID"
+  echo "seqid,d__Domain,r__Realm,k__Kingdom,p__Phylum,c__Class,o__Order,f__Family,g__Genus,s__Species" > "\$EVID"
 
   # If deep6 produced predictions, copy them; else create header-only raw.tsv
-  if [ -n "$pred_file" ] && [ -s "$pred_file" ]; then
-    cp "$pred_file" "$RAW_TSV"
+  if [ -n "\$pred_file" ] && [ -s "\$pred_file" ]; then
+    cp "\$pred_file" "\$RAW_TSV"
   else
     # Deep6 standard header per repo output: name length duplo euk mono pro ribo vari
-    printf "name\tlength\tduplo\teuk\tmono\tpro\tribo\tvari\n" > "$RAW_TSV"
+    printf "name\tlength\tduplo\teuk\tmono\tpro\tribo\tvari\n" > "\$RAW_TSV"
   fi
 
   # Convert tsv -> csv (overwrite, don't append)
-  sed 's/\t/,/g' "$RAW_TSV" > "$RAW_CSV"
+  sed 's/\t/,/g' "\$RAW_TSV" > "\$RAW_CSV"
 
   # If RAW_CSV has more than header, run your scoring/cleaning
   # (NR>1 means at least 1 data row)
-  if awk 'NR>1{exit 0} END{exit 1}' "$RAW_CSV"; then
-    python3 ${projectDir}/bin/deep6_compare_all_vs_allv0.1.py "$RAW_CSV" "${prefix}_deep6_sanity_check.csv" "$CLEAN_CSV"
+  if awk 'NR>1{exit 0} END{exit 1}' "\$RAW_CSV"; then
+    python3 ${projectDir}/bin/deep6_compare_all_vs_allv0.1.py "\$RAW_CSV" "${prefix}_deep6_sanity_check.csv" "\$CLEAN_CSV"
     # Build confident predictions + evidence
     # Assumes CLEAN_CSV format: seqid,length,score,realm,flag (as you described)
-    echo "seqid,length,score,realm,flag" > "$CONF"
+    echo "seqid,length,score,realm,flag" > "\$CONF"
     # pull unique seqids (skip header)
-    awk -F "," 'NR>1{print $1}' "$CLEAN_CSV" | sort -u > sample.list
+    awk -F "," 'NR>1{print \$1}' "\$CLEAN_CSV" | sort -u > sample.list
     while read -r x; do
-      top=$(grep -w "$x" "$CLEAN_CSV" | awk -F "," '{print $3}' | head -n 1)
+      top=\$(grep -w "\$x" "\$CLEAN_CSV" | awk -F "," '{print \$3}' | head -n 1)
       # guard if missing
-      if [ -z "$top" ]; then
+      if [ -z "\$top" ]; then
         continue
       fi
       # if top > 0.7 keep it
-      if (( $(echo "$top > 0.7" | bc -l) )); then
-        grep -w "$x" "$CLEAN_CSV" >> "$CONF"
+      if (( \$(echo "\$top > 0.7" | bc -l) )); then
+        grep -w "\$x" "\$CLEAN_CSV" >> "\$CONF"
         # realm is column 4
-        realm=$(grep -w "$x" "$CLEAN_CSV" | awk -F "," '{print $4}' | head -n 1)
+        realm=\$(grep -w "\$x" "\$CLEAN_CSV" | awk -F "," '{print \$4}' | head -n 1)
         # Map realm -> taxonomy line using your mapping file
         # deep6lines.txt should include entries like: ribo;d__Viruses,r__Riboviria,k__unclassified,...
-        line=$(grep -w "^${realm};" ${projectDir}/bin/deep6lines.txt | awk -F ";" '{print $2}' | head -n 1)
+        line=\$(grep -w "^\${realm};" ${projectDir}/bin/deep6lines.txt | awk -F ";" '{print \$2}' | head -n 1)
         # if mapping missing, default to viruses/unclassified
-        if [ -z "$line" ]; then
+        if [ -z "\$line" ]; then
           line="d__Viruses,r__unclassified,k__unclassified,p__unclassified,c__unclassified,o__unclassified,f__unclassified,g__unclassified,s__unclassified"
         fi
-        echo "${x},${line}" >> "$EVID"
+        echo "\${x},\${line}" >> "\$EVID"
       fi
     done < sample.list
   else
@@ -1059,7 +1059,7 @@ process RUN_CAT {
   outdir="${prefix}.cat_review"
   mkdir -p "\$outdir"
 
-  CAT_pack contigs -i ${proteins_faa} -d ${cat_db} -o "/$outdir" -t ${params.threads}
+  CAT_pack contigs -i ${proteins_faa} -d ${cat_db} -o "/\$outdir" -t ${params.threads}
   raw="\$outdir/contig_annotations.tsv"
 
   if [[ -s "\$raw" ]]; then
