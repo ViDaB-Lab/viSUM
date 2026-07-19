@@ -8,6 +8,7 @@ include { RUN_GENOMAD } from './modules/local/run_genomad'
 include { STANDARDIZE_GENOMAD } from './modules/local/standardize_genomad'
 include { PREPARE_VIRSORTER2_DATABASE } from './modules/local/virsorter2_database'
 include { RUN_VIRSORTER2 } from './modules/local/run_virsorter2'
+include { STANDARDIZE_VIRSORTER2 } from './modules/local/standardize_virsorter2'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -217,6 +218,24 @@ workflow {
         RUN_VIRSORTER2.out.results.view {
             prefix, type, review, score, boundary, viralFasta, metadata ->
                 "VIRSORTER2 sample=${prefix} type=${type} score=${score.name} output=${review.name}"
+        }
+
+        ch_virsorter2_for_standardizer = RUN_VIRSORTER2.out.results.map {
+            prefix, type, review, score, boundary, viralFasta, metadata ->
+                tuple(prefix, type, score, boundary, metadata)
+        }
+
+        ch_virsorter2_standardizer_input = ch_virsorter2_for_standardizer
+            .join(
+                NORMALIZE_FASTA.out.normalized_records.map {
+                    prefix, type, fasta, headerMap -> tuple(prefix, headerMap)
+                }
+            )
+
+        STANDARDIZE_VIRSORTER2(ch_virsorter2_standardizer_input)
+
+        STANDARDIZE_VIRSORTER2.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
     }
 }

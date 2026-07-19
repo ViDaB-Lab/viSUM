@@ -30,7 +30,6 @@ process STANDARDIZE_GENOMAD {
         --virus-summary "${virus_summary}" \
         --plasmid-summary "${plasmid_summary}" \
         --run-metadata "${run_metadata}" \
-        --score-calibrated false \
         --output "${prefix}.genomad_evidence.tsv"
     """
 }
