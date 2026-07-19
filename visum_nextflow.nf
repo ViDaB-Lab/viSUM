@@ -717,7 +717,7 @@ process RUN_VIRSORTER2 {
   if [ -s "\$RAW" ]; then
     awk -F "\t" '
     NR>1 {
-      split(\$1, a, /\|\|/)
+      split(\$1, a, /\\|\\|/)
       seqid = a[1]
       tag   = (length(a)>1 ? a[2] : "full")
       score = \$7
@@ -953,17 +953,17 @@ process PROCESS_GIANTHUNTER {
     ranks[4]="c__"; ranks[5]="o__"; ranks[6]="f__";
     ranks[7]="g__"; ranks[8]="s__"
   }
-  $4 ~ /Viruses/ {
-    gsub(/superkingdom:/, "d__", $4)
-    gsub(/kingdom:/, "k__", $4)
-    gsub(/phylum:/, "p__", $4)
-    gsub(/class:/, "c__", $4)
-    gsub(/order:/, "o__", $4)
-    gsub(/family:/, "f__", $4)
-    gsub(/genus:/, "g__", $4)
-    gsub(/species:/, "s__", $4)
+  \$4 ~ /Viruses/ {
+    gsub(/superkingdom:/, "d__", \$4)
+    gsub(/kingdom:/, "k__", \$4)
+    gsub(/phylum:/, "p__", \$4)
+    gsub(/class:/, "c__", \$4)
+    gsub(/order:/, "o__", \$4)
+    gsub(/family:/, "f__", \$4)
+    gsub(/genus:/, "g__", \$4)
+    gsub(/species:/, "s__", \$4)
 
-    n = split($4, raw, ";")
+    n = split(\$4, raw, ";")
     count = 0
     for (i = 1; i <= n; i++) {
         if (raw[i] ~ /^(d__|k__|p__|c__|o__|f__|g__|s__)/) {
@@ -978,7 +978,7 @@ process PROCESS_GIANTHUNTER {
     lineage = parts[1]
     for (i = 2; i <= 8; i++) lineage = lineage ";" parts[i]
 
-    print $1 "," lineage "," $5
+    print \$1 "," lineage "," \$5
   }
   '   ${gianthunter_pred} > "\$OUT"
   """
