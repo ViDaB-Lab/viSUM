@@ -5,6 +5,7 @@ nextflow.enable.dsl = 2
 include { NORMALIZE_FASTA } from './modules/local/normalize_fasta'
 include { PREPARE_GENOMAD_DATABASE } from './modules/local/genomad_database'
 include { RUN_GENOMAD } from './modules/local/run_genomad'
+include { STANDARDIZE_GENOMAD } from './modules/local/standardize_genomad'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -158,6 +159,24 @@ workflow {
 
         RUN_GENOMAD.out.results.view { prefix, type, review, virusSummary, virusFasta, virusGenes, virusProteins, plasmidSummary, metadata ->
             "GENOMAD sample=${prefix} type=${type} virus_summary=${virusSummary.name} output=${review.name}"
+        }
+
+        ch_genomad_for_standardizer = RUN_GENOMAD.out.results.map {
+            prefix, type, review, virusSummary, virusFasta, virusGenes, virusProteins, plasmidSummary, metadata ->
+                tuple(prefix, type, virusSummary, plasmidSummary, metadata)
+        }
+
+        ch_genomad_standardizer_input = ch_genomad_for_standardizer
+            .join(
+                NORMALIZE_FASTA.out.normalized_records.map { prefix, type, fasta, headerMap ->
+                    tuple(prefix, headerMap)
+                }
+            )
+
+        STANDARDIZE_GENOMAD(ch_genomad_standardizer_input)
+
+        STANDARDIZE_GENOMAD.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
     }
 }

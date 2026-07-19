@@ -4,7 +4,7 @@ process NORMALIZE_FASTA {
 
     conda 'conda-forge::python=3.11'
 
-    publishDir { "${params.outdir}/${prefix}/prep" }, mode: 'copy'
+    publishDir { "${params.outdir}/${prefix}_results/prep" }, mode: 'copy'
 
     input:
     tuple val(prefix), val(type), path(fasta)

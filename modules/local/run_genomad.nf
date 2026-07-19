@@ -8,7 +8,7 @@ process RUN_GENOMAD {
     memory params.memory
     time params.time
 
-    publishDir { "${params.outdir}/${prefix}/genomad" },
+    publishDir { "${params.outdir}/${prefix}_results/genomad" },
         mode: 'copy'
 
     input:

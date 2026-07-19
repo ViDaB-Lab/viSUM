@@ -3,3 +3,7 @@
 
 # Persistent databases are installed locally and must not be committed
 databases/
+
+# Python runtime artifacts
+__pycache__/
+*.py[cod]
