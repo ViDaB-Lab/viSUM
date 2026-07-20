@@ -10,6 +10,7 @@ include { PREPARE_VIRSORTER2_DATABASE } from './modules/local/virsorter2_databas
 include { RUN_VIRSORTER2 } from './modules/local/run_virsorter2'
 include { STANDARDIZE_VIRSORTER2 } from './modules/local/standardize_virsorter2'
 include { PREPARE_CENOTETAKER3_DATABASE } from './modules/local/cenotetaker3_database'
+include { RUN_CENOTETAKER3 } from './modules/local/run_cenotetaker3'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -262,6 +263,21 @@ workflow {
 
         PREPARE_CENOTETAKER3_DATABASE.out.database.view { database, metadata ->
             "CENOTETAKER3_DB database=${database} metadata=${metadata.name}"
+        }
+
+        ch_cenotetaker3_database = PREPARE_CENOTETAKER3_DATABASE.out.database
+            .map { database, metadata -> database }
+            .first()
+
+        RUN_CENOTETAKER3(
+            NORMALIZE_FASTA.out.normalized_records,
+            ch_cenotetaker3_database
+        )
+
+        RUN_CENOTETAKER3.out.results.view {
+            prefix, type, summary, virusFasta, virusProteins, pruneSummary,
+            geneAnnotations, runArguments, log, metadata ->
+                "CENOTETAKER3 sample=${prefix} type=${type} summary=${summary.name}"
         }
     }
 }

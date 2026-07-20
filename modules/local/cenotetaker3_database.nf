@@ -113,7 +113,10 @@ process PREPARE_CENOTETAKER3_DATABASE {
     write_metadata() {
         local action="\$1"
         local cenotetaker3_version
-        cenotetaker3_version=\$(cenotetaker3 --version 2>&1 | head -n 1 || true)
+        cenotetaker3_version=\$(
+            python3 -c "from importlib.metadata import version; print(version('cenote-taker3'))" \
+                2>/dev/null || true
+        )
         if [[ -z "\$cenotetaker3_version" ]]; then
             cenotetaker3_version='unknown'
         fi
