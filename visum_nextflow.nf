@@ -11,6 +11,7 @@ include { RUN_VIRSORTER2 } from './modules/local/run_virsorter2'
 include { STANDARDIZE_VIRSORTER2 } from './modules/local/standardize_virsorter2'
 include { PREPARE_CENOTETAKER3_DATABASE } from './modules/local/cenotetaker3_database'
 include { RUN_CENOTETAKER3 } from './modules/local/run_cenotetaker3'
+include { STANDARDIZE_CENOTETAKER3 } from './modules/local/standardize_cenotetaker3'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -278,6 +279,33 @@ workflow {
             prefix, type, summary, virusFasta, virusProteins, pruneSummary,
             geneAnnotations, runArguments, log, metadata ->
                 "CENOTETAKER3 sample=${prefix} type=${type} summary=${summary.name}"
+        }
+
+        ch_cenotetaker3_for_standardizer = RUN_CENOTETAKER3.out.results.map {
+            prefix, type, summary, virusFasta, virusProteins, pruneSummary,
+            geneAnnotations, runArguments, log, metadata ->
+                tuple(
+                    prefix,
+                    type,
+                    summary,
+                    virusFasta,
+                    pruneSummary,
+                    geneAnnotations,
+                    metadata
+                )
+        }
+
+        ch_cenotetaker3_standardizer_input = ch_cenotetaker3_for_standardizer
+            .join(
+                NORMALIZE_FASTA.out.normalized_records.map {
+                    prefix, type, fasta, headerMap -> tuple(prefix, headerMap)
+                }
+            )
+
+        STANDARDIZE_CENOTETAKER3(ch_cenotetaker3_standardizer_input)
+
+        STANDARDIZE_CENOTETAKER3.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
     }
 }

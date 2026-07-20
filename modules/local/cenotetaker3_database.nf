@@ -114,7 +114,7 @@ process PREPARE_CENOTETAKER3_DATABASE {
         local action="\$1"
         local cenotetaker3_version
         cenotetaker3_version=\$(
-            python3 -c "from importlib.metadata import version; print(version('cenote-taker3'))" \
+            python3 -c "from importlib.metadata import version; print(version('cenotetaker3'))" \
                 2>/dev/null || true
         )
         if [[ -z "\$cenotetaker3_version" ]]; then
