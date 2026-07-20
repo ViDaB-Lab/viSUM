@@ -50,6 +50,31 @@ def validatePrefix(rawPrefix, source) {
 }
 
 
+def parseBooleanParameter(rawValue, parameterName) {
+    if( rawValue instanceof Boolean ) {
+        return rawValue
+    }
+
+    if( rawValue == null ) {
+        throw new IllegalArgumentException(
+            "Missing boolean value for ${parameterName}. Use true or false."
+        )
+    }
+
+    def normalizedValue = rawValue.toString().trim().toLowerCase()
+    if( normalizedValue == 'true' ) {
+        return true
+    }
+    if( normalizedValue == 'false' ) {
+        return false
+    }
+
+    throw new IllegalArgumentException(
+        "Invalid value '${rawValue}' for ${parameterName}. Use true or false."
+    )
+}
+
+
 workflow {
 
     def singleMode = params.input != null
@@ -126,13 +151,26 @@ workflow {
             }
     }
 
+    def runGenomad = parseBooleanParameter(params.run_genomad, '--run_genomad')
+    def runVirsorter2 = parseBooleanParameter(params.run_virsorter2, '--run_virsorter2')
+    def runCenotetaker3 = parseBooleanParameter(params.run_cenotetaker3, '--run_cenotetaker3')
+    def runDeep6 = parseBooleanParameter(params.run_deep6, '--run_deep6')
+
+    println(
+        "viSUM program selection: " +
+        "geNomad=${runGenomad}, " +
+        "VirSorter2=${runVirsorter2}, " +
+        "Cenote-Taker3=${runCenotetaker3}, " +
+        "Deep6=${runDeep6}"
+    )
+
     NORMALIZE_FASTA(ch_samples)
 
     NORMALIZE_FASTA.out.normalized_records.view { prefix, type, fasta, headerMap ->
         "NORMALIZED sample=${prefix} type=${type} fasta=${fasta.name} map=${headerMap.name}"
     }
 
-    if( params.run_genomad ) {
+    if( runGenomad ) {
         def userSuppliedDatabase = params.genomad_db != null
         def genomadDatabasePath = userSuppliedDatabase
             ? file(params.genomad_db).toString()
@@ -187,7 +225,7 @@ workflow {
         }
     }
 
-    if( params.run_virsorter2 ) {
+    if( runVirsorter2 ) {
         def userSuppliedDatabase = params.virsorter2_db != null
         def virsorter2DatabasePath = userSuppliedDatabase
             ? file(params.virsorter2_db).toString()
@@ -243,7 +281,7 @@ workflow {
         }
     }
 
-    if( params.run_cenotetaker3 ) {
+    if( runCenotetaker3 ) {
         def userSuppliedDatabase = params.ct3_db != null
         def cenotetaker3DatabasePath = userSuppliedDatabase
             ? file(params.ct3_db).toString()
@@ -310,7 +348,7 @@ workflow {
         }
     }
 
-    if( params.run_deep6 ) {
+    if( runDeep6 ) {
         def userSuppliedInstallation = params.deep6_dir != null
         def deep6InstallationPath = userSuppliedInstallation
             ? file(params.deep6_dir).toString()
