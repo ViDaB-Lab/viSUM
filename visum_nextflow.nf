@@ -13,6 +13,7 @@ include { PREPARE_CENOTETAKER3_DATABASE } from './modules/local/cenotetaker3_dat
 include { RUN_CENOTETAKER3 } from './modules/local/run_cenotetaker3'
 include { STANDARDIZE_CENOTETAKER3 } from './modules/local/standardize_cenotetaker3'
 include { PREPARE_DEEP6_DATABASE } from './modules/local/deep6_database'
+include { RUN_DEEP6 } from './modules/local/run_deep6'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -349,6 +350,17 @@ workflow {
     }
 
     if( runDeep6 ) {
+        def deep6MinimumLength
+        try {
+            deep6MinimumLength = params.deep6_minlen as Integer
+        }
+        catch( Exception ignored ) {
+            error "Invalid --deep6_minlen '${params.deep6_minlen}'. Use an integer of at least 250."
+        }
+        if( deep6MinimumLength < 250 ) {
+            error "Invalid --deep6_minlen '${params.deep6_minlen}'. Deep6 requires at least 250 nt."
+        }
+
         def userSuppliedInstallation = params.deep6_dir != null
         def deep6InstallationPath = userSuppliedInstallation
             ? file(params.deep6_dir).toString()
@@ -365,23 +377,42 @@ workflow {
             ? 'user-supplied'
             : 'bundled-with-installation'
 
-        ch_deep6_database_request = Channel.of(
-            tuple(
-                deep6InstallationPath,
-                deep6InstallationSource,
-                deep6ModelPath,
-                deep6ModelSource,
-                params.deep6_auto_download,
-                params.deep6_repository,
-                params.deep6_revision
-            )
-        )
+        ch_deep6_samples = NORMALIZE_FASTA.out.normalized_records.filter {
+            prefix, type, fasta, headerMap -> type == 'rna'
+        }
+
+        // Trigger one shared setup only when at least one RNA sample is present.
+        ch_deep6_database_request = ch_deep6_samples
+            .take(1)
+            .map { prefix, type, fasta, headerMap ->
+                tuple(
+                    deep6InstallationPath,
+                    deep6InstallationSource,
+                    deep6ModelPath,
+                    deep6ModelSource,
+                    params.deep6_auto_download,
+                    params.deep6_repository,
+                    params.deep6_revision
+                )
+            }
 
         PREPARE_DEEP6_DATABASE(ch_deep6_database_request)
 
         PREPARE_DEEP6_DATABASE.out.database.view {
             installation, models, metadata ->
                 "DEEP6_DB installation=${installation} models=${models} metadata=${metadata.name}"
+        }
+
+        ch_deep6_bundle = PREPARE_DEEP6_DATABASE.out.database
+            .map { installation, models, metadata ->
+                tuple(installation, models, metadata)
+            }
+            .first()
+
+        RUN_DEEP6(ch_deep6_samples, ch_deep6_bundle)
+
+        RUN_DEEP6.out.results.view { prefix, type, scores, logFile, metadata ->
+            "DEEP6 sample=${prefix} type=${type} scores=${scores.name}"
         }
     }
 }
