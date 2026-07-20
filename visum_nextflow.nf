@@ -12,6 +12,7 @@ include { STANDARDIZE_VIRSORTER2 } from './modules/local/standardize_virsorter2'
 include { PREPARE_CENOTETAKER3_DATABASE } from './modules/local/cenotetaker3_database'
 include { RUN_CENOTETAKER3 } from './modules/local/run_cenotetaker3'
 include { STANDARDIZE_CENOTETAKER3 } from './modules/local/standardize_cenotetaker3'
+include { PREPARE_DEEP6_DATABASE } from './modules/local/deep6_database'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -306,6 +307,43 @@ workflow {
 
         STANDARDIZE_CENOTETAKER3.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
+        }
+    }
+
+    if( params.run_deep6 ) {
+        def userSuppliedInstallation = params.deep6_dir != null
+        def deep6InstallationPath = userSuppliedInstallation
+            ? file(params.deep6_dir).toString()
+            : file("${params.dbdir}/deep6/Deep6").toString()
+        def deep6InstallationSource = userSuppliedInstallation
+            ? 'user-supplied'
+            : 'viSUM-managed'
+
+        def userSuppliedModels = params.deep6_model != null
+        def deep6ModelPath = userSuppliedModels
+            ? file(params.deep6_model).toString()
+            : file("${deep6InstallationPath}/Models").toString()
+        def deep6ModelSource = userSuppliedModels
+            ? 'user-supplied'
+            : 'bundled-with-installation'
+
+        ch_deep6_database_request = Channel.of(
+            tuple(
+                deep6InstallationPath,
+                deep6InstallationSource,
+                deep6ModelPath,
+                deep6ModelSource,
+                params.deep6_auto_download,
+                params.deep6_repository,
+                params.deep6_revision
+            )
+        )
+
+        PREPARE_DEEP6_DATABASE(ch_deep6_database_request)
+
+        PREPARE_DEEP6_DATABASE.out.database.view {
+            installation, models, metadata ->
+                "DEEP6_DB installation=${installation} models=${models} metadata=${metadata.name}"
         }
     }
 }
