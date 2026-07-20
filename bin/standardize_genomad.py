@@ -88,8 +88,20 @@ def load_header_map(path: Path, sample_id: str) -> dict[str, dict[str, str]]:
     return records
 
 
-def validate_run_metadata(path: Path, sample_id: str, input_type: str) -> None:
-    rows = read_tsv(path, {"sample_id", "input_type", "genomad_version"})
+def load_run_metadata(
+    path: Path, sample_id: str, input_type: str
+) -> dict[str, str]:
+    rows = read_tsv(
+        path,
+        {
+            "sample_id",
+            "input_type",
+            "genomad_version",
+            "run_status",
+            "virus_call_count",
+            "plasmid_call_count",
+        },
+    )
     if len(rows) != 1:
         raise ValueError(f"Expected one geNomad metadata row in {path}; found {len(rows)}")
     row = rows[0]
@@ -97,6 +109,14 @@ def validate_run_metadata(path: Path, sample_id: str, input_type: str) -> None:
         raise ValueError("geNomad metadata does not match the requested sample and input type")
     if not clean_missing(row["genomad_version"]):
         raise ValueError("geNomad metadata contains an empty version")
+    if row["run_status"] not in {
+        "completed_with_virus_calls",
+        "completed_no_viruses_detected",
+    }:
+        raise ValueError(f"Unrecognized geNomad run status: {row['run_status']}")
+    parse_nonnegative_int(row["virus_call_count"], "virus call count", sample_id)
+    parse_nonnegative_int(row["plasmid_call_count"], "plasmid call count", sample_id)
+    return row
 
 
 def clean_missing(value: str | None) -> str:
@@ -112,6 +132,16 @@ def validate_score(value: str, label: str, sequence_id: str) -> str:
     if not 0.0 <= score <= 1.0:
         raise ValueError(f"{label} outside 0-1 for {sequence_id}: {value}")
     return value
+
+
+def parse_nonnegative_int(value: str, label: str, sequence_id: str) -> int:
+    value = clean_missing(value)
+    if not value:
+        raise ValueError(f"Missing {label} for {sequence_id}")
+    numeric = int(value)
+    if numeric < 0:
+        raise ValueError(f"{label} must be nonnegative for {sequence_id}: {value}")
+    return numeric
 
 
 def resolve_identity(
@@ -196,10 +226,31 @@ def standardize_row(
 def main() -> None:
     args = parse_args()
     header_records = load_header_map(args.header_map, args.sample_id)
-    validate_run_metadata(args.run_metadata, args.sample_id, args.input_type)
+    metadata = load_run_metadata(args.run_metadata, args.sample_id, args.input_type)
 
     evidence_rows: list[dict[str, str]] = []
-    for row in read_tsv(args.virus_summary, VIRUS_REQUIRED):
+    virus_rows = read_tsv(args.virus_summary, VIRUS_REQUIRED)
+    plasmid_rows = read_tsv(args.plasmid_summary, PLASMID_REQUIRED)
+
+    virus_call_count = parse_nonnegative_int(
+        metadata["virus_call_count"], "virus call count", args.sample_id
+    )
+    plasmid_call_count = parse_nonnegative_int(
+        metadata["plasmid_call_count"], "plasmid call count", args.sample_id
+    )
+    if virus_call_count != len(virus_rows):
+        raise ValueError("geNomad metadata and virus-summary call counts disagree")
+    if plasmid_call_count != len(plasmid_rows):
+        raise ValueError("geNomad metadata and plasmid-summary call counts disagree")
+    expected_status = (
+        "completed_with_virus_calls"
+        if virus_rows
+        else "completed_no_viruses_detected"
+    )
+    if metadata["run_status"] != expected_status:
+        raise ValueError("geNomad metadata status disagrees with the virus summary")
+
+    for row in virus_rows:
         evidence_rows.append(
             standardize_row(
                 row,
@@ -208,7 +259,7 @@ def main() -> None:
                 header_records,
             )
         )
-    for row in read_tsv(args.plasmid_summary, PLASMID_REQUIRED):
+    for row in plasmid_rows:
         evidence_rows.append(
             standardize_row(
                 row,

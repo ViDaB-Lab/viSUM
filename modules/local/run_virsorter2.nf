@@ -59,6 +59,14 @@ process RUN_VIRSORTER2 {
     cp "\$BOUNDARY_FILE" "${prefix}.virsorter2_final-viral-boundary.tsv"
     cp "\$FASTA_FILE" "${prefix}.virsorter2_final-viral-combined.fasta"
 
+    VIRUS_CALL_COUNT=\$(awk 'NR > 1 { count++ } END { print count + 0 }' \
+        "${prefix}.virsorter2_final-viral-score.tsv")
+    if [[ "\$VIRUS_CALL_COUNT" -eq 0 ]]; then
+        RUN_STATUS='completed_no_viruses_detected'
+    else
+        RUN_STATUS='completed_with_virus_calls'
+    fi
+
     VIRSORTER2_VERSION=\$(
         python3 -c 'import virsorter; print(virsorter.__version__)' 2>/dev/null \
             || true
@@ -67,9 +75,9 @@ process RUN_VIRSORTER2 {
         VIRSORTER2_VERSION='unknown'
     fi
 
-    printf 'sample_id\tinput_type\tinput_fasta\tvirsorter2_version\tdatabase_path\tclassifier_groups\tmin_length\tmin_score\tkeep_original_sequence\tthreads\n' \
+    printf 'sample_id\tinput_type\tinput_fasta\tvirsorter2_version\tdatabase_path\tclassifier_groups\tmin_length\tmin_score\tkeep_original_sequence\tthreads\trun_status\tvirus_call_count\n' \
         > "${prefix}.virsorter2_run_metadata.tsv"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${prefix}" \
         "${type}" \
         "${normalized_fasta.name}" \
@@ -80,6 +88,8 @@ process RUN_VIRSORTER2 {
         "${params.vs2_min_score}" \
         'true' \
         "${task.cpus}" \
+        "\$RUN_STATUS" \
+        "\$VIRUS_CALL_COUNT" \
         >> "${prefix}.virsorter2_run_metadata.tsv"
     """
 }

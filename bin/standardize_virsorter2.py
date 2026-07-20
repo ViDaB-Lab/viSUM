@@ -103,6 +103,8 @@ def load_run_metadata(path: Path, sample_id: str, input_type: str) -> dict[str, 
             "classifier_groups",
             "min_length",
             "min_score",
+            "run_status",
+            "virus_call_count",
         },
     )
     if len(rows) != 1:
@@ -120,6 +122,12 @@ def load_run_metadata(path: Path, sample_id: str, input_type: str) -> dict[str, 
     parse_score(row["min_score"], "minimum score", sample_id)
     if not clean_missing(row["classifier_groups"]):
         raise ValueError("VirSorter2 metadata contains no classifier groups")
+    if row["run_status"] not in {
+        "completed_with_virus_calls",
+        "completed_no_viruses_detected",
+    }:
+        raise ValueError(f"Unrecognized VirSorter2 run status: {row['run_status']}")
+    parse_nonnegative_int(row["virus_call_count"], "virus call count", sample_id)
     return row
 
 
@@ -271,6 +279,19 @@ def main() -> None:
     boundary_records = unique_rows(
         boundary_rows, "seqname_new", "VirSorter2 boundary table"
     )
+
+    metadata_call_count = parse_nonnegative_int(
+        metadata["virus_call_count"], "virus call count", args.sample_id
+    )
+    if metadata_call_count != len(score_records):
+        raise ValueError("VirSorter2 metadata and score-table call counts disagree")
+    expected_status = (
+        "completed_with_virus_calls"
+        if score_records
+        else "completed_no_viruses_detected"
+    )
+    if metadata["run_status"] != expected_status:
+        raise ValueError("VirSorter2 metadata status disagrees with the score table")
 
     evidence_rows: list[dict[str, str]] = []
     for sequence_id, row in score_records.items():

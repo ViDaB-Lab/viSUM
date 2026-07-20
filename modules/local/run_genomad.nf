@@ -64,9 +64,19 @@ process RUN_GENOMAD {
         cp "\$SUMMARY_DIR/\$expected_file" "\$expected_file"
     done
 
-    printf 'sample_id\tinput_type\tinput_fasta\tgenomad_version\tthreads\tsplits\tcleanup\n' \
+    VIRUS_CALL_COUNT=\$(awk 'NR > 1 { count++ } END { print count + 0 }' \
+        "${prefix}_virus_summary.tsv")
+    PLASMID_CALL_COUNT=\$(awk 'NR > 1 { count++ } END { print count + 0 }' \
+        "${prefix}_plasmid_summary.tsv")
+    if [[ "\$VIRUS_CALL_COUNT" -eq 0 ]]; then
+        RUN_STATUS='completed_no_viruses_detected'
+    else
+        RUN_STATUS='completed_with_virus_calls'
+    fi
+
+    printf 'sample_id\tinput_type\tinput_fasta\tgenomad_version\tthreads\tsplits\tcleanup\trun_status\tvirus_call_count\tplasmid_call_count\n' \
         > "${prefix}.genomad_run_metadata.tsv"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${prefix}" \
         "${type}" \
         "${normalized_fasta.name}" \
@@ -74,6 +84,9 @@ process RUN_GENOMAD {
         "${task.cpus}" \
         "${params.genomad_splits}" \
         "${params.genomad_cleanup}" \
+        "\$RUN_STATUS" \
+        "\$VIRUS_CALL_COUNT" \
+        "\$PLASMID_CALL_COUNT" \
         >> "${prefix}.genomad_run_metadata.tsv"
     """
 }
