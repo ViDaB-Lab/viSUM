@@ -156,9 +156,11 @@ process PREPARE_DEEPMICROCLASS2 {
     trap cleanup_stage EXIT
 
     mkdir -p "\$STAGE_ROOT"
-    echo "Cloning the pinned DeepMicroClass2 code and bundled checkpoints..."
-    git clone "\$REPOSITORY" "\$STAGED_INSTALLATION"
-    git -C "\$STAGED_INSTALLATION" checkout --detach "\$REQUESTED_REVISION"
+    echo "Fetching only the pinned DeepMicroClass2 revision and bundled checkpoints..."
+    git init "\$STAGED_INSTALLATION"
+    git -C "\$STAGED_INSTALLATION" remote add origin "\$REPOSITORY"
+    git -C "\$STAGED_INSTALLATION" fetch --depth 1 origin "\$REQUESTED_REVISION"
+    git -C "\$STAGED_INSTALLATION" checkout --detach FETCH_HEAD
 
     if ! validate_installation "\$STAGED_INSTALLATION"; then
         echo "ERROR: The downloaded DeepMicroClass2 installation failed validation." >&2
