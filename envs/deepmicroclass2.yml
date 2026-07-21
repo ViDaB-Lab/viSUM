@@ -7,12 +7,14 @@ channels:
 dependencies:
   - python=3.10
   - git
-  # PyTorch Lightning 2.2 imports pkg_resources. Setuptools 82 removed that
-  # module, so pin the final compatible major release for reproducibility.
-  - setuptools=81.0.0
+  # DeepMicroClass2 imports the deprecated pkg_resources API. Setuptools 81
+  # warns on that import, so keep the last pre-warning release for now.
+  - setuptools=80.9.0
   - pytorch::pytorch=2.2.2
   - pytorch::cpuonly
-  - pytorch-lightning=2.2.5
+  # The bundled DeepMicroClass2 checkpoints were written with Lightning 2.4.0.
+  # Matching that release avoids automatic checkpoint migration warnings.
+  - pytorch-lightning=2.4.0
   - torchmetrics=1.3.2
   - numpy=1.26.4
   - pandas=2.2.2
