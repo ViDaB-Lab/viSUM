@@ -15,6 +15,8 @@ include { STANDARDIZE_CENOTETAKER3 } from './modules/local/standardize_cenotetak
 include { PREPARE_DEEP6_DATABASE } from './modules/local/deep6_database'
 include { RUN_DEEP6 } from './modules/local/run_deep6'
 include { STANDARDIZE_DEEP6 } from './modules/local/standardize_deep6'
+include { PREPARE_DEEPMICROCLASS2 } from './modules/local/deepmicroclass2_installation'
+include { RUN_DEEPMICROCLASS2 } from './modules/local/run_deepmicroclass2'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -157,13 +159,18 @@ workflow {
     def runVirsorter2 = parseBooleanParameter(params.run_virsorter2, '--run_virsorter2')
     def runCenotetaker3 = parseBooleanParameter(params.run_cenotetaker3, '--run_cenotetaker3')
     def runDeep6 = parseBooleanParameter(params.run_deep6, '--run_deep6')
+    def runDeepmicroclass2 = parseBooleanParameter(
+        params.run_deepmicroclass2,
+        '--run_deepmicroclass2'
+    )
 
     println(
         "viSUM program selection: " +
         "geNomad=${runGenomad}, " +
         "VirSorter2=${runVirsorter2}, " +
         "Cenote-Taker3=${runCenotetaker3}, " +
-        "Deep6=${runDeep6}"
+        "Deep6=${runDeep6}, " +
+        "DeepMicroClass2=${runDeepmicroclass2}"
     )
 
     NORMALIZE_FASTA(ch_samples)
@@ -454,6 +461,59 @@ workflow {
 
         STANDARDIZE_DEEP6.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
+        }
+    }
+
+    if( runDeepmicroclass2 ) {
+        if( params.deepmicroclass2_model != '8class' ) {
+            error "Invalid --deepmicroclass2_model '${params.deepmicroclass2_model}'. The initial viSUM integration supports 8class."
+        }
+
+        def userSuppliedInstallation = params.deepmicroclass2_dir != null
+        def deepmicroclass2InstallationPath = userSuppliedInstallation
+            ? file(params.deepmicroclass2_dir).toString()
+            : file("${params.tooldir}/deepmicroclass2/DeepMicroClass2").toString()
+        def deepmicroclass2InstallationSource = userSuppliedInstallation
+            ? 'user-supplied'
+            : 'viSUM-managed'
+
+        ch_deepmicroclass2_samples = NORMALIZE_FASTA.out.normalized_records.filter {
+            prefix, type, fasta, headerMap -> type == 'dna'
+        }
+
+        // Trigger one shared installation check only when at least one DNA
+        // sample is available for DeepMicroClass2.
+        ch_deepmicroclass2_installation_request = ch_deepmicroclass2_samples
+            .take(1)
+            .map { prefix, type, fasta, headerMap ->
+                tuple(
+                    deepmicroclass2InstallationPath,
+                    deepmicroclass2InstallationSource,
+                    params.deepmicroclass2_auto_download,
+                    params.deepmicroclass2_repository,
+                    params.deepmicroclass2_revision
+                )
+            }
+
+        PREPARE_DEEPMICROCLASS2(ch_deepmicroclass2_installation_request)
+
+        PREPARE_DEEPMICROCLASS2.out.installation.view {
+            installation, metadata ->
+                "DEEPMICROCLASS2_INSTALL installation=${installation} metadata=${metadata.name}"
+        }
+
+        ch_deepmicroclass2_bundle = PREPARE_DEEPMICROCLASS2.out.installation
+            .map { installation, metadata -> tuple(installation, metadata) }
+            .first()
+
+        RUN_DEEPMICROCLASS2(
+            ch_deepmicroclass2_samples,
+            ch_deepmicroclass2_bundle
+        )
+
+        RUN_DEEPMICROCLASS2.out.results.view {
+            prefix, type, scores, logFile, metadata ->
+                "DEEPMICROCLASS2 sample=${prefix} type=${type} scores=${scores.name}"
         }
     }
 }
