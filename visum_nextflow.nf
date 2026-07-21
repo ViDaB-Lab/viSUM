@@ -14,6 +14,7 @@ include { RUN_CENOTETAKER3 } from './modules/local/run_cenotetaker3'
 include { STANDARDIZE_CENOTETAKER3 } from './modules/local/standardize_cenotetaker3'
 include { PREPARE_DEEP6_DATABASE } from './modules/local/deep6_database'
 include { RUN_DEEP6 } from './modules/local/run_deep6'
+include { STANDARDIZE_DEEP6 } from './modules/local/standardize_deep6'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -361,6 +362,28 @@ workflow {
             error "Invalid --deep6_minlen '${params.deep6_minlen}'. Deep6 requires at least 250 nt."
         }
 
+        def deep6MinimumScore
+        try {
+            deep6MinimumScore = params.deep6_min_score as Double
+        }
+        catch( Exception ignored ) {
+            error "Invalid --deep6_min_score '${params.deep6_min_score}'. Use a number from 0 to 1."
+        }
+        if( !Double.isFinite(deep6MinimumScore) || deep6MinimumScore < 0.0 || deep6MinimumScore > 1.0 ) {
+            error "Invalid --deep6_min_score '${params.deep6_min_score}'. Use a number from 0 to 1."
+        }
+
+        def deep6MedianMultiplier
+        try {
+            deep6MedianMultiplier = params.deep6_median_multiplier as Double
+        }
+        catch( Exception ignored ) {
+            error "Invalid --deep6_median_multiplier '${params.deep6_median_multiplier}'. Use a number of at least 1."
+        }
+        if( !Double.isFinite(deep6MedianMultiplier) || deep6MedianMultiplier < 1.0 ) {
+            error "Invalid --deep6_median_multiplier '${params.deep6_median_multiplier}'. Use a number of at least 1."
+        }
+
         def userSuppliedInstallation = params.deep6_dir != null
         def deep6InstallationPath = userSuppliedInstallation
             ? file(params.deep6_dir).toString()
@@ -413,6 +436,24 @@ workflow {
 
         RUN_DEEP6.out.results.view { prefix, type, scores, logFile, metadata ->
             "DEEP6 sample=${prefix} type=${type} scores=${scores.name}"
+        }
+
+        ch_deep6_for_standardizer = RUN_DEEP6.out.results.map {
+            prefix, type, scores, logFile, metadata ->
+                tuple(prefix, type, scores, metadata)
+        }
+
+        ch_deep6_standardizer_input = ch_deep6_for_standardizer
+            .join(
+                NORMALIZE_FASTA.out.normalized_records.map {
+                    prefix, type, fasta, headerMap -> tuple(prefix, headerMap)
+                }
+            )
+
+        STANDARDIZE_DEEP6(ch_deep6_standardizer_input)
+
+        STANDARDIZE_DEEP6.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
     }
 }
