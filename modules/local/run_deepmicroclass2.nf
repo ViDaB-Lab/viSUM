@@ -85,7 +85,7 @@ process RUN_DEEPMICROCLASS2 {
     fi
 
     INSTALLED_REVISION=\$(
-        awk -F '\t' 'NR == 2 { print \$7 }' "${deepmicroclass2_installation_metadata}"
+        awk -F '\t' 'NR == 2 { print \$8 }' "${deepmicroclass2_installation_metadata}"
     )
     [[ -n "\$INSTALLED_REVISION" ]] || INSTALLED_REVISION='unknown'
 

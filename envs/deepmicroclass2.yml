@@ -6,6 +6,7 @@ channels:
 
 dependencies:
   - python=3.10
+  - git
   # PyTorch Lightning 2.2 imports pkg_resources. Setuptools 82 removed that
   # module, so pin the final compatible major release for reproducibility.
   - setuptools=81.0.0
@@ -14,5 +15,7 @@ dependencies:
   - pytorch-lightning=2.2.5
   - torchmetrics=1.3.2
   - numpy=1.26.4
+  - pandas=2.2.2
   - biopython=1.83
   - scikit-learn=1.4.2
+  - pysam=0.22.1

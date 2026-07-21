@@ -2,7 +2,9 @@ process PREPARE_DEEPMICROCLASS2 {
 
     tag 'deepmicroclass2_installation'
 
-    conda 'conda-forge::git'
+    // Use the same complete environment as inference. This makes the official
+    // DeepMicroClass2 self-check a prerequisite for every accepted install.
+    conda "${projectDir}/envs/deepmicroclass2.yml"
 
     publishDir "${params.outdir}/software_setup",
         mode: 'copy',
@@ -60,6 +62,25 @@ process PREPARE_DEEPMICROCLASS2 {
         done
     }
 
+    validate_runtime() {
+        local candidate="\$1"
+        local report_errors="\${2:-false}"
+
+        if ! python "\$candidate/selftest.py"; then
+            [[ "\$report_errors" == 'true' ]] && \
+                report_error "the official DeepMicroClass2 self-check failed for: \$candidate"
+            return 1
+        fi
+    }
+
+    validate_bundle() {
+        local candidate="\$1"
+        local report_errors="\${2:-false}"
+
+        validate_installation "\$candidate" "\$report_errors" || return 1
+        validate_runtime "\$candidate" "\$report_errors" || return 1
+    }
+
     installed_revision() {
         git -C "\$1" rev-parse HEAD 2>/dev/null || true
     }
@@ -75,9 +96,9 @@ process PREPARE_DEEPMICROCLASS2 {
         revision="\$(installed_revision "\$INSTALL_DEST")"
         [[ -n "\$revision" ]] || revision='unknown'
 
-        printf 'installation_path\tinstallation_source\tvalidation\tinstallation_action\trepository\trequested_revision\tinstalled_revision\tmodel_mode\n' \
+        printf 'installation_path\tinstallation_source\tvalidation\truntime_self_check\tinstallation_action\trepository\trequested_revision\tinstalled_revision\tmodel_mode\n' \
             > deepmicroclass2_installation_metadata.tsv
-        printf '%s\t%s\tpassed\t%s\t%s\t%s\t%s\t%s\n' \
+        printf '%s\t%s\tpassed\tpassed\t%s\t%s\t%s\t%s\t%s\n' \
             "\$INSTALL_DEST" "\$INSTALL_SOURCE" "\$action" "\$REPOSITORY" \
             "\$REQUESTED_REVISION" "\$revision" '8class' \
             >> deepmicroclass2_installation_metadata.tsv
@@ -96,10 +117,10 @@ process PREPARE_DEEPMICROCLASS2 {
     }
 
     if [[ "\$INSTALL_SOURCE" == 'user-supplied' ]]; then
-        if ! validate_installation "\$INSTALL_DEST"; then
+        if ! validate_bundle "\$INSTALL_DEST"; then
             echo "ERROR: The user-supplied DeepMicroClass2 installation is incomplete:" >&2
             echo "       \$INSTALL_DEST" >&2
-            validate_installation "\$INSTALL_DEST" true || true
+            validate_bundle "\$INSTALL_DEST" true || true
             echo "Automatic setup was not attempted because --deepmicroclass2_dir was supplied." >&2
             exit 1
         fi
@@ -119,7 +140,7 @@ process PREPARE_DEEPMICROCLASS2 {
     exec 9>"\${INSTALL_DEST}.install.lock"
     flock 9
 
-    if validate_installation "\$INSTALL_DEST"; then
+    if validate_bundle "\$INSTALL_DEST"; then
         if managed_revision_matches; then
             emit_installation 'skipped-existing-managed-installation'
             exit 0
@@ -136,7 +157,7 @@ process PREPARE_DEEPMICROCLASS2 {
     if [[ -e "\$INSTALL_DEST" ]]; then
         echo "ERROR: A managed DeepMicroClass2 path exists but failed validation:" >&2
         echo "       \$INSTALL_DEST" >&2
-        validate_installation "\$INSTALL_DEST" true || true
+        validate_bundle "\$INSTALL_DEST" true || true
         echo "viSUM will not overwrite or repair it automatically." >&2
         exit 1
     fi
@@ -162,9 +183,9 @@ process PREPARE_DEEPMICROCLASS2 {
     git -C "\$STAGED_INSTALLATION" fetch --depth 1 origin "\$REQUESTED_REVISION"
     git -C "\$STAGED_INSTALLATION" checkout --detach FETCH_HEAD
 
-    if ! validate_installation "\$STAGED_INSTALLATION"; then
+    if ! validate_bundle "\$STAGED_INSTALLATION"; then
         echo "ERROR: The downloaded DeepMicroClass2 installation failed validation." >&2
-        validate_installation "\$STAGED_INSTALLATION" true || true
+        validate_bundle "\$STAGED_INSTALLATION" true || true
         exit 1
     fi
 
