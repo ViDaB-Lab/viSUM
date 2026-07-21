@@ -38,6 +38,20 @@ process RUN_DEEPMICROCLASS2 {
     FINAL_SCORE_FILE="${prefix}.deepmicroclass2_scores.tsv"
     LOG_FILE="${prefix}.deepmicroclass2.log"
     METADATA_FILE="${prefix}.deepmicroclass2_run_metadata.tsv"
+    CLASS_THRESHOLDS='arc=0.625000,bac=0.400000,chlor=0.390625,euk=0.435547,eukvir=0.951172,mit=0.261719,pls=0.832031,prokvir=0.997925'
+
+    case "${params.deepmicroclass2_model}" in
+        8class)
+            MINIMUM_LENGTH=500
+            ;;
+        high_precision|300bp)
+            MINIMUM_LENGTH=300
+            ;;
+        *)
+            echo "ERROR: Unsupported DeepMicroClass2 model mode '${params.deepmicroclass2_model}'." >&2
+            exit 1
+            ;;
+    esac
 
     mkdir -p "\$RAW_DIRECTORY"
 
@@ -74,7 +88,9 @@ process RUN_DEEPMICROCLASS2 {
     cp "\$RAW_SCORE_FILE" "\$FINAL_SCORE_FILE"
 
     INPUT_COUNT=\$(awk 'NR > 1 && NF { count++ } END { print count + 0 }' "${header_map}")
-    ELIGIBLE_COUNT=\$(awk -F '\t' 'NR > 1 && \$7 >= 500 { count++ } END { print count + 0 }' "${header_map}")
+    ELIGIBLE_COUNT=\$(awk -F '\t' -v min_length="\$MINIMUM_LENGTH" \
+        'NR > 1 && \$7 >= min_length { count++ } END { print count + 0 }' \
+        "${header_map}")
     PREDICTION_COUNT=\$(awk 'NR > 1 && NF { count++ } END { print count + 0 }' "\$FINAL_SCORE_FILE")
 
     if [[ "\$PREDICTION_COUNT" -ne "\$ELIGIBLE_COUNT" ]]; then
@@ -94,12 +110,13 @@ process RUN_DEEPMICROCLASS2 {
         RUN_STATUS='completed_no_eligible_sequences'
     fi
 
-    printf 'sample_id\tinput_type\tmodel_mode\tminimum_length\tinput_sequence_count\teligible_sequence_count\tprediction_count\tdeepmicroclass2_revision\tdevice\trun_status\tscore_file\n' \
+    printf 'sample_id\tinput_type\tmodel_mode\tminimum_length\tinput_sequence_count\teligible_sequence_count\tprediction_count\tclass_thresholds\tdeepmicroclass2_revision\tdevice\trun_status\tscore_file\n' \
         > "\$METADATA_FILE"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "${prefix}" "${type}" "${params.deepmicroclass2_model}" '500' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "${prefix}" "${type}" "${params.deepmicroclass2_model}" "\$MINIMUM_LENGTH" \
         "\$INPUT_COUNT" "\$ELIGIBLE_COUNT" "\$PREDICTION_COUNT" \
-        "\$INSTALLED_REVISION" 'cpu' "\$RUN_STATUS" "\$FINAL_SCORE_FILE" \
+        "\$CLASS_THRESHOLDS" "\$INSTALLED_REVISION" 'cpu' "\$RUN_STATUS" \
+        "\$FINAL_SCORE_FILE" \
         >> "\$METADATA_FILE"
 
     echo "DeepMicroClass2 sample=${prefix} type=${type} predictions=\$PREDICTION_COUNT scores=\$FINAL_SCORE_FILE"

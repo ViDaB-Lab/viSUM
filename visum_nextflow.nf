@@ -17,6 +17,7 @@ include { RUN_DEEP6 } from './modules/local/run_deep6'
 include { STANDARDIZE_DEEP6 } from './modules/local/standardize_deep6'
 include { PREPARE_DEEPMICROCLASS2 } from './modules/local/deepmicroclass2_installation'
 include { RUN_DEEPMICROCLASS2 } from './modules/local/run_deepmicroclass2'
+include { STANDARDIZE_DEEPMICROCLASS2 } from './modules/local/standardize_deepmicroclass2'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -465,9 +466,19 @@ workflow {
     }
 
     if( runDeepmicroclass2 ) {
-        if( params.deepmicroclass2_model != '8class' ) {
-            error "Invalid --deepmicroclass2_model '${params.deepmicroclass2_model}'. The initial viSUM integration supports 8class."
+        def deepmicroclass2Model = params.deepmicroclass2_model?.toString()?.trim()
+        if( !(deepmicroclass2Model in ['8class', 'high_precision', '300bp']) ) {
+            error "Invalid --deepmicroclass2_model '${params.deepmicroclass2_model}'. Use 8class, high_precision, or 300bp."
         }
+        def deepmicroclass2ModelDescription = [
+            '8class': 'fastest; length-matched non-overlapping windows; minimum 500 nt',
+            'high_precision': 'overlapping length-matched windows; includes 300-499 nt contigs',
+            '300bp': 'advanced; applies the 300-nt model to every contig of at least 300 nt'
+        ][deepmicroclass2Model]
+        println(
+            "DeepMicroClass2 model: ${deepmicroclass2Model} " +
+            "(${deepmicroclass2ModelDescription})"
+        )
 
         def userSuppliedInstallation = params.deepmicroclass2_dir != null
         def deepmicroclass2InstallationPath = userSuppliedInstallation
@@ -514,6 +525,24 @@ workflow {
         RUN_DEEPMICROCLASS2.out.results.view {
             prefix, type, scores, logFile, metadata ->
                 "DEEPMICROCLASS2 sample=${prefix} type=${type} scores=${scores.name}"
+        }
+
+        ch_deepmicroclass2_for_standardizer = RUN_DEEPMICROCLASS2.out.results.map {
+            prefix, type, scores, logFile, metadata ->
+                tuple(prefix, type, scores, metadata)
+        }
+
+        ch_deepmicroclass2_standardizer_input = ch_deepmicroclass2_for_standardizer
+            .join(
+                NORMALIZE_FASTA.out.normalized_records.map {
+                    prefix, type, fasta, headerMap -> tuple(prefix, headerMap)
+                }
+            )
+
+        STANDARDIZE_DEEPMICROCLASS2(ch_deepmicroclass2_standardizer_input)
+
+        STANDARDIZE_DEEPMICROCLASS2.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
     }
 }

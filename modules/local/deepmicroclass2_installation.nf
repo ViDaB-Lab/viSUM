@@ -51,6 +51,7 @@ process PREPARE_DEEPMICROCLASS2 {
             "\$candidate/predict.py" \
             "\$candidate/models.py" \
             "\$candidate/utils.py" \
+            "\$candidate/model/300/DeepMicroClass-best.ckpt" \
             "\$candidate/model/8-class/DeepMicroClass-best-500-8class.ckpt" \
             "\$candidate/model/8-class/DeepMicroClass-best-1000-8class.ckpt" \
             "\$candidate/model/8-class/DeepMicroClass-best-3000-8class.ckpt"; do
@@ -96,11 +97,11 @@ process PREPARE_DEEPMICROCLASS2 {
         revision="\$(installed_revision "\$INSTALL_DEST")"
         [[ -n "\$revision" ]] || revision='unknown'
 
-        printf 'installation_path\tinstallation_source\tvalidation\truntime_self_check\tinstallation_action\trepository\trequested_revision\tinstalled_revision\tmodel_mode\n' \
+        printf 'installation_path\tinstallation_source\tvalidation\truntime_self_check\tinstallation_action\trepository\trequested_revision\tinstalled_revision\tsupported_model_modes\n' \
             > deepmicroclass2_installation_metadata.tsv
         printf '%s\t%s\tpassed\tpassed\t%s\t%s\t%s\t%s\t%s\n' \
             "\$INSTALL_DEST" "\$INSTALL_SOURCE" "\$action" "\$REPOSITORY" \
-            "\$REQUESTED_REVISION" "\$revision" '8class' \
+            "\$REQUESTED_REVISION" "\$revision" '8class,high_precision,300bp' \
             >> deepmicroclass2_installation_metadata.tsv
     }
 
