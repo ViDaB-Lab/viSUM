@@ -18,6 +18,8 @@ include { STANDARDIZE_DEEP6 } from './modules/local/standardize_deep6'
 include { PREPARE_DEEPMICROCLASS2 } from './modules/local/deepmicroclass2_installation'
 include { RUN_DEEPMICROCLASS2 } from './modules/local/run_deepmicroclass2'
 include { STANDARDIZE_DEEPMICROCLASS2 } from './modules/local/standardize_deepmicroclass2'
+include { PREPARE_VIRBOT_DATABASE } from './modules/local/virbot_installation'
+include { RUN_VIRBOT } from './modules/local/run_virbot'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -160,6 +162,7 @@ workflow {
     def runVirsorter2 = parseBooleanParameter(params.run_virsorter2, '--run_virsorter2')
     def runCenotetaker3 = parseBooleanParameter(params.run_cenotetaker3, '--run_cenotetaker3')
     def runDeep6 = parseBooleanParameter(params.run_deep6, '--run_deep6')
+    def runVirbot = parseBooleanParameter(params.run_virbot, '--run_virbot')
     def runDeepmicroclass2 = parseBooleanParameter(
         params.run_deepmicroclass2,
         '--run_deepmicroclass2'
@@ -171,6 +174,7 @@ workflow {
         "VirSorter2=${runVirsorter2}, " +
         "Cenote-Taker3=${runCenotetaker3}, " +
         "Deep6=${runDeep6}, " +
+        "VirBot=${runVirbot}, " +
         "DeepMicroClass2=${runDeepmicroclass2}"
     )
 
@@ -543,6 +547,68 @@ workflow {
 
         STANDARDIZE_DEEPMICROCLASS2.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
+        }
+    }
+
+    if( runVirbot ) {
+        def virbotSensitive = parseBooleanParameter(
+            params.virbot_sensitive,
+            '--virbot_sensitive'
+        )
+        def virbotTaxaMode = params.virbot_taxa?.toString()?.trim()?.toUpperCase()
+        if( !(virbotTaxaMode in ['TOP', 'LCA']) ) {
+            error "Invalid --virbot_taxa '${params.virbot_taxa}'. Use TOP or LCA."
+        }
+
+        def userSuppliedInstallation = params.virbot_dir != null
+        def virbotInstallationPath = userSuppliedInstallation
+            ? file(params.virbot_dir).toString()
+            : file("${params.dbdir}/virbot/VirBot").toString()
+        def virbotInstallationSource = userSuppliedInstallation
+            ? 'user-supplied'
+            : 'viSUM-managed'
+
+        ch_virbot_samples = NORMALIZE_FASTA.out.normalized_records.filter {
+            prefix, type, fasta, headerMap -> type == 'rna'
+        }
+
+        // No RNA sample means no VirBot installation check or analysis task.
+        ch_virbot_installation_request = ch_virbot_samples
+            .take(1)
+            .map { prefix, type, fasta, headerMap ->
+                tuple(
+                    virbotInstallationPath,
+                    virbotInstallationSource,
+                    params.virbot_auto_download,
+                    params.virbot_repository,
+                    params.virbot_revision
+                )
+            }
+
+        PREPARE_VIRBOT_DATABASE(ch_virbot_installation_request)
+
+        PREPARE_VIRBOT_DATABASE.out.installation.view {
+            installation, database, metadata ->
+                "VIRBOT_INSTALL installation=${installation} database=${database} metadata=${metadata.name}"
+        }
+
+        ch_virbot_bundle = PREPARE_VIRBOT_DATABASE.out.installation
+            .map { installation, database, metadata ->
+                tuple(
+                    installation,
+                    database,
+                    metadata,
+                    virbotSensitive,
+                    virbotTaxaMode
+                )
+            }
+            .first()
+
+        RUN_VIRBOT(ch_virbot_samples, ch_virbot_bundle)
+
+        RUN_VIRBOT.out.results.view {
+            prefix, type, scores, virusFasta, logFile, metadata ->
+                "VIRBOT sample=${prefix} type=${type} scores=${scores.name} virus_fasta=${virusFasta.name}"
         }
     }
 }
