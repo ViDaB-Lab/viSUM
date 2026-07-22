@@ -5,6 +5,7 @@
 import argparse
 import csv
 import math
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -73,7 +74,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input-type", required=True, choices=("dna",))
     parser.add_argument("--header-map", required=True, type=Path)
     parser.add_argument("--prediction-table", required=True, type=Path)
-    parser.add_argument("--virus-fasta", required=True, type=Path)
     parser.add_argument("--gene-annotations", required=True, type=Path)
     parser.add_argument("--run-metadata", required=True, type=Path)
     parser.add_argument("--ictv-csv", required=True, type=Path)
@@ -229,41 +229,8 @@ def load_prediction_table(
     )
 
 
-def load_fasta_lengths(path: Path) -> dict[str, int]:
-    lengths: dict[str, int] = {}
-    sequence_id: str | None = None
-    length = 0
-
-    with path.open("r", encoding="utf-8") as handle:
-        for line_number, raw_line in enumerate(handle, start=1):
-            line = raw_line.strip()
-            if not line:
-                continue
-            if line.startswith(">"):
-                if sequence_id is not None:
-                    if length < 1:
-                        raise ValueError(f"Empty FASTA record: {sequence_id}")
-                    lengths[sequence_id] = length
-                sequence_id = line[1:].split(maxsplit=1)[0]
-                if not sequence_id:
-                    raise ValueError(f"Empty FASTA identifier at line {line_number}")
-                if sequence_id in lengths:
-                    raise ValueError(f"Duplicate FASTA identifier: {sequence_id}")
-                length = 0
-            else:
-                if sequence_id is None:
-                    raise ValueError("Sequence data precedes the first FASTA header")
-                length += len(line)
-
-    if sequence_id is not None:
-        if length < 1:
-            raise ValueError(f"Empty FASTA record: {sequence_id}")
-        lengths[sequence_id] = length
-    return lengths
-
-
 def load_gene_counts(path: Path) -> Counter[str]:
-    if path.stat().st_size == 0:
+    if not path.is_file() or path.stat().st_size == 0:
         return Counter()
     rows = read_table(path, {"Genome"}, "\t")
     counts: Counter[str] = Counter()
@@ -384,8 +351,15 @@ def main() -> None:
     header_records = load_header_map(args.header_map, args.sample_id)
     metadata = load_metadata(args.run_metadata, args.sample_id, args.input_type)
     prediction_format, prediction_rows = load_prediction_table(args.prediction_table)
-    fasta_lengths = load_fasta_lengths(args.virus_fasta)
-    gene_counts = load_gene_counts(args.gene_annotations)
+    try:
+        gene_counts = load_gene_counts(args.gene_annotations)
+    except (OSError, UnicodeError, ValueError, csv.Error) as error:
+        print(
+            "WARNING: Ignoring unusable GiantHunter gene annotations; "
+            f"n_genes will be blank ({error})",
+            file=sys.stderr,
+        )
+        gene_counts = Counter()
     ictv_index = load_ictv_taxonomy(args.ictv_csv)
 
     input_count = parse_integer(
@@ -472,28 +446,11 @@ def main() -> None:
     if len(positive_rows) != expected_call_count:
         raise ValueError("GiantHunter metadata and prediction call counts disagree")
 
-    positive_ids = {row["Accession"].strip() for row in positive_rows}
-    if set(fasta_lengths) != positive_ids:
-        missing = sorted(positive_ids.difference(fasta_lengths))
-        unexpected = sorted(set(fasta_lengths).difference(positive_ids))
-        raise ValueError(
-            "GiantHunter prediction/FASTA identifiers disagree; "
-            f"missing={missing[:5]}, unexpected={unexpected[:5]}"
-        )
-
     evidence_rows: list[dict[str, str]] = []
     for row in positive_rows:
         sequence_id = row["Accession"].strip()
         length = parse_integer(row["Length"], "prediction length", sequence_id, minimum=1)
-        if fasta_lengths[sequence_id] != length:
-            raise ValueError(
-                f"GiantHunter prediction and FASTA lengths disagree for {sequence_id}"
-            )
-        n_genes = gene_counts.get(sequence_id, 0)
-        if n_genes < 1:
-            raise ValueError(
-                f"GiantHunter positive lacks gene annotations: {sequence_id}"
-            )
+        n_genes = gene_counts.get(sequence_id)
 
         raw_lineage = row["PotentialLineage"].strip()
         score_type = (
@@ -513,7 +470,7 @@ def main() -> None:
             "score_type": score_type,
             "length": str(length),
             "topology": "",
-            "n_genes": str(n_genes),
+            "n_genes": str(n_genes) if n_genes else "",
             "n_hallmarks": "",
         }
         output.update(

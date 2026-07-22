@@ -51,6 +51,9 @@ class GiantHunterWorkflowContractTests(unittest.TestCase):
         self.assertIn("skipped_no_sequences_meeting_minimum_length", self.analysis)
         self.assertIn("completed_no_reference_protein_hits", self.analysis)
         self.assertIn("completed_no_giant_virus_calls", self.analysis)
+        self.assertNotIn("FASTA_CALL_COUNT", self.analysis)
+        self.assertNotIn("gianthunter_giant_virus_contigs.fasta", self.analysis)
+        self.assertNotIn("gianthunter_all_predicted_proteins.faa", self.analysis)
 
     def test_eligibility_uses_the_header_map_length_column(self):
         self.assertIn("(\\$7 + 0) >= minimum", self.analysis)
@@ -65,6 +68,7 @@ class GiantHunterWorkflowContractTests(unittest.TestCase):
         self.assertIn("gianthunterIctvCsv", self.workflow)
         self.assertIn("standardize_gianthunter.py", self.standardizer)
         self.assertIn("--gene-annotations", self.standardizer)
+        self.assertNotIn("--virus-fasta", self.standardizer)
 
     def test_database_validation_covers_runtime_assets(self):
         for required_name in (

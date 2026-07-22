@@ -19,8 +19,6 @@ process RUN_GIANTHUNTER {
     tuple val(prefix),
           val(type),
           path("${prefix}.gianthunter_prediction.tsv"),
-          path("${prefix}.gianthunter_giant_virus_contigs.fasta"),
-          path("${prefix}.gianthunter_all_predicted_proteins.faa"),
           path("${prefix}.gianthunter_gene_annotations.tsv"),
           path("${prefix}.gianthunter.log"),
           path("${prefix}.gianthunter_run_metadata.tsv"),
@@ -37,12 +35,8 @@ process RUN_GIANTHUNTER {
 
     RAW_DIRECTORY="${prefix}.gianthunter_raw"
     RAW_PREDICTION="\$RAW_DIRECTORY/final_prediction/gianthunter_prediction.tsv"
-    RAW_FASTA="\$RAW_DIRECTORY/final_prediction/giant_virus_contigs.fa"
-    RAW_PROTEINS="\$RAW_DIRECTORY/final_prediction/supplementary/all_predicted_protein.fa"
     RAW_ANNOTATIONS="\$RAW_DIRECTORY/final_prediction/supplementary/gene_annotation.tsv"
     FINAL_PREDICTION="${prefix}.gianthunter_prediction.tsv"
-    FINAL_FASTA="${prefix}.gianthunter_giant_virus_contigs.fasta"
-    FINAL_PROTEINS="${prefix}.gianthunter_all_predicted_proteins.faa"
     FINAL_ANNOTATIONS="${prefix}.gianthunter_gene_annotations.tsv"
     LOG_FILE="${prefix}.gianthunter.log"
     METADATA_FILE="${prefix}.gianthunter_run_metadata.tsv"
@@ -57,8 +51,6 @@ process RUN_GIANTHUNTER {
 
     if [[ "\$ELIGIBLE_COUNT" -eq 0 ]]; then
         printf '%b\n' "\$EXPECTED_HEADER" > "\$FINAL_PREDICTION"
-        : > "\$FINAL_FASTA"
-        : > "\$FINAL_PROTEINS"
         : > "\$FINAL_ANNOTATIONS"
         printf 'GiantHunter skipped: no input sequences met the minimum length of %s nt.\n' \
             "${params.gianthunter_min_length}" > "\$LOG_FILE"
@@ -103,29 +95,15 @@ process RUN_GIANTHUNTER {
         "\$FINAL_PREDICTION")
 
     if [[ "\$ELIGIBLE_COUNT" -gt 0 ]]; then
-        for source_and_destination in \
-            "\$RAW_FASTA|\$FINAL_FASTA" \
-            "\$RAW_PROTEINS|\$FINAL_PROTEINS" \
-            "\$RAW_ANNOTATIONS|\$FINAL_ANNOTATIONS"; do
-            SOURCE_FILE="\${source_and_destination%%|*}"
-            DESTINATION_FILE="\${source_and_destination#*|}"
-            if [[ -f "\$SOURCE_FILE" ]]; then
-                cp "\$SOURCE_FILE" "\$DESTINATION_FILE"
-            elif [[ "\$GIANT_VIRUS_CALL_COUNT" -eq 0 ]]; then
-                : > "\$DESTINATION_FILE"
-            else
-                echo "ERROR: GiantHunter reported positive calls but omitted: \$SOURCE_FILE" >&2
-                exit 1
-            fi
-        done
-    fi
-
-    FASTA_CALL_COUNT=\$(awk '/^>/ { count++ } END { print count + 0 }' "\$FINAL_FASTA")
-    if [[ "\$FASTA_CALL_COUNT" -ne "\$GIANT_VIRUS_CALL_COUNT" ]]; then
-        echo "ERROR: GiantHunter prediction/FASTA call counts disagree for sample '${prefix}':" >&2
-        echo "       prediction rows: \$GIANT_VIRUS_CALL_COUNT" >&2
-        echo "       FASTA records:   \$FASTA_CALL_COUNT" >&2
-        exit 1
+        if [[ -f "\$RAW_ANNOTATIONS" ]]; then
+            cp "\$RAW_ANNOTATIONS" "\$FINAL_ANNOTATIONS"
+        else
+            # Gene annotations are supplemental context. Their absence must
+            # not invalidate an otherwise valid GiantHunter prediction table.
+            : > "\$FINAL_ANNOTATIONS"
+            echo "WARNING: GiantHunter produced no gene-annotation table; n_genes will be blank." \
+                >> "\$LOG_FILE"
+        fi
     fi
 
     GIANTHUNTER_VERSION=\$(
@@ -144,14 +122,14 @@ process RUN_GIANTHUNTER {
         RUN_STATUS='completed_with_giant_virus_calls'
     fi
 
-    printf 'sample_id\tinput_type\tinput_sequence_count\teligible_sequence_count\tgiant_virus_call_count\tgianthunter_version\tdatabase_path\tminimum_length\treject_threshold\tquery_cover\tthreads\trun_status\tprediction_file\tvirus_fasta\n' \
+    printf 'sample_id\tinput_type\tinput_sequence_count\teligible_sequence_count\tgiant_virus_call_count\tgianthunter_version\tdatabase_path\tminimum_length\treject_threshold\tquery_cover\tthreads\trun_status\tprediction_file\n' \
         > "\$METADATA_FILE"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${prefix}" "${type}" "\$INPUT_COUNT" "\$ELIGIBLE_COUNT" \
         "\$GIANT_VIRUS_CALL_COUNT" "\$GIANTHUNTER_VERSION" \
         "${gianthunter_database}" "${params.gianthunter_min_length}" \
         "${params.gianthunter_reject}" "${params.gianthunter_query_cover}" \
-        "${task.cpus}" "\$RUN_STATUS" "\$FINAL_PREDICTION" "\$FINAL_FASTA" \
+        "${task.cpus}" "\$RUN_STATUS" "\$FINAL_PREDICTION" \
         >> "\$METADATA_FILE"
 
     echo "GIANTHUNTER sample=${prefix} type=${type} calls=\$GIANT_VIRUS_CALL_COUNT prediction=\$FINAL_PREDICTION"

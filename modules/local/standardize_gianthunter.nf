@@ -11,7 +11,6 @@ process STANDARDIZE_GIANTHUNTER {
     tuple val(prefix),
           val(type),
           path(prediction_table),
-          path(virus_fasta),
           path(gene_annotations),
           path(run_metadata),
           path(header_map)
@@ -30,7 +29,6 @@ process STANDARDIZE_GIANTHUNTER {
         --input-type "${type}" \
         --header-map "${header_map}" \
         --prediction-table "${prediction_table}" \
-        --virus-fasta "${virus_fasta}" \
         --gene-annotations "${gene_annotations}" \
         --run-metadata "${run_metadata}" \
         --ictv-csv "${ictv_csv}" \

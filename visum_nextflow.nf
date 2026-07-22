@@ -727,15 +727,13 @@ workflow {
         )
 
         RUN_GIANTHUNTER.out.results.view {
-            prefix, type, prediction, virusFasta, proteins, annotations,
-            logFile, metadata ->
-                "GIANTHUNTER sample=${prefix} type=${type} prediction=${prediction.name} virus_fasta=${virusFasta.name}"
+            prefix, type, prediction, annotations, logFile, metadata ->
+                "GIANTHUNTER sample=${prefix} type=${type} prediction=${prediction.name}"
         }
 
         ch_gianthunter_for_standardizer = RUN_GIANTHUNTER.out.results.map {
-            prefix, type, prediction, virusFasta, proteins, annotations,
-            logFile, metadata ->
-                tuple(prefix, type, prediction, virusFasta, annotations, metadata)
+            prefix, type, prediction, annotations, logFile, metadata ->
+                tuple(prefix, type, prediction, annotations, metadata)
         }
 
         ch_gianthunter_standardizer_input = ch_gianthunter_for_standardizer

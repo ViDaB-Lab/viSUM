@@ -1,7 +1,9 @@
 import csv
+import io
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
@@ -48,7 +50,6 @@ class StandardizeGiantHunterTests(unittest.TestCase):
         directory: Path,
         header_rows: list[dict[str, str]],
         prediction_rows: list[dict[str, str]],
-        fasta_sequences: dict[str, str],
         annotation_rows: list[dict[str, str]],
         *,
         eligible_count: int,
@@ -56,10 +57,10 @@ class StandardizeGiantHunterTests(unittest.TestCase):
         run_status: str,
         empty_annotations: bool = False,
         prediction_columns: list[str] = PREDICTION_COLUMNS,
+        annotation_columns: list[str] = ANNOTATION_COLUMNS,
     ) -> list[dict[str, str]]:
         header_map = directory / "header_map.tsv"
         prediction = directory / "prediction.tsv"
-        virus_fasta = directory / "viruses.fasta"
         annotations = directory / "annotations.tsv"
         metadata = directory / "metadata.tsv"
         ictv = directory / "ictv.csv"
@@ -67,15 +68,12 @@ class StandardizeGiantHunterTests(unittest.TestCase):
 
         write_table(header_map, HEADER_COLUMNS, header_rows, "\t")
         write_table(prediction, prediction_columns, prediction_rows, "\t")
-        with virus_fasta.open("w", encoding="utf-8") as handle:
-            for sequence_id, sequence in fasta_sequences.items():
-                handle.write(f">{sequence_id}\n{sequence}\n")
         if empty_annotations:
             annotations.write_text("", encoding="utf-8")
         else:
             write_table(
                 annotations,
-                ANNOTATION_COLUMNS,
+                annotation_columns,
                 annotation_rows,
                 "\t",
             )
@@ -134,8 +132,6 @@ class StandardizeGiantHunterTests(unittest.TestCase):
             str(header_map),
             "--prediction-table",
             str(prediction),
-            "--virus-fasta",
-            str(virus_fasta),
             "--gene-annotations",
             str(annotations),
             "--run-metadata",
@@ -204,10 +200,6 @@ class StandardizeGiantHunterTests(unittest.TestCase):
                         "Score": "-",
                     },
                 ],
-                {
-                    "contig_taxonomy": "A" * 5787,
-                    "contig_model": "C" * 3543,
-                },
                 [
                     {"Genome": "contig_taxonomy", "ORF": "orf1"},
                     {"Genome": "contig_taxonomy", "ORF": "orf2"},
@@ -258,7 +250,6 @@ class StandardizeGiantHunterTests(unittest.TestCase):
                         "Score": "-",
                     }
                 ],
-                {},
                 [],
                 eligible_count=1,
                 call_count=0,
@@ -280,7 +271,6 @@ class StandardizeGiantHunterTests(unittest.TestCase):
                     }
                 ],
                 [],
-                {},
                 [],
                 eligible_count=0,
                 call_count=0,
@@ -312,7 +302,6 @@ class StandardizeGiantHunterTests(unittest.TestCase):
                         "GenusCluster": "-",
                     }
                 ],
-                {},
                 [],
                 eligible_count=1,
                 call_count=0,
@@ -329,10 +318,41 @@ class StandardizeGiantHunterTests(unittest.TestCase):
 
         self.assertEqual(rows, [])
 
-    def test_positive_without_matching_fasta_is_rejected(self) -> None:
+    def test_positive_without_gene_row_keeps_blank_gene_count(self) -> None:
         with tempfile.TemporaryDirectory() as temp_directory:
-            with self.assertRaisesRegex(ValueError, "prediction/FASTA identifiers"):
-                self.run_standardizer(
+            rows = self.run_standardizer(
+                Path(temp_directory),
+                [
+                    {
+                        "sample_id": "sample",
+                        "sequence_id": "contig1",
+                        "record_type": "input_contig",
+                        "length": "4000",
+                    }
+                ],
+                [
+                    {
+                        "Accession": "contig1",
+                        "Length": "4000",
+                        "GiantVirus": "GiantVirus",
+                        "PotentialLineage": "Unclassified",
+                        "Score": "0.9",
+                    }
+                ],
+                [],
+                eligible_count=1,
+                call_count=1,
+                run_status="completed_with_giant_virus_calls",
+            )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["n_genes"], "")
+
+    def test_malformed_gene_annotations_are_non_blocking(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_directory:
+            warning = io.StringIO()
+            with redirect_stderr(warning):
+                rows = self.run_standardizer(
                     Path(temp_directory),
                     [
                         {
@@ -351,12 +371,16 @@ class StandardizeGiantHunterTests(unittest.TestCase):
                             "Score": "0.9",
                         }
                     ],
-                    {},
-                    [{"Genome": "contig1", "ORF": "orf1"}],
+                    [{"Unexpected": "value"}],
                     eligible_count=1,
                     call_count=1,
                     run_status="completed_with_giant_virus_calls",
+                    annotation_columns=["Unexpected"],
                 )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["n_genes"], "")
+        self.assertIn("Ignoring unusable GiantHunter gene annotations", warning.getvalue())
 
 
 if __name__ == "__main__":
