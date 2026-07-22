@@ -16,6 +16,9 @@ class GiantHunterWorkflowContractTests(unittest.TestCase):
         cls.analysis = (
             ROOT / "modules" / "local" / "run_gianthunter.nf"
         ).read_text(encoding="utf-8")
+        cls.standardizer = (
+            ROOT / "modules" / "local" / "standardize_gianthunter.nf"
+        ).read_text(encoding="utf-8")
         cls.environment = (ROOT / "envs" / "gianthunter.yml").read_text(
             encoding="utf-8"
         )
@@ -48,6 +51,20 @@ class GiantHunterWorkflowContractTests(unittest.TestCase):
         self.assertIn("skipped_no_sequences_meeting_minimum_length", self.analysis)
         self.assertIn("completed_no_reference_protein_hits", self.analysis)
         self.assertIn("completed_no_giant_virus_calls", self.analysis)
+
+    def test_eligibility_uses_the_header_map_length_column(self):
+        self.assertIn("(\\$7 + 0) >= minimum", self.analysis)
+        self.assertNotIn("(\\$8 + 0) >= minimum", self.analysis)
+
+    def test_standardizer_is_wired_with_ictv_validation(self):
+        self.assertIn(
+            "include { STANDARDIZE_GIANTHUNTER }",
+            self.workflow,
+        )
+        self.assertIn("STANDARDIZE_GIANTHUNTER(", self.workflow)
+        self.assertIn("gianthunterIctvCsv", self.workflow)
+        self.assertIn("standardize_gianthunter.py", self.standardizer)
+        self.assertIn("--gene-annotations", self.standardizer)
 
     def test_database_validation_covers_runtime_assets(self):
         for required_name in (

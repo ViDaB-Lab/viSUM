@@ -23,6 +23,7 @@ include { RUN_VIRBOT } from './modules/local/run_virbot'
 include { STANDARDIZE_VIRBOT } from './modules/local/standardize_virbot'
 include { PREPARE_GIANTHUNTER_DATABASE } from './modules/local/gianthunter_database'
 include { RUN_GIANTHUNTER } from './modules/local/run_gianthunter'
+include { STANDARDIZE_GIANTHUNTER } from './modules/local/standardize_gianthunter'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -646,6 +647,11 @@ workflow {
     }
 
     if( runGianthunter ) {
+        def gianthunterIctvCsv = file(params.ictv_csv)
+        if( !gianthunterIctvCsv.exists() ) {
+            error "GiantHunter ICTV taxonomy file not found: ${gianthunterIctvCsv}"
+        }
+
         def gianthunterMinimumLength
         try {
             gianthunterMinimumLength = params.gianthunter_min_length as Integer
@@ -724,6 +730,28 @@ workflow {
             prefix, type, prediction, virusFasta, proteins, annotations,
             logFile, metadata ->
                 "GIANTHUNTER sample=${prefix} type=${type} prediction=${prediction.name} virus_fasta=${virusFasta.name}"
+        }
+
+        ch_gianthunter_for_standardizer = RUN_GIANTHUNTER.out.results.map {
+            prefix, type, prediction, virusFasta, proteins, annotations,
+            logFile, metadata ->
+                tuple(prefix, type, prediction, virusFasta, annotations, metadata)
+        }
+
+        ch_gianthunter_standardizer_input = ch_gianthunter_for_standardizer
+            .join(
+                NORMALIZE_FASTA.out.normalized_records.map {
+                    prefix, type, fasta, headerMap -> tuple(prefix, headerMap)
+                }
+            )
+
+        STANDARDIZE_GIANTHUNTER(
+            ch_gianthunter_standardizer_input,
+            gianthunterIctvCsv
+        )
+
+        STANDARDIZE_GIANTHUNTER.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
     }
 }

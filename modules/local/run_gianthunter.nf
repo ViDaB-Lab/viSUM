@@ -52,7 +52,7 @@ process RUN_GIANTHUNTER {
 
     INPUT_COUNT=\$(awk 'NR > 1 && NF { count++ } END { print count + 0 }' "${header_map}")
     ELIGIBLE_COUNT=\$(awk -F '\t' -v minimum="${params.gianthunter_min_length}" \
-        'NR > 1 && (\$8 + 0) >= minimum { count++ } END { print count + 0 }' \
+        'NR > 1 && (\$7 + 0) >= minimum { count++ } END { print count + 0 }' \
         "${header_map}")
 
     if [[ "\$ELIGIBLE_COUNT" -eq 0 ]]; then
