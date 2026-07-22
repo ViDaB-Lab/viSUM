@@ -21,6 +21,8 @@ include { STANDARDIZE_DEEPMICROCLASS2 } from './modules/local/standardize_deepmi
 include { PREPARE_VIRBOT_DATABASE } from './modules/local/virbot_installation'
 include { RUN_VIRBOT } from './modules/local/run_virbot'
 include { STANDARDIZE_VIRBOT } from './modules/local/standardize_virbot'
+include { PREPARE_GIANTHUNTER_DATABASE } from './modules/local/gianthunter_database'
+include { RUN_GIANTHUNTER } from './modules/local/run_gianthunter'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -164,6 +166,10 @@ workflow {
     def runCenotetaker3 = parseBooleanParameter(params.run_cenotetaker3, '--run_cenotetaker3')
     def runDeep6 = parseBooleanParameter(params.run_deep6, '--run_deep6')
     def runVirbot = parseBooleanParameter(params.run_virbot, '--run_virbot')
+    def runGianthunter = parseBooleanParameter(
+        params.run_gianthunter,
+        '--run_gianthunter'
+    )
     def runDeepmicroclass2 = parseBooleanParameter(
         params.run_deepmicroclass2,
         '--run_deepmicroclass2'
@@ -176,7 +182,8 @@ workflow {
         "Cenote-Taker3=${runCenotetaker3}, " +
         "Deep6=${runDeep6}, " +
         "VirBot=${runVirbot}, " +
-        "DeepMicroClass2=${runDeepmicroclass2}"
+        "DeepMicroClass2=${runDeepmicroclass2}, " +
+        "GiantHunter=${runGianthunter}"
     )
 
     NORMALIZE_FASTA(ch_samples)
@@ -635,6 +642,88 @@ workflow {
 
         STANDARDIZE_VIRBOT.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
+        }
+    }
+
+    if( runGianthunter ) {
+        def gianthunterMinimumLength
+        try {
+            gianthunterMinimumLength = params.gianthunter_min_length as Integer
+        }
+        catch( Exception ignored ) {
+            error "Invalid --gianthunter_min_length '${params.gianthunter_min_length}'. Use a positive integer."
+        }
+        if( gianthunterMinimumLength < 1 ) {
+            error "Invalid --gianthunter_min_length '${params.gianthunter_min_length}'. Use a positive integer."
+        }
+
+        def gianthunterReject
+        try {
+            gianthunterReject = params.gianthunter_reject as Double
+        }
+        catch( Exception ignored ) {
+            error "Invalid --gianthunter_reject '${params.gianthunter_reject}'. Use a number from 0 to 1."
+        }
+        if( !Double.isFinite(gianthunterReject) || gianthunterReject < 0.0 || gianthunterReject > 1.0 ) {
+            error "Invalid --gianthunter_reject '${params.gianthunter_reject}'. Use a number from 0 to 1."
+        }
+
+        def gianthunterQueryCover
+        try {
+            gianthunterQueryCover = params.gianthunter_query_cover as Integer
+        }
+        catch( Exception ignored ) {
+            error "Invalid --gianthunter_query_cover '${params.gianthunter_query_cover}'. Use an integer from 0 to 100."
+        }
+        if( gianthunterQueryCover < 0 || gianthunterQueryCover > 100 ) {
+            error "Invalid --gianthunter_query_cover '${params.gianthunter_query_cover}'. Use an integer from 0 to 100."
+        }
+
+        def userSuppliedDatabase = params.gianthunter_db != null
+        def gianthunterDatabasePath = userSuppliedDatabase
+            ? file(params.gianthunter_db).toString()
+            : file("${params.dbdir}/gianthunter/gianthunter_db_v1").toString()
+        def gianthunterDatabaseSource = userSuppliedDatabase
+            ? 'user-supplied'
+            : 'viSUM-managed'
+
+        ch_gianthunter_samples = NORMALIZE_FASTA.out.normalized_records.filter {
+            prefix, type, fasta, headerMap -> type == 'dna'
+        }
+
+        // No DNA sample means no GiantHunter database check or analysis task.
+        ch_gianthunter_database_request = ch_gianthunter_samples
+            .take(1)
+            .map { prefix, type, fasta, headerMap ->
+                tuple(
+                    gianthunterDatabasePath,
+                    gianthunterDatabaseSource,
+                    params.gianthunter_auto_download,
+                    params.gianthunter_database_release,
+                    params.gianthunter_database_url,
+                    params.gianthunter_database_sha256
+                )
+            }
+
+        PREPARE_GIANTHUNTER_DATABASE(ch_gianthunter_database_request)
+
+        PREPARE_GIANTHUNTER_DATABASE.out.database.view { database, metadata ->
+            "GIANTHUNTER_DB database=${database} metadata=${metadata.name}"
+        }
+
+        ch_gianthunter_bundle = PREPARE_GIANTHUNTER_DATABASE.out.database
+            .map { database, metadata -> tuple(database, metadata) }
+            .first()
+
+        RUN_GIANTHUNTER(
+            ch_gianthunter_samples,
+            ch_gianthunter_bundle
+        )
+
+        RUN_GIANTHUNTER.out.results.view {
+            prefix, type, prediction, virusFasta, proteins, annotations,
+            logFile, metadata ->
+                "GIANTHUNTER sample=${prefix} type=${type} prediction=${prediction.name} virus_fasta=${virusFasta.name}"
         }
     }
 }
