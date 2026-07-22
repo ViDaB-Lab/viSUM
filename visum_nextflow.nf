@@ -20,6 +20,7 @@ include { RUN_DEEPMICROCLASS2 } from './modules/local/run_deepmicroclass2'
 include { STANDARDIZE_DEEPMICROCLASS2 } from './modules/local/standardize_deepmicroclass2'
 include { PREPARE_VIRBOT_DATABASE } from './modules/local/virbot_installation'
 include { RUN_VIRBOT } from './modules/local/run_virbot'
+include { STANDARDIZE_VIRBOT } from './modules/local/standardize_virbot'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -559,6 +560,10 @@ workflow {
         if( !(virbotTaxaMode in ['TOP', 'LCA']) ) {
             error "Invalid --virbot_taxa '${params.virbot_taxa}'. Use TOP or LCA."
         }
+        def virbotIctvCsv = file(params.ictv_csv)
+        if( !virbotIctvCsv.exists() ) {
+            error "ICTV taxonomy file required by VirBot was not found: ${params.ictv_csv}"
+        }
 
         def userSuppliedInstallation = params.virbot_dir != null
         def virbotInstallationPath = userSuppliedInstallation
@@ -609,6 +614,27 @@ workflow {
         RUN_VIRBOT.out.results.view {
             prefix, type, scores, virusFasta, logFile, metadata ->
                 "VIRBOT sample=${prefix} type=${type} scores=${scores.name} virus_fasta=${virusFasta.name}"
+        }
+
+        ch_virbot_for_standardizer = RUN_VIRBOT.out.results.map {
+            prefix, type, scores, virusFasta, logFile, metadata ->
+                tuple(prefix, type, scores, virusFasta, metadata)
+        }
+
+        ch_virbot_standardizer_input = ch_virbot_for_standardizer
+            .join(
+                NORMALIZE_FASTA.out.normalized_records.map {
+                    prefix, type, fasta, headerMap -> tuple(prefix, headerMap)
+                }
+            )
+
+        STANDARDIZE_VIRBOT(
+            ch_virbot_standardizer_input,
+            virbotIctvCsv
+        )
+
+        STANDARDIZE_VIRBOT.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
     }
 }
