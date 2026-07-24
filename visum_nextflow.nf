@@ -24,6 +24,7 @@ include { STANDARDIZE_VIRBOT } from './modules/local/standardize_virbot'
 include { PREPARE_GIANTHUNTER_DATABASE } from './modules/local/gianthunter_database'
 include { RUN_GIANTHUNTER } from './modules/local/run_gianthunter'
 include { STANDARDIZE_GIANTHUNTER } from './modules/local/standardize_gianthunter'
+include { PREPARE_VICAT_DATABASE } from './modules/local/vicat_database'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -171,6 +172,7 @@ workflow {
         params.run_gianthunter,
         '--run_gianthunter'
     )
+    def runVicat = parseBooleanParameter(params.run_vicat, '--run_vicat')
     def runDeepmicroclass2 = parseBooleanParameter(
         params.run_deepmicroclass2,
         '--run_deepmicroclass2'
@@ -184,7 +186,8 @@ workflow {
         "Deep6=${runDeep6}, " +
         "VirBot=${runVirbot}, " +
         "DeepMicroClass2=${runDeepmicroclass2}, " +
-        "GiantHunter=${runGianthunter}"
+        "GiantHunter=${runGianthunter}, " +
+        "viCAT=${runVicat}"
     )
 
     NORMALIZE_FASTA(ch_samples)
@@ -750,6 +753,50 @@ workflow {
 
         STANDARDIZE_GIANTHUNTER.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
+        }
+    }
+
+    if( runVicat ) {
+        def userSuppliedDatabase = params.vicat_db != null
+        def vicatDatabasePath = userSuppliedDatabase
+            ? file(params.vicat_db).toString()
+            : file(params.vicat_managed_db).toString()
+        def vicatDatabaseSource = userSuppliedDatabase
+            ? 'user-supplied'
+            : 'viSUM-managed'
+
+        def vicatSourceProteins = params.vicat_metavr_proteins == null
+            ? ''
+            : file(params.vicat_metavr_proteins).toString()
+        def vicatSourceMetadata = params.vicat_metavr_metadata == null
+            ? ''
+            : file(params.vicat_metavr_metadata).toString()
+
+        if( (vicatSourceProteins && !vicatSourceMetadata) ||
+            (!vicatSourceProteins && vicatSourceMetadata) ) {
+            error 'A local viCAT build requires both --vicat_metavr_proteins and --vicat_metavr_metadata.'
+        }
+
+        ch_vicat_database_request = NORMALIZE_FASTA.out.normalized_records
+            .take(1)
+            .map { prefix, type, fasta, headerMap ->
+                tuple(
+                    vicatDatabasePath,
+                    vicatDatabaseSource,
+                    vicatSourceProteins,
+                    vicatSourceMetadata,
+                    params.vicat_metavr_proteins_sha256,
+                    params.vicat_metavr_metadata_sha256,
+                    params.vicat_expected_uvigs,
+                    params.vicat_expected_proteins,
+                    params.vicat_expected_representatives
+                )
+            }
+
+        PREPARE_VICAT_DATABASE(ch_vicat_database_request)
+
+        PREPARE_VICAT_DATABASE.out.database.view { database, metadata ->
+            "VICAT_DB database=${database} metadata=${metadata.name}"
         }
     }
 }

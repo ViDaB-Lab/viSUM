@@ -206,5 +206,34 @@ nextflow run main.nf --vitap_use_latest true --vitap_db_label VMR_MSL41
 Do not go gentle into that good night
 
 
+viCAT MetaVR5 database setup
+=============================
+
+viCAT is currently optional and disabled by default. MetaVR redistribution
+permission is not assumed, so users may either provide an existing viCAT
+database or download the original MetaVR5 protein and metadata files and let
+viSUM build the database locally.
+
+Use an existing database:
+
+  --run_vicat true --vicat_db /absolute/path/to/vicat/database
+
+Build once from the two original MetaVR5 downloads:
+
+  --run_vicat true \
+  --vicat_metavr_proteins /absolute/path/to/IMGVR5_UViG.faa.gz \
+  --vicat_metavr_metadata /absolute/path/to/IMGVR5_UViG.tsv.gz
+
+The managed database is installed under databases/vicat/metavr5 by default.
+Subsequent runs validate and reuse it without requiring the source downloads.
+The build has a high temporary storage burden and the taxonomy stage may use
+approximately 300 GB RAM. Completed build stages are checkpointed. Temporary
+files are deleted after a successful, fully validated build but retained after
+failure or interruption so the build can continue on the next run.
+
+The original user-downloaded MetaVR files are never deleted by viSUM. Set
+--run_vicat false to skip both database preparation and viCAT analysis.
+
+
 
 
