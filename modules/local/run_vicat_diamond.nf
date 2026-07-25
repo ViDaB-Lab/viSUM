@@ -8,7 +8,7 @@ process RUN_VICAT_DIAMOND {
 
     publishDir { "${params.outdir}/${prefix}_results/vicat" },
         mode: 'copy',
-        pattern: "${prefix}.vicat_{diamond.tsv,diamond.log,run_metadata.tsv}"
+        pattern: '*.vicat_*'
 
     input:
     tuple val(prefix), val(type), path(orfs_faa), path(orf_map), path(header_map), path(orf_metadata), path(orf_log)

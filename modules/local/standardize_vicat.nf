@@ -8,7 +8,7 @@ process STANDARDIZE_VICAT {
 
     publishDir { "${params.outdir}/${prefix}_results/vicat" },
         mode: 'copy',
-        pattern: "${prefix}.vicat_{orf_evidence.tsv,evidence.tsv}"
+        pattern: '*.vicat_*'
 
     input:
     tuple val(prefix), val(type), path(orf_map), path(header_map), path(diamond), path(run_metadata), path(diamond_log)

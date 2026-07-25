@@ -8,7 +8,7 @@ process PREDICT_VICAT_ORFS {
 
     publishDir { "${params.outdir}/${prefix}_results/vicat" },
         mode: 'copy',
-        pattern: "${prefix}.vicat_{orfs.faa,orf_map.tsv,orf_prediction.log,orf_run_metadata.tsv}"
+        pattern: '*.vicat_*'
 
     input:
     tuple val(prefix), val(type), path(normalized_fasta), path(header_map)
