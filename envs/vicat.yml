@@ -1,0 +1,11 @@
+name: visum-vicat
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.12
+  - python-duckdb=1.5.4
+  - pyrodigal=3.7.1
+  - pyrodigal-gv=0.3.2
+  - pyrodigal-rv=0.1.0
+  - diamond=2.1.25

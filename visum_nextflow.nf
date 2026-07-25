@@ -25,6 +25,9 @@ include { PREPARE_GIANTHUNTER_DATABASE } from './modules/local/gianthunter_datab
 include { RUN_GIANTHUNTER } from './modules/local/run_gianthunter'
 include { STANDARDIZE_GIANTHUNTER } from './modules/local/standardize_gianthunter'
 include { PREPARE_VICAT_DATABASE } from './modules/local/vicat_database'
+include { PREDICT_VICAT_ORFS } from './modules/local/predict_vicat_orfs'
+include { RUN_VICAT_DIAMOND } from './modules/local/run_vicat_diamond'
+include { STANDARDIZE_VICAT } from './modules/local/standardize_vicat'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -757,6 +760,33 @@ workflow {
     }
 
     if( runVicat ) {
+        def allowedVicatSensitivity = [
+            'faster', 'fast', 'mid-sensitive', 'sensitive', 'more-sensitive',
+            'very-sensitive', 'ultra-sensitive'
+        ]
+        if( !(params.vicat_diamond_sensitivity in allowedVicatSensitivity) ) {
+            error "Invalid --vicat_diamond_sensitivity '${params.vicat_diamond_sensitivity}'. " +
+                "Use one of: ${allowedVicatSensitivity.join(', ')}."
+        }
+        def vicatTaxonomySupport = params.vicat_taxonomy_support as Double
+        if( !Double.isFinite(vicatTaxonomySupport) ||
+            vicatTaxonomySupport < 0.5 || vicatTaxonomySupport > 1.0 ) {
+            error '--vicat_taxonomy_support must be between 0.5 and 1.0.'
+        }
+        def vicatLocusOverlap = params.vicat_locus_overlap as Double
+        if( !Double.isFinite(vicatLocusOverlap) ||
+            vicatLocusOverlap <= 0.0 || vicatLocusOverlap > 1.0 ) {
+            error '--vicat_locus_overlap must be greater than 0 and at most 1.0.'
+        }
+        def vicatMinimumQueryCover = params.vicat_min_query_cover as Integer
+        if( vicatMinimumQueryCover < 0 || vicatMinimumQueryCover > 100 ) {
+            error '--vicat_min_query_cover must be between 0 and 100.'
+        }
+        def vicatTopPercent = params.vicat_top_percent as Double
+        if( vicatTopPercent < 0.0 || vicatTopPercent > 100.0 ) {
+            error '--vicat_top_percent must be between 0 and 100.'
+        }
+
         def userSuppliedDatabase = params.vicat_db != null
         def vicatDatabasePath = userSuppliedDatabase
             ? file(params.vicat_db).toString()
@@ -797,6 +827,36 @@ workflow {
 
         PREPARE_VICAT_DATABASE.out.database.view { database, metadata ->
             "VICAT_DB database=${database} metadata=${metadata.name}"
+        }
+
+        ch_vicat_database = PREPARE_VICAT_DATABASE.out.database
+            .map { database, metadata -> tuple(database, metadata) }
+            .first()
+
+        PREDICT_VICAT_ORFS(NORMALIZE_FASTA.out.normalized_records)
+
+        PREDICT_VICAT_ORFS.out.orfs.view {
+            prefix, type, proteins, orfMap, headerMap, metadata, log ->
+                "VICAT_ORFS sample=${prefix} type=${type} proteins=${proteins.name}"
+        }
+
+        RUN_VICAT_DIAMOND(
+            PREDICT_VICAT_ORFS.out.orfs,
+            ch_vicat_database
+        )
+
+        RUN_VICAT_DIAMOND.out.results.view {
+            prefix, type, orfMap, headerMap, diamond, metadata, log ->
+                "VICAT_DIAMOND sample=${prefix} type=${type} alignments=${diamond.name}"
+        }
+
+        STANDARDIZE_VICAT(
+            RUN_VICAT_DIAMOND.out.results,
+            ch_vicat_database
+        )
+
+        STANDARDIZE_VICAT.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
     }
 }

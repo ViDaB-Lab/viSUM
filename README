@@ -234,6 +234,15 @@ failure or interruption so the build can continue on the next run.
 The original user-downloaded MetaVR files are never deleted by viSUM. Set
 --run_vicat false to skip both database preparation and viCAT analysis.
 
+viCAT analysis predicts ORFs with pyrodigal-gv for DNA inputs. RNA inputs are
+processed with both pyrodigal-gv and pyrodigal-rv; exact duplicate calls are
+collapsed and overlapping alternative calls are resolved after DIAMOND search.
+DIAMOND hits are joined to the vOTU-balanced MetaVR taxonomy lookup. viCAT
+produces raw alignments, one-row-per-ORF-locus audit evidence, and a lean
+one-row-per-contig evidence table for the harmonizer. Each genomic locus can
+contribute at most one taxonomy vote, preventing dual callers and repeated
+database lineages from manufacturing support.
+
 
 
 
