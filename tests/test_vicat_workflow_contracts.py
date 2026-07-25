@@ -21,3 +21,10 @@ def test_vicat_orf_commands_use_supported_cli_flags_and_pinned_versions() -> Non
     assert " -q " not in module
     assert "pyrodigal-gv=0.3.2" in environment
     assert "pyrodigal-rv=0.1.0" in environment
+
+
+def test_vicat_diamond_uses_an_argument_array() -> None:
+    module = (ROOT / "modules" / "local" / "run_vicat_diamond.nf").read_text(encoding="utf-8")
+    assert "DIAMOND_ARGS=(" in module
+    assert 'diamond "\\${DIAMOND_ARGS[@]}"' in module
+    assert "diamond blastp \\\n" not in module

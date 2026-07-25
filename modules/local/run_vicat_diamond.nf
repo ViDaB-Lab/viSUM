@@ -44,18 +44,22 @@ process RUN_VICAT_DIAMOND {
         : > "\$RAW"
         printf 'viCAT DIAMOND skipped: no predicted ORFs.\n' > "\$LOG"
     else
-        diamond blastp \
-            --query "${orfs_faa}" \
-            --db "\$DB" \
-            --out "\$RAW" \
-            --outfmt 6 qseqid sseqid pident length qlen slen qstart qend sstart send evalue bitscore qcovhsp scovhsp \
-            --${params.vicat_diamond_sensitivity} \
-            --evalue "${params.vicat_evalue}" \
-            --min-score "${params.vicat_min_bitscore}" \
-            --query-cover "${params.vicat_min_query_cover}" \
-            --top "${params.vicat_top_percent}" \
-            --threads "${task.cpus}" \
-            > "\$LOG" 2>&1
+        DIAMOND_ARGS=(
+            blastp
+            --query "${orfs_faa}"
+            --db "\$DB"
+            --out "\$RAW"
+            --outfmt 6
+            qseqid sseqid pident length qlen slen qstart qend
+            sstart send evalue bitscore qcovhsp scovhsp
+            --${params.vicat_diamond_sensitivity}
+            --evalue "${params.vicat_evalue}"
+            --min-score "${params.vicat_min_bitscore}"
+            --query-cover "${params.vicat_min_query_cover}"
+            --top "${params.vicat_top_percent}"
+            --threads "${task.cpus}"
+        )
+        diamond "\${DIAMOND_ARGS[@]}" > "\$LOG" 2>&1
     fi
 
     printf '%s\n' "\$HEADER" > "\$FINAL"
