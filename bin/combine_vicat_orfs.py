@@ -90,12 +90,38 @@ def load_predictions(proteins: Path, gff: Path, caller: str) -> list[Prediction]
     for header, translation in fasta_records(proteins):
         parts = [part.strip() for part in header.split(" # ")]
         attributes = parse_attributes(parts[-1]) if parts else {}
-        feature_id = attributes.get("ID")
-        if not feature_id or feature_id not in features:
+        # pyrodigal-gv 0.3.2 can emit a short attribute ID (for example
+        # ID=1_1) in the protein description while the GFF uses the full
+        # FASTA record identifier (for example sample_c000001_1). Prefer the
+        # record identifier and retain the attribute ID for compatible CLIs.
+        candidate_ids = [parts[0].split()[0] if parts else "", attributes.get("ID", "")]
+        feature_id = next((value for value in candidate_ids if value in features), None)
+        if feature_id is None:
+            # Final compatibility fallback: match the parent sequence and
+            # coordinates encoded in the Prodigal-style protein header.
+            try:
+                parent_id = candidate_ids[0].rsplit("_", 1)[0]
+                header_start, header_end = int(parts[1]), int(parts[2])
+                header_strand = "+" if int(parts[3]) == 1 else "-"
+            except (IndexError, ValueError):
+                parent_id, header_start, header_end, header_strand = "", -1, -1, ""
+            matches = [
+                key for key, value in features.items()
+                if value[:4] == (parent_id, header_start, header_end, header_strand)
+            ]
+            if len(matches) == 1:
+                feature_id = matches[0]
+        if feature_id is None:
             raise ValueError(
                 f"Could not connect protein header to GFF feature in {proteins}: {header}"
             )
         parent, start, end, strand, table = features[feature_id]
+        if len(parts) >= 4:
+            expected_strand = "+" if parts[3] == "1" else "-"
+            if (int(parts[1]), int(parts[2]), expected_strand) != (start, end, strand):
+                raise ValueError(
+                    f"Protein/GFF coordinates disagree for {feature_id} in {proteins}"
+                )
         predictions.append(
             Prediction(parent, start, end, strand, translation.rstrip("*"), table, caller)
         )

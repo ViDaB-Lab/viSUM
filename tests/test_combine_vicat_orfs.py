@@ -51,3 +51,35 @@ def test_combines_exact_calls_but_retains_alternatives(tmp_path: Path) -> None:
     assert rows[0]["callers"] == "pyrodigal-gv,pyrodigal-rv"
     assert rows[1]["callers"] == "pyrodigal-rv"
     assert output_faa.read_text(encoding="utf-8").count(">") == 2
+
+
+def test_accepts_pyrodigal_gv_short_header_id_and_full_gff_id(tmp_path: Path) -> None:
+    faa = tmp_path / "gv.faa"
+    gff = tmp_path / "gv.gff"
+    faa.write_text(
+        ">sample_c000001_1 # 89 # 586 # -1 # ID=1_1;partial=00;start_type=ATG\nMPEPTIDE\n",
+        encoding="utf-8",
+    )
+    gff.write_text(
+        "##gff-version 3\n"
+        "sample_c000001\tpyrodigal\tCDS\t89\t586\t.\t-\t0\t"
+        "ID=sample_c000001_1;partial=00;transl_table=11\n",
+        encoding="utf-8",
+    )
+    output_faa = tmp_path / "combined.faa"
+    output_map = tmp_path / "combined.tsv"
+    subprocess.run(
+        [
+            sys.executable, str(ROOT / "bin" / "combine_vicat_orfs.py"),
+            "--sample-id", "sample", "--input-type", "dna",
+            "--gv-proteins", str(faa), "--gv-gff", str(gff),
+            "--output-proteins", str(output_faa), "--output-map", str(output_map),
+        ],
+        check=True,
+    )
+    with output_map.open(encoding="utf-8", newline="") as handle:
+        row = next(csv.DictReader(handle, delimiter="\t"))
+    assert row["sequence_id"] == "sample_c000001"
+    assert row["start"] == "89"
+    assert row["end"] == "586"
+    assert row["strand"] == "-"
