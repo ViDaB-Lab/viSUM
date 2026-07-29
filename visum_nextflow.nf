@@ -782,9 +782,21 @@ workflow {
         if( vicatMinimumQueryCover < 0 || vicatMinimumQueryCover > 100 ) {
             error '--vicat_min_query_cover must be between 0 and 100.'
         }
+        def vicatMinimumBitscore = params.vicat_min_bitscore as Double
+        if( !Double.isFinite(vicatMinimumBitscore) || vicatMinimumBitscore < 0.0 ) {
+            error '--vicat_min_bitscore must be zero or greater.'
+        }
         def vicatTopPercent = params.vicat_top_percent as Double
         if( vicatTopPercent < 0.0 || vicatTopPercent > 100.0 ) {
             error '--vicat_top_percent must be between 0 and 100.'
+        }
+        def vicatBlockSize = params.vicat_block_size as Double
+        if( !Double.isFinite(vicatBlockSize) || vicatBlockSize <= 0.0 ) {
+            error '--vicat_block_size must be greater than zero.'
+        }
+        def vicatIndexChunks = params.vicat_index_chunks as Integer
+        if( vicatIndexChunks < 1 ) {
+            error '--vicat_index_chunks must be at least 1.'
         }
 
         def userSuppliedDatabase = params.vicat_db != null

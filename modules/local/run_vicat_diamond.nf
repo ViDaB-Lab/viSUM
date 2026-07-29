@@ -42,7 +42,7 @@ process RUN_VICAT_DIAMOND {
         : > "\$RAW"
         printf 'viCAT DIAMOND skipped: no predicted ORFs.\n' > "\$LOG"
     else
-        diamond blastp --query "${orfs_faa}" --db "\$DB" --out "\$RAW" --outfmt 6 qseqid sseqid pident length qlen slen qstart qend sstart send evalue bitscore qcovhsp scovhsp --${params.vicat_diamond_sensitivity} --evalue "${params.vicat_evalue}" --min-score "${params.vicat_min_bitscore}" --query-cover "${params.vicat_min_query_cover}" --top "${params.vicat_top_percent}" --threads "${task.cpus}" > "\$LOG" 2>&1
+        diamond blastp --query "${orfs_faa}" --db "\$DB" --out "\$RAW" --outfmt 6 qseqid sseqid pident length qlen slen qstart qend sstart send evalue bitscore qcovhsp scovhsp --${params.vicat_diamond_sensitivity} --min-score "${params.vicat_min_bitscore}" --query-cover "${params.vicat_min_query_cover}" --top "${params.vicat_top_percent}" --block-size "${params.vicat_block_size}" --index-chunks "${params.vicat_index_chunks}" --threads "${task.cpus}" > "\$LOG" 2>&1
     fi
 
     printf 'qseqid\tsseqid\tpident\tlength\tqlen\tslen\tqstart\tqend\tsstart\tsend\tevalue\tbitscore\tqcovhsp\tscovhsp\n' > "${prefix}.vicat_diamond.tsv"
@@ -50,8 +50,8 @@ process RUN_VICAT_DIAMOND {
     HIT_COUNT=\$(wc -l < "\$RAW")
     HIT_ORFS=\$(awk -F '\t' 'NF {seen[\$1]=1} END {print length(seen)+0}' "\$RAW")
 
-    printf 'sample_id\tinput_type\torf_count\thit_orf_count\talignment_count\tdatabase_path\tsensitivity\tevalue\tminimum_bitscore\tminimum_query_cover\ttop_percent\n' > "${prefix}.vicat_run_metadata.tsv"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${prefix}" "${type}" "\$ORF_COUNT" "\$HIT_ORFS" "\$HIT_COUNT" "\$DB" "${params.vicat_diamond_sensitivity}" "${params.vicat_evalue}" "${params.vicat_min_bitscore}" "${params.vicat_min_query_cover}" "${params.vicat_top_percent}" >> "${prefix}.vicat_run_metadata.tsv"
+    printf 'sample_id\tinput_type\torf_count\thit_orf_count\talignment_count\tdatabase_path\tsensitivity\tminimum_bitscore\tminimum_query_cover\ttop_percent\tblock_size\tindex_chunks\n' > "${prefix}.vicat_run_metadata.tsv"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${prefix}" "${type}" "\$ORF_COUNT" "\$HIT_ORFS" "\$HIT_COUNT" "\$DB" "${params.vicat_diamond_sensitivity}" "${params.vicat_min_bitscore}" "${params.vicat_min_query_cover}" "${params.vicat_top_percent}" "${params.vicat_block_size}" "${params.vicat_index_chunks}" >> "${prefix}.vicat_run_metadata.tsv"
 
     echo "VICAT_DIAMOND sample=${prefix} orfs=\$ORF_COUNT hit_orfs=\$HIT_ORFS alignments=\$HIT_COUNT"
     """

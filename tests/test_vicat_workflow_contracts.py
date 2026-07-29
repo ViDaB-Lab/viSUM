@@ -32,7 +32,11 @@ def test_vicat_diamond_uses_one_literal_command_and_lean_tuple() -> None:
     assert "path(orf_metadata)" not in module
     assert "path(orf_log)" not in module
     for parameter in (
-        "params.vicat_diamond_sensitivity", "params.vicat_evalue",
+        "params.vicat_diamond_sensitivity",
         "params.vicat_min_bitscore", "params.vicat_min_query_cover",
+        "params.vicat_top_percent", "params.vicat_block_size",
+        "params.vicat_index_chunks",
     ):
         assert parameter in commands[0]
+    assert "--evalue" not in commands[0]
+    assert " evalue " in commands[0]
