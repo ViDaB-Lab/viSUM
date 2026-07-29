@@ -836,7 +836,7 @@ workflow {
         PREDICT_VICAT_ORFS(NORMALIZE_FASTA.out.normalized_records)
 
         PREDICT_VICAT_ORFS.out.orfs.view {
-            prefix, type, proteins, orfMap, headerMap, metadata, log ->
+            prefix, type, proteins, orfMap, headerMap ->
                 "VICAT_ORFS sample=${prefix} type=${type} proteins=${proteins.name}"
         }
 
@@ -846,7 +846,7 @@ workflow {
         )
 
         RUN_VICAT_DIAMOND.out.results.view {
-            prefix, type, orfMap, headerMap, diamond, metadata, log ->
+            prefix, type, orfMap, headerMap, diamond ->
                 "VICAT_DIAMOND sample=${prefix} type=${type} alignments=${diamond.name}"
         }
 

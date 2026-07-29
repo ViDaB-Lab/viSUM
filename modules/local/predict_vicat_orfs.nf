@@ -18,9 +18,9 @@ process PREDICT_VICAT_ORFS {
           path("${prefix}.vicat_orfs.faa"),
           path("${prefix}.vicat_orf_map.tsv"),
           path(header_map),
-          path("${prefix}.vicat_orf_run_metadata.tsv"),
-          path("${prefix}.vicat_orf_prediction.log"),
           emit: orfs
+    path("${prefix}.vicat_orf_run_metadata.tsv"), emit: metadata
+    path("${prefix}.vicat_orf_prediction.log"), emit: log
 
     script:
     """

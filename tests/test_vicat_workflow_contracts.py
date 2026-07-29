@@ -23,8 +23,16 @@ def test_vicat_orf_commands_use_supported_cli_flags_and_pinned_versions() -> Non
     assert "pyrodigal-rv=0.1.0" in environment
 
 
-def test_vicat_diamond_uses_an_argument_array() -> None:
+def test_vicat_diamond_uses_one_literal_command_and_lean_tuple() -> None:
     module = (ROOT / "modules" / "local" / "run_vicat_diamond.nf").read_text(encoding="utf-8")
-    assert "DIAMOND_ARGS=(" in module
-    assert 'diamond "\\${DIAMOND_ARGS[@]}"' in module
-    assert "diamond blastp \\\n" not in module
+    commands = [line.strip() for line in module.splitlines() if line.strip().startswith("diamond blastp")]
+    assert len(commands) == 1
+    assert "bin/run_vicat_diamond.py" not in module
+    assert "DIAMOND_ARGS=(" not in module
+    assert "path(orf_metadata)" not in module
+    assert "path(orf_log)" not in module
+    for parameter in (
+        "params.vicat_diamond_sensitivity", "params.vicat_evalue",
+        "params.vicat_min_bitscore", "params.vicat_min_query_cover",
+    ):
+        assert parameter in commands[0]

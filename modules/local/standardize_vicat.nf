@@ -11,7 +11,7 @@ process STANDARDIZE_VICAT {
         pattern: '*.vicat_*'
 
     input:
-    tuple val(prefix), val(type), path(orf_map), path(header_map), path(diamond), path(run_metadata), path(diamond_log)
+    tuple val(prefix), val(type), path(orf_map), path(header_map), path(diamond)
     tuple path(vicat_database), path(vicat_database_metadata)
 
     output:
