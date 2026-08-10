@@ -17,6 +17,7 @@ process STANDARDIZE_VICAT {
     output:
     tuple val(prefix), val('vicat'), path("${prefix}.vicat_evidence.tsv"), emit: evidence
     tuple val(prefix), path("${prefix}.vicat_orf_evidence.tsv"), emit: loci
+    tuple val(prefix), path("${prefix}.vicat_reference_audit.tsv"), emit: audit
 
     script:
     """
@@ -41,6 +42,7 @@ process STANDARDIZE_VICAT {
         --taxonomy-support "${params.vicat_taxonomy_support}" \
         --locus-overlap "${params.vicat_locus_overlap}" \
         --output-loci "${prefix}.vicat_orf_evidence.tsv" \
+        --output-audit "${prefix}.vicat_reference_audit.tsv" \
         --output-evidence "${prefix}.vicat_evidence.tsv"
     """
 }

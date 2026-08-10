@@ -31,6 +31,17 @@ LOCUS_COLUMNS = [
     "reference_taxonomy_coverage", "reference_taxonomy_conflict", "taxonomy_support",
     "classification_rank", "caller_taxonomy_conflict", *TAXONOMY_COLUMNS,
 ]
+AUDIT_COLUMNS = [
+    "sample_id", "sequence_id", "locus_id", "orf_id", "orf_callers",
+    "coordinates", "strand", "protein_length", "selected_orf_for_locus",
+    "selected_best_reference", "reference_id", "identity", "alignment_length",
+    "query_length", "subject_length", "query_start", "query_end", "subject_start",
+    "subject_end", "evalue", "bitscore", "relative_bitscore", "query_coverage",
+    "subject_coverage", "lineage_vote_representative", "lineage_vote_weight",
+    "member_votu_count", "classified_votu_count", "reference_taxonomy_coverage",
+    "reference_taxonomy_conflict", "reference_taxonomy_conflict_rank",
+    "taxonomy_methods", "taxonomy_support_threshold", *TAXONOMY_COLUMNS,
+]
 
 
 @dataclass
@@ -55,6 +66,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--taxonomy-support", required=True, type=float)
     parser.add_argument("--locus-overlap", required=True, type=float)
     parser.add_argument("--output-loci", required=True, type=Path)
+    parser.add_argument("--output-audit", required=True, type=Path)
     parser.add_argument("--output-evidence", required=True, type=Path)
     return parser.parse_args()
 
@@ -212,6 +224,21 @@ def taxonomy_call(hits: list[dict], threshold: float) -> dict:
     }
 
 
+def lineage_vote_details(hits: list[dict]) -> tuple[set[int], float]:
+    """Identify the best retained hit for each distinct full lineage."""
+    lineages: dict[tuple, dict] = {}
+    for hit in hits:
+        lineage = tuple(hit[column] for column in TAXONOMY_COLUMNS)
+        previous = lineages.get(lineage)
+        if previous is None or float(hit["bitscore"]) > float(previous["bitscore"]):
+            lineages[lineage] = hit
+    if not lineages:
+        return set(), 0.0
+    return {id(hit) for hit in lineages.values()}, max(
+        float(hit["bitscore"]) for hit in lineages.values()
+    )
+
+
 class UnionFind:
     def __init__(self, values):
         self.parent = {value: value for value in values}
@@ -299,6 +326,7 @@ def main() -> None:
     sequence_lengths = {row["sequence_id"]: int(row["length"]) for row in header_rows}
     loci = build_loci(orfs, args.locus_overlap)
     locus_rows = []
+    audit_rows = []
     contig_loci: dict[str, list[dict]] = defaultdict(list)
     for locus_index, alternatives in enumerate(loci, start=1):
         calls = [(orf, taxonomy_call(hits.get(orf.orf_id, []), args.taxonomy_support)) for orf in alternatives]
@@ -355,6 +383,63 @@ def main() -> None:
         }
         locus_rows.append(row)
         contig_loci[sequence_id].append({"row": row, "call": selected, "callers": callers})
+
+        for orf, call in calls:
+            orf_hits = hits.get(orf.orf_id, [])
+            vote_representatives, best_lineage_score = lineage_vote_details(orf_hits)
+            for hit in orf_hits:
+                is_vote = id(hit) in vote_representatives
+                bitscore = float(hit["bitscore"])
+                audit_rows.append(
+                    {
+                        "sample_id": args.sample_id,
+                        "sequence_id": sequence_id,
+                        "locus_id": locus_id,
+                        "orf_id": orf.orf_id,
+                        "orf_callers": ",".join(sorted(orf.callers)),
+                        "coordinates": f"{orf.start}-{orf.end}",
+                        "strand": orf.strand,
+                        "protein_length": orf.protein_length,
+                        "selected_orf_for_locus": "true" if selected_orf is orf else "false",
+                        "selected_best_reference": "true" if (
+                            selected_orf is orf
+                            and hit["sseqid"] == selected.get("best_reference_id")
+                            and bitscore == selected.get("best_bitscore")
+                        ) else "false",
+                        "reference_id": hit["sseqid"],
+                        "identity": format_number(hit["pident"]),
+                        "alignment_length": hit["length"],
+                        "query_length": hit["qlen"],
+                        "subject_length": hit["slen"],
+                        "query_start": hit["qstart"],
+                        "query_end": hit["qend"],
+                        "subject_start": hit["sstart"],
+                        "subject_end": hit["send"],
+                        "evalue": format_number(hit["evalue"]),
+                        "bitscore": format_number(bitscore),
+                        "relative_bitscore": format_number(
+                            bitscore / best_lineage_score if best_lineage_score else None
+                        ),
+                        "query_coverage": format_number(hit["qcovhsp"]),
+                        "subject_coverage": format_number(hit["scovhsp"]),
+                        "lineage_vote_representative": "true" if is_vote else "false",
+                        "lineage_vote_weight": format_number(
+                            bitscore / best_lineage_score if is_vote and best_lineage_score else None
+                        ),
+                        "member_votu_count": hit["member_votu_count"],
+                        "classified_votu_count": hit["classified_votu_count"],
+                        "reference_taxonomy_coverage": format_number(hit["taxonomy_coverage"]),
+                        "reference_taxonomy_conflict": (
+                            "true" if hit["reference_taxonomy_conflict"] else "false"
+                        ),
+                        "reference_taxonomy_conflict_rank": (
+                            hit["reference_taxonomy_conflict_rank"] or ""
+                        ),
+                        "taxonomy_methods": hit["taxonomy_methods"] or "",
+                        "taxonomy_support_threshold": format_number(args.taxonomy_support),
+                        **{column: hit[column] or "" for column in TAXONOMY_COLUMNS},
+                    }
+                )
 
     evidence_rows = []
     for sequence_id, entries in sorted(contig_loci.items()):
@@ -431,16 +516,24 @@ def main() -> None:
         )
 
     args.output_loci.parent.mkdir(parents=True, exist_ok=True)
+    args.output_audit.parent.mkdir(parents=True, exist_ok=True)
     args.output_evidence.parent.mkdir(parents=True, exist_ok=True)
     with args.output_loci.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=LOCUS_COLUMNS, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         writer.writerows(locus_rows)
+    with args.output_audit.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=AUDIT_COLUMNS, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(audit_rows)
     with args.output_evidence.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=OUTPUT_COLUMNS, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         writer.writerows(evidence_rows)
-    print(f"viCAT standardized: loci={len(locus_rows)} contigs_with_hits={len(evidence_rows)}")
+    print(
+        f"viCAT standardized: loci={len(locus_rows)} reference_hits={len(audit_rows)} "
+        f"contigs_with_hits={len(evidence_rows)}"
+    )
 
 
 if __name__ == "__main__":

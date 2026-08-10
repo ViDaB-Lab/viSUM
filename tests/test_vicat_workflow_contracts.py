@@ -40,3 +40,9 @@ def test_vicat_diamond_uses_one_literal_command_and_lean_tuple() -> None:
         assert parameter in commands[0]
     assert "--evalue" not in commands[0]
     assert " evalue " in commands[0]
+
+
+def test_vicat_standardizer_emits_reference_audit() -> None:
+    module = (ROOT / "modules" / "local" / "standardize_vicat.nf").read_text(encoding="utf-8")
+    assert 'path("${prefix}.vicat_reference_audit.tsv"), emit: audit' in module
+    assert '--output-audit "${prefix}.vicat_reference_audit.tsv"' in module

@@ -60,6 +60,7 @@ def test_locus_voting_and_zero_hit_contig(tmp_path: Path) -> None:
         diamond, columns,
         [
             ["orfA", "repA", 80, 100, 100, 120, 1, 100, 1, 100, "1e-30", 100, 100, 83],
+            ["orfA", "repC", 78, 98, 100, 110, 1, 98, 1, 98, "1e-28", 97, 98, 89],
             ["orfB", "repB", 79, 100, 100, 120, 1, 100, 1, 100, "1e-29", 96, 100, 83],
             ["orfC", "repC", 75, 90, 100, 110, 1, 90, 1, 90, "1e-20", 80, 90, 82],
         ],
@@ -67,6 +68,7 @@ def test_locus_voting_and_zero_hit_contig(tmp_path: Path) -> None:
     lookup = tmp_path / "lookup.parquet"
     make_lookup(lookup)
     loci = tmp_path / "loci.tsv"
+    audit = tmp_path / "audit.tsv"
     evidence = tmp_path / "evidence.tsv"
     environment = dict(os.environ)
     environment["PYTHONPATH"] = str(ROOT / "bin") + os.pathsep + environment.get("PYTHONPATH", "")
@@ -77,7 +79,8 @@ def test_locus_voting_and_zero_hit_contig(tmp_path: Path) -> None:
             "--orf-map", str(orf_map), "--diamond", str(diamond),
             "--taxonomy-lookup", str(lookup), "--header-map", str(header_map),
             "--taxonomy-support", "0.60", "--locus-overlap", "0.80",
-            "--output-loci", str(loci), "--output-evidence", str(evidence),
+            "--output-loci", str(loci), "--output-audit", str(audit),
+            "--output-evidence", str(evidence),
         ],
         check=True, env=environment,
     )
@@ -85,6 +88,8 @@ def test_locus_voting_and_zero_hit_contig(tmp_path: Path) -> None:
         locus_rows = list(csv.DictReader(handle, delimiter="\t"))
     with evidence.open(encoding="utf-8", newline="") as handle:
         evidence_rows = list(csv.DictReader(handle, delimiter="\t"))
+    with audit.open(encoding="utf-8", newline="") as handle:
+        audit_rows = list(csv.DictReader(handle, delimiter="\t"))
     assert len(locus_rows) == 3
     assert locus_rows[0]["caller_taxonomy_conflict"] == "true"
     assert len(evidence_rows) == 1
@@ -92,3 +97,16 @@ def test_locus_voting_and_zero_hit_contig(tmp_path: Path) -> None:
     assert evidence_rows[0]["classification_rank"] == "order"
     assert evidence_rows[0]["taxonomy_conflict"] == "true"
     assert evidence_rows[0]["score"] == "1"
+    assert len(audit_rows) == 4
+    assert {row["reference_id"] for row in audit_rows} == {"repA", "repB", "repC"}
+    assert all(row["taxonomy_support_threshold"] == "0.6" for row in audit_rows)
+    rep_a = next(row for row in audit_rows if row["reference_id"] == "repA")
+    assert rep_a["selected_orf_for_locus"] == "true"
+    assert rep_a["selected_best_reference"] == "true"
+    assert rep_a["lineage_vote_representative"] == "true"
+    assert rep_a["g__Genus"] == "g__A"
+    duplicate_lineage = next(
+        row for row in audit_rows if row["orf_id"] == "orfA" and row["reference_id"] == "repC"
+    )
+    assert duplicate_lineage["lineage_vote_representative"] == "false"
+    assert duplicate_lineage["lineage_vote_weight"] == ""
