@@ -20,6 +20,7 @@ EXTRA_COLUMNS = [
     "orf_loci", "hit_loci", "hit_locus_fraction", "orf_callers",
     "best_reference_id", "best_bitscore", "best_evalue", "best_identity",
     "best_query_coverage", "best_subject_coverage", "taxonomy_support",
+    "taxonomy_eligible_loci", "taxonomy_supporting_loci",
     "classification_rank", "taxonomy_conflict", "reference_taxonomy_conflict_loci",
 ]
 OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + EXTRA_COLUMNS
@@ -40,7 +41,7 @@ AUDIT_COLUMNS = [
     "subject_coverage", "lineage_vote_representative", "lineage_vote_weight",
     "member_votu_count", "classified_votu_count", "reference_taxonomy_coverage",
     "reference_taxonomy_conflict", "reference_taxonomy_conflict_rank",
-    "taxonomy_methods", "taxonomy_support_threshold", *TAXONOMY_COLUMNS,
+    "taxonomy_methods", "orf_taxonomy_support_threshold", *TAXONOMY_COLUMNS,
 ]
 
 
@@ -63,7 +64,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--diamond", required=True, type=Path)
     parser.add_argument("--taxonomy-lookup", required=True, type=Path)
     parser.add_argument("--header-map", required=True, type=Path)
-    parser.add_argument("--taxonomy-support", required=True, type=float)
+    parser.add_argument("--orf-taxonomy-support", required=True, type=float)
+    parser.add_argument("--contig-taxonomy-support", required=True, type=float)
     parser.add_argument("--locus-overlap", required=True, type=float)
     parser.add_argument("--output-loci", required=True, type=Path)
     parser.add_argument("--output-audit", required=True, type=Path)
@@ -180,7 +182,6 @@ def taxonomy_call(hits: list[dict], threshold: float) -> dict:
         (lineage, float(hit["bitscore"]) / best_score)
         for lineage, hit in lineages.items()
     ]
-    total_weight = sum(weight for _, weight in weighted)
     taxonomy = unclassified_taxonomy("virus")
     deepest = "domain"
     deepest_support = 1.0
@@ -188,16 +189,21 @@ def taxonomy_call(hits: list[dict], threshold: float) -> dict:
     accepted_prefix: list[str] = []
     for index, column in enumerate(TAXONOMY_COLUMNS[1:], start=1):
         support: dict[str, float] = defaultdict(float)
+        eligible_weight = 0.0
         for lineage, weight in weighted:
             if any(lineage[parent_index + 1] != accepted for parent_index, accepted in enumerate(accepted_prefix)):
                 continue
             value = lineage[index]
             if not is_unclassified(value):
                 support[str(value)] += weight
+                eligible_weight += weight
         if not support:
             break
         winner, winner_weight = max(support.items(), key=lambda item: (item[1], item[0]))
-        fraction = winner_weight / total_weight
+        # A reference whose database taxonomy was truncated at this rank is an
+        # abstention here. It remains a qualified viral-homology hit, but must
+        # contribute neither support nor opposition below its last safe rank.
+        fraction = winner_weight / eligible_weight
         if fraction + 1e-12 < threshold:
             aggregation_conflict = len(support) > 1
             break
@@ -311,8 +317,10 @@ def format_number(value, digits=6):
 
 def main() -> None:
     args = parse_args()
-    if not 0.5 <= args.taxonomy_support <= 1.0:
-        raise SystemExit("--taxonomy-support must be between 0.5 and 1")
+    if not 0.5 <= args.orf_taxonomy_support <= 1.0:
+        raise SystemExit("--orf-taxonomy-support must be between 0.5 and 1")
+    if not 0.5 <= args.contig_taxonomy_support <= 1.0:
+        raise SystemExit("--contig-taxonomy-support must be between 0.5 and 1")
     if not 0.0 < args.locus_overlap <= 1.0:
         raise SystemExit("--locus-overlap must be greater than 0 and at most 1")
 
@@ -329,7 +337,10 @@ def main() -> None:
     audit_rows = []
     contig_loci: dict[str, list[dict]] = defaultdict(list)
     for locus_index, alternatives in enumerate(loci, start=1):
-        calls = [(orf, taxonomy_call(hits.get(orf.orf_id, []), args.taxonomy_support)) for orf in alternatives]
+        calls = [
+            (orf, taxonomy_call(hits.get(orf.orf_id, []), args.orf_taxonomy_support))
+            for orf in alternatives
+        ]
         hit_calls = [(orf, call) for orf, call in calls if call]
         selected_orf, selected = (None, {})
         if hit_calls:
@@ -436,7 +447,7 @@ def main() -> None:
                             hit["reference_taxonomy_conflict_rank"] or ""
                         ),
                         "taxonomy_methods": hit["taxonomy_methods"] or "",
-                        "taxonomy_support_threshold": format_number(args.taxonomy_support),
+                        "orf_taxonomy_support_threshold": format_number(args.orf_taxonomy_support),
                         **{column: hit[column] or "" for column in TAXONOMY_COLUMNS},
                     }
                 )
@@ -449,6 +460,8 @@ def main() -> None:
         total_loci, hit_loci = len(entries), len(hit_entries)
         taxonomy = unclassified_taxonomy("virus")
         deepest, deepest_support = "domain", 1.0
+        deepest_eligible_loci = hit_loci
+        deepest_supporting_loci = hit_loci
         contig_conflict = any(
             entry["call"].get("aggregation_conflict") or
             entry["row"]["caller_taxonomy_conflict"] == "true"
@@ -456,25 +469,29 @@ def main() -> None:
         )
         accepted_prefix: list[str] = []
         for index, column in enumerate(TAXONOMY_COLUMNS[1:], start=1):
-            counts = Counter(
-                entry["call"]["taxonomy"][column]
-                for entry in hit_entries
+            eligible_entries = [
+                entry for entry in hit_entries
                 if all(
                     entry["call"]["taxonomy"][TAXONOMY_COLUMNS[parent_index + 1]] == accepted
                     for parent_index, accepted in enumerate(accepted_prefix)
                 )
                 if not is_unclassified(entry["call"]["taxonomy"][column])
-            )
+            ]
+            counts = Counter(entry["call"]["taxonomy"][column] for entry in eligible_entries)
             if not counts:
                 break
             winner, count = max(counts.items(), key=lambda item: (item[1], item[0]))
-            support = count / hit_loci
-            if support + 1e-12 < args.taxonomy_support:
-                contig_conflict = len(counts) > 1 or count < hit_loci
+            # Loci with taxonomy truncated above this rank abstain while still
+            # contributing to the viCAT viral hit-locus evidence.
+            support = count / len(eligible_entries)
+            if support + 1e-12 < args.contig_taxonomy_support:
+                contig_conflict = len(counts) > 1
                 break
             taxonomy[column] = winner
             accepted_prefix.append(winner)
             deepest, deepest_support = RANK_NAMES[index], support
+            deepest_eligible_loci = len(eligible_entries)
+            deepest_supporting_loci = count
 
         best_entry = max(hit_entries, key=lambda entry: entry["call"]["best_bitscore"])
         all_callers = sorted(set().union(*(set(entry["callers"]) for entry in entries)))
@@ -509,6 +526,8 @@ def main() -> None:
                 "best_query_coverage": format_number(best_entry["call"]["best_query_coverage"]),
                 "best_subject_coverage": format_number(best_entry["call"]["best_subject_coverage"]),
                 "taxonomy_support": format_number(deepest_support),
+                "taxonomy_eligible_loci": deepest_eligible_loci,
+                "taxonomy_supporting_loci": deepest_supporting_loci,
                 "classification_rank": deepest,
                 "taxonomy_conflict": "true" if contig_conflict else "false",
                 "reference_taxonomy_conflict_loci": reference_conflicts,

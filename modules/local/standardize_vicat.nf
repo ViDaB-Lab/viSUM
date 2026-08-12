@@ -39,7 +39,8 @@ process STANDARDIZE_VICAT {
         --diamond "${diamond}" \
         --taxonomy-lookup "\$LOOKUP" \
         --header-map "${header_map}" \
-        --taxonomy-support "${params.vicat_taxonomy_support}" \
+        --orf-taxonomy-support "${params.vicat_orf_taxonomy_support}" \
+        --contig-taxonomy-support "${params.vicat_contig_taxonomy_support}" \
         --locus-overlap "${params.vicat_locus_overlap}" \
         --output-loci "${prefix}.vicat_orf_evidence.tsv" \
         --output-audit "${prefix}.vicat_reference_audit.tsv" \

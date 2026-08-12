@@ -768,10 +768,15 @@ workflow {
             error "Invalid --vicat_diamond_sensitivity '${params.vicat_diamond_sensitivity}'. " +
                 "Use one of: ${allowedVicatSensitivity.join(', ')}."
         }
-        def vicatTaxonomySupport = params.vicat_taxonomy_support as Double
-        if( !Double.isFinite(vicatTaxonomySupport) ||
-            vicatTaxonomySupport < 0.5 || vicatTaxonomySupport > 1.0 ) {
-            error '--vicat_taxonomy_support must be between 0.5 and 1.0.'
+        def vicatOrfTaxonomySupport = params.vicat_orf_taxonomy_support as Double
+        if( !Double.isFinite(vicatOrfTaxonomySupport) ||
+            vicatOrfTaxonomySupport < 0.5 || vicatOrfTaxonomySupport > 1.0 ) {
+            error '--vicat_orf_taxonomy_support must be between 0.5 and 1.0.'
+        }
+        def vicatContigTaxonomySupport = params.vicat_contig_taxonomy_support as Double
+        if( !Double.isFinite(vicatContigTaxonomySupport) ||
+            vicatContigTaxonomySupport < 0.5 || vicatContigTaxonomySupport > 1.0 ) {
+            error '--vicat_contig_taxonomy_support must be between 0.5 and 1.0.'
         }
         def vicatLocusOverlap = params.vicat_locus_overlap as Double
         if( !Double.isFinite(vicatLocusOverlap) ||

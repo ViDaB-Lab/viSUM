@@ -46,3 +46,16 @@ def test_vicat_standardizer_emits_reference_audit() -> None:
     module = (ROOT / "modules" / "local" / "standardize_vicat.nf").read_text(encoding="utf-8")
     assert 'path("${prefix}.vicat_reference_audit.tsv"), emit: audit' in module
     assert '--output-audit "${prefix}.vicat_reference_audit.tsv"' in module
+
+
+def test_vicat_uses_separate_orf_and_contig_taxonomy_thresholds() -> None:
+    module = (ROOT / "modules" / "local" / "standardize_vicat.nf").read_text(encoding="utf-8")
+    config = (ROOT / "visum.config").read_text(encoding="utf-8")
+    workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+    for parameter in ("vicat_orf_taxonomy_support", "vicat_contig_taxonomy_support"):
+        assert parameter in module
+        assert parameter in config
+        assert parameter in workflow
+    assert "vicat_taxonomy_support" not in module
+    assert "vicat_taxonomy_support" not in config
+    assert "vicat_taxonomy_support" not in workflow

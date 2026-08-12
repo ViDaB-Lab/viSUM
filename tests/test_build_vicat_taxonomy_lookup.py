@@ -111,6 +111,68 @@ class TestViCATTaxonomyLookupBuilder(unittest.TestCase):
             self.assertEqual(rep_d["o__Order"], "o__OrderA")
             self.assertEqual(rep_d["f__Family"], "f__unclassified")
             self.assertEqual(rep_d["taxonomy_conflict_rank"], "family")
+            self.assertEqual(rep_d["classification"], "virus")
+            self.assertEqual(rep_d["classification_rank"], "order")
+
+    def test_realm_conflict_retains_viral_classification_only(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            members = root / "members.tsv"
+            metadata = root / "metadata.tsv"
+            output = root / "output"
+            work = root / "work"
+
+            members.write_text(
+                "repConflict|gene1\tuvigD|gene1\n"
+                "repConflict|gene1\tuvigV|gene1\n",
+                encoding="utf-8",
+            )
+            with metadata.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+                writer.writerow(["uvig", "votu", "ictv_taxonomy", "ictv_taxonomy_method"])
+                writer.writerows(
+                    [
+                        ["uvigD", "votuD", self.lineage_for_realm("Duplodnaviria"), "geNomad"],
+                        ["uvigV", "votuV", self.lineage_for_realm("Varidnaviria"), "geNomad"],
+                    ]
+                )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(BUILDER),
+                    "--cluster-members", str(members),
+                    "--metadata", str(metadata),
+                    "--output-dir", str(output),
+                    "--work-dir", str(work),
+                    "--threads", "2",
+                    "--memory-limit", "1GB",
+                    "--prefix", "test",
+                    "--expected-member-count", "2",
+                    "--expected-representative-count", "1",
+                ],
+                text=True,
+                capture_output=True,
+                env=os.environ.copy(),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+            relation = duckdb.sql(
+                f"SELECT * FROM read_parquet('{(output / 'test.vicat_taxonomy_lookup.parquet').as_posix()}')"
+            )
+            columns = [column[0] for column in relation.description]
+            row = relation.fetchone()
+            lookup = dict(zip(columns, row))
+            self.assertEqual(lookup["classification"], "virus")
+            self.assertEqual(lookup["classification_rank"], "domain")
+            self.assertTrue(lookup["taxonomy_conflict"])
+            self.assertEqual(lookup["taxonomy_conflict_rank"], "realm")
+            self.assertEqual(lookup["d__Domain"], "d__Viruses")
+            self.assertEqual(lookup["r__Realm"], "r__unclassified")
+
+    @staticmethod
+    def lineage_for_realm(realm: str) -> str:
+        return f"r__{realm};k__Kingdom;p__Phylum;c__Class;o__Order;f__Family;g__Genus;s__Species"
 
     @staticmethod
     def lineage(family: str, genus: str, species: str = "") -> str:
