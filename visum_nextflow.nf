@@ -973,9 +973,26 @@ workflow {
         .join(ch_discovery_evidence_by_sample, remainder: true)
         .map { joined ->
             if( joined.size() == 4 ) {
-                return tuple(joined[0], joined[1], joined[2], joined[3], [])
+                // A path input cannot stage an empty collection in Nextflow
+                // 26.04.x. Stage a valid header-only placeholder, while the
+                // explicit count tells the module not to pass it to Python.
+                return tuple(
+                    joined[0],
+                    joined[1],
+                    joined[2],
+                    joined[3],
+                    0,
+                    file("${projectDir}/assets/empty_discovery_evidence.tsv")
+                )
             }
-            tuple(joined[0], joined[1], joined[2], joined[3], joined[4])
+            tuple(
+                joined[0],
+                joined[1],
+                joined[2],
+                joined[3],
+                joined[4].size(),
+                joined[4]
+            )
         }
 
     DISCOVERY_GATE(ch_discovery_gate_inputs)

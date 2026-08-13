@@ -7,7 +7,12 @@ process DISCOVERY_GATE {
     publishDir { "${params.outdir}/${prefix}_results/discovery_gate" }, mode: 'copy'
 
     input:
-    tuple val(prefix), val(type), path(fasta), path(header_map), path(evidence_files)
+    tuple val(prefix),
+          val(type),
+          path(fasta),
+          path(header_map),
+          val(evidence_file_count),
+          path(evidence_files)
 
     output:
     tuple val(prefix),
@@ -23,9 +28,9 @@ process DISCOVERY_GATE {
 
     script:
     def evidenceList = evidence_files instanceof List ? evidence_files : [evidence_files]
-    def evidenceArguments = evidenceList
-        .collect { evidence -> "'${evidence}'" }
-        .join(' ')
+    def evidenceArguments = evidence_file_count > 0
+        ? evidenceList.collect { evidence -> "'${evidence}'" }.join(' ')
+        : ''
     """
     python3 "${projectDir}/bin/discovery_gate.py" \
         --sample-id "${prefix}" \

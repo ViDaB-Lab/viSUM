@@ -19,8 +19,9 @@ class ResourceWorkflowContractTests(unittest.TestCase):
     def test_local_executor_has_total_cpu_and_memory_budgets(self) -> None:
         self.assertIn("max_cpus      = 8", self.config)
         self.assertIn("max_memory    = '48 GB'", self.config)
-        self.assertIn("executor.$local.cpus = params.max_cpus", self.config)
-        self.assertIn("executor.$local.memory = params.max_memory", self.config)
+        self.assertIn("executor.cpus = params.max_cpus", self.config)
+        self.assertIn("executor.memory = params.max_memory", self.config)
+        self.assertNotIn("executor.$local", self.config)
 
     def test_utility_processes_inherit_one_cpu(self) -> None:
         process_block = re.search(

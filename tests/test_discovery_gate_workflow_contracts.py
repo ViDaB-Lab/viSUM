@@ -31,6 +31,22 @@ class DiscoveryGateWorkflowContractTests(unittest.TestCase):
         self.assertIn(".discovery_gate.tsv", module)
         self.assertIn(".discovery_gate_summary.tsv", module)
 
+    def test_zero_evidence_uses_a_staged_placeholder_without_counting_it(self) -> None:
+        workflow = (REPOSITORY_ROOT / "visum_nextflow.nf").read_text(
+            encoding="utf-8"
+        )
+        module = (
+            REPOSITORY_ROOT / "modules" / "local" / "discovery_gate.nf"
+        ).read_text(encoding="utf-8")
+        placeholder = (
+            REPOSITORY_ROOT / "assets" / "empty_discovery_evidence.tsv"
+        )
+
+        self.assertTrue(placeholder.is_file())
+        self.assertIn("empty_discovery_evidence.tsv", workflow)
+        self.assertIn("val(evidence_file_count)", module)
+        self.assertIn("evidence_file_count > 0", module)
+
 
 if __name__ == "__main__":
     unittest.main()
