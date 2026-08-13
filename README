@@ -1,5 +1,34 @@
 vHARMONY
 
+Discovery evidence gate
+=======================
+
+viSUM combines the sparse, threshold-qualified evidence emitted by every
+enabled discovery program before running quality or taxonomic refinement. The
+gate operates on normalized input contigs and does not reconcile taxonomy.
+
+Calls made on extracted viral or proviral regions are credited to their input
+contig. A contig advances when at least one enabled discovery program reports
+qualified viral evidence. Cellular or plasmid evidence does not silently veto
+a viral call; conflicts advance as ambiguous candidates so later stages can
+resolve them. Contigs without viral evidence are withheld from refinement but
+remain in the audit and noncandidate FASTA.
+
+For each sample, the gate publishes under `discovery_gate/`:
+
+  * `<prefix>.discovery_candidates.fasta` - full normalized contigs passed to
+    quality/refinement stages such as CheckV.
+  * `<prefix>.discovery_noncandidates.fasta` - all contigs not advanced.
+  * `<prefix>.discovery_gate.tsv` - one decision row per input contig, including
+    supporting and opposing tools.
+  * `<prefix>.discovery_gate_summary.tsv` - sample-level routing counts.
+
+The statuses are `viral` (two or more viral tools), `likely_viral` (one viral
+tool), `ambiguous` (viral and cellular/plasmid evidence), `likely_nonviral`
+(cellular/plasmid evidence only), and `unresolved` (no qualified evidence).
+Only the first three advance. These labels route candidates; they are not the
+pipeline's final viral-origin or taxonomy conclusions.
+
 vHARMONY will install all databases by itself (except for virbot)
 
 Estimate of space the person will need with all the db's downloaded. Manipulate params.db

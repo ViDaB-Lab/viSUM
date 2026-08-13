@@ -1,6 +1,16 @@
 Breakdown of programs and status:
 
 
+### DISCOVERY EVIDENCE GATE
+
+The first-stage gate is implemented. It aggregates standardized calls at the
+original-contig level, retains every contig with at least one qualified viral
+call, preserves cellular/plasmid conflicts as ambiguous candidates, and emits
+candidate/noncandidate FASTA files plus complete audit and summary tables. It
+does not reconcile taxonomy. The candidate FASTA is the intended input to the
+future CheckV quality/boundary stage.
+
+
 
 ###GENERAL VIRUS programs
 

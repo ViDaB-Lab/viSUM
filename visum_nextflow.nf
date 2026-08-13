@@ -28,6 +28,7 @@ include { PREPARE_VICAT_DATABASE } from './modules/local/vicat_database'
 include { PREDICT_VICAT_ORFS } from './modules/local/predict_vicat_orfs'
 include { RUN_VICAT_DIAMOND } from './modules/local/run_vicat_diamond'
 include { STANDARDIZE_VICAT } from './modules/local/standardize_vicat'
+include { DISCOVERY_GATE } from './modules/local/discovery_gate'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -181,6 +182,10 @@ workflow {
         '--run_deepmicroclass2'
     )
 
+    // Every standardizer emits sparse, threshold-qualified evidence. These
+    // channels are merged and grouped by sample for the discovery gate.
+    ch_discovery_evidence = Channel.empty()
+
     println(
         "viSUM program selection: " +
         "geNomad=${runGenomad}, " +
@@ -252,6 +257,9 @@ workflow {
         STANDARDIZE_GENOMAD.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
+        ch_discovery_evidence = ch_discovery_evidence.mix(
+            STANDARDIZE_GENOMAD.out.evidence
+        )
     }
 
     if( runVirsorter2 ) {
@@ -308,6 +316,9 @@ workflow {
         STANDARDIZE_VIRSORTER2.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
+        ch_discovery_evidence = ch_discovery_evidence.mix(
+            STANDARDIZE_VIRSORTER2.out.evidence
+        )
     }
 
     if( runCenotetaker3 ) {
@@ -375,6 +386,9 @@ workflow {
         STANDARDIZE_CENOTETAKER3.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
+        ch_discovery_evidence = ch_discovery_evidence.mix(
+            STANDARDIZE_CENOTETAKER3.out.evidence
+        )
     }
 
     if( runDeep6 ) {
@@ -482,6 +496,9 @@ workflow {
         STANDARDIZE_DEEP6.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
+        ch_discovery_evidence = ch_discovery_evidence.mix(
+            STANDARDIZE_DEEP6.out.evidence
+        )
     }
 
     if( runDeepmicroclass2 ) {
@@ -563,6 +580,9 @@ workflow {
         STANDARDIZE_DEEPMICROCLASS2.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
+        ch_discovery_evidence = ch_discovery_evidence.mix(
+            STANDARDIZE_DEEPMICROCLASS2.out.evidence
+        )
     }
 
     if( runVirbot ) {
@@ -650,6 +670,9 @@ workflow {
         STANDARDIZE_VIRBOT.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
+        ch_discovery_evidence = ch_discovery_evidence.mix(
+            STANDARDIZE_VIRBOT.out.evidence
+        )
     }
 
     if( runGianthunter ) {
@@ -757,6 +780,9 @@ workflow {
         STANDARDIZE_GIANTHUNTER.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
+        ch_discovery_evidence = ch_discovery_evidence.mix(
+            STANDARDIZE_GIANTHUNTER.out.evidence
+        )
     }
 
     if( runVicat ) {
@@ -875,5 +901,31 @@ workflow {
         STANDARDIZE_VICAT.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
+        ch_discovery_evidence = ch_discovery_evidence.mix(
+            STANDARDIZE_VICAT.out.evidence
+        )
+    }
+
+    ch_discovery_evidence_by_sample = ch_discovery_evidence
+        .map { prefix, tool, evidence -> tuple(prefix, evidence) }
+        .groupTuple()
+
+    ch_discovery_gate_inputs = NORMALIZE_FASTA.out.normalized_records
+        .map { prefix, type, fasta, headerMap ->
+            tuple(prefix, type, fasta, headerMap)
+        }
+        .join(ch_discovery_evidence_by_sample, remainder: true)
+        .map { joined ->
+            if( joined.size() == 4 ) {
+                return tuple(joined[0], joined[1], joined[2], joined[3], [])
+            }
+            tuple(joined[0], joined[1], joined[2], joined[3], joined[4])
+        }
+
+    DISCOVERY_GATE(ch_discovery_gate_inputs)
+
+    DISCOVERY_GATE.out.candidates.view {
+        prefix, type, candidates, audit, summary ->
+            "DISCOVERY_GATE sample=${prefix} type=${type} candidates=${candidates.name} audit=${audit.name}"
     }
 }
