@@ -4,7 +4,7 @@ process RUN_VIRBOT {
 
     conda "${projectDir}/envs/virbot.yml"
 
-    cpus params.threads
+    cpus { Math.min(params.virbot_cpus as int, params.max_cpus as int) }
     memory params.virbot_memory
     time params.virbot_time
 
@@ -31,6 +31,11 @@ process RUN_VIRBOT {
     script:
     """
     set -euo pipefail
+
+    export OMP_NUM_THREADS="${task.cpus}"
+    export MKL_NUM_THREADS="${task.cpus}"
+    export OPENBLAS_NUM_THREADS="${task.cpus}"
+    export NUMEXPR_NUM_THREADS="${task.cpus}"
 
     if [[ "${type}" != 'rna' ]]; then
         echo "ERROR: VirBot received non-RNA sample '${prefix}' with type '${type}'." >&2
@@ -111,11 +116,11 @@ process RUN_VIRBOT {
         RUN_STATUS='completed_no_virus_calls'
     fi
 
-    printf 'sample_id\tinput_type\tinput_sequence_count\tpositive_sequence_count\tsensitive_mode\ttaxa_mode\tvirbot_version\tvirbot_revision\trun_status\tscore_file\tvirus_fasta\n' \
+    printf 'sample_id\tinput_type\tinput_sequence_count\tpositive_sequence_count\tsensitive_mode\ttaxa_mode\tthreads\tvirbot_version\tvirbot_revision\trun_status\tscore_file\tvirus_fasta\n' \
         > "\$METADATA_FILE"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${prefix}" "${type}" "\$INPUT_COUNT" "\$POSITIVE_COUNT" \
-        "${sensitive_mode}" "${taxa_mode}" "\$VIRBOT_VERSION" \
+        "${sensitive_mode}" "${taxa_mode}" "${task.cpus}" "\$VIRBOT_VERSION" \
         "\$INSTALLED_REVISION" "\$RUN_STATUS" "\$FINAL_SCORE_FILE" \
         "\$FINAL_FASTA_FILE" \
         >> "\$METADATA_FILE"

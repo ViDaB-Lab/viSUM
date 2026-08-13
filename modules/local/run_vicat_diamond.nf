@@ -2,7 +2,7 @@ process RUN_VICAT_DIAMOND {
 
     tag "${prefix}"
     conda "${projectDir}/envs/vicat.yml"
-    cpus params.vicat_threads
+    cpus { Math.min(params.vicat_cpus as int, params.max_cpus as int) }
     memory params.vicat_memory
     time params.vicat_time
 
@@ -24,6 +24,11 @@ process RUN_VICAT_DIAMOND {
     script:
     """
     set -euo pipefail
+
+    export OMP_NUM_THREADS="${task.cpus}"
+    export MKL_NUM_THREADS="${task.cpus}"
+    export OPENBLAS_NUM_THREADS="${task.cpus}"
+    export NUMEXPR_NUM_THREADS="${task.cpus}"
 
     if [[ -s "${vicat_database}/IMGVR5_UViG_representatives.dmnd" ]]; then
         DB="${vicat_database}/IMGVR5_UViG_representatives.dmnd"
@@ -50,8 +55,8 @@ process RUN_VICAT_DIAMOND {
     HIT_COUNT=\$(wc -l < "\$RAW")
     HIT_ORFS=\$(awk -F '\t' 'NF {seen[\$1]=1} END {print length(seen)+0}' "\$RAW")
 
-    printf 'sample_id\tinput_type\torf_count\thit_orf_count\talignment_count\tdatabase_path\tsensitivity\tminimum_bitscore\tminimum_query_cover\ttop_percent\tblock_size\tindex_chunks\n' > "${prefix}.vicat_run_metadata.tsv"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${prefix}" "${type}" "\$ORF_COUNT" "\$HIT_ORFS" "\$HIT_COUNT" "\$DB" "${params.vicat_diamond_sensitivity}" "${params.vicat_min_bitscore}" "${params.vicat_min_query_cover}" "${params.vicat_top_percent}" "${params.vicat_block_size}" "${params.vicat_index_chunks}" >> "${prefix}.vicat_run_metadata.tsv"
+    printf 'sample_id\tinput_type\torf_count\thit_orf_count\talignment_count\tdatabase_path\tsensitivity\tminimum_bitscore\tminimum_query_cover\ttop_percent\tblock_size\tindex_chunks\tthreads\n' > "${prefix}.vicat_run_metadata.tsv"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "${prefix}" "${type}" "\$ORF_COUNT" "\$HIT_ORFS" "\$HIT_COUNT" "\$DB" "${params.vicat_diamond_sensitivity}" "${params.vicat_min_bitscore}" "${params.vicat_min_query_cover}" "${params.vicat_top_percent}" "${params.vicat_block_size}" "${params.vicat_index_chunks}" "${task.cpus}" >> "${prefix}.vicat_run_metadata.tsv"
 
     echo "VICAT_DIAMOND sample=${prefix} orfs=\$ORF_COUNT hit_orfs=\$HIT_ORFS alignments=\$HIT_COUNT"
     """

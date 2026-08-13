@@ -5,8 +5,8 @@ process RUN_CENOTETAKER3 {
     // Match the database module exactly so Nextflow reuses one CT3 environment.
     conda "bioconda::cenote-taker3=${params.ct3_version} conda-forge::wget"
 
-    cpus params.threads
-    memory params.memory
+    cpus { Math.min(params.ct3_cpus as int, params.max_cpus as int) }
+    memory params.ct3_memory
     time params.ct3_time
 
     publishDir { "${params.outdir}/${prefix}_results/cenotetaker3" },
@@ -40,6 +40,11 @@ process RUN_CENOTETAKER3 {
 
     """
     set -euo pipefail
+
+    export OMP_NUM_THREADS="${task.cpus}"
+    export MKL_NUM_THREADS="${task.cpus}"
+    export OPENBLAS_NUM_THREADS="${task.cpus}"
+    export NUMEXPR_NUM_THREADS="${task.cpus}"
 
     cenotetaker3 \
         -c "${normalized_fasta}" \

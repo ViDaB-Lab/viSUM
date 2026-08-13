@@ -91,7 +91,63 @@ def parseBooleanParameter(rawValue, parameterName) {
 }
 
 
+def parsePositiveIntegerParameter(rawValue, parameterName) {
+    Integer parsedValue
+    try {
+        parsedValue = rawValue as Integer
+    }
+    catch( Exception ignored ) {
+        throw new IllegalArgumentException(
+            "Invalid value '${rawValue}' for ${parameterName}. Use a positive integer."
+        )
+    }
+
+    if( parsedValue < 1 ) {
+        throw new IllegalArgumentException(
+            "Invalid value '${rawValue}' for ${parameterName}. Use a positive integer."
+        )
+    }
+    return parsedValue
+}
+
+
 workflow {
+
+    if( params.threads != null ) {
+        error '--threads is no longer used because it could not distinguish a total workflow budget from per-tool threads. Use --max_cpus and, when needed, a tool-specific --*_cpus option.'
+    }
+    if( params.vicat_build_threads != null ) {
+        error '--vicat_build_threads was renamed to --vicat_build_cpus.'
+    }
+    if( params.vicat_orf_threads != null ) {
+        error '--vicat_orf_threads was renamed to --vicat_orf_cpus.'
+    }
+    if( params.vicat_threads != null ) {
+        error '--vicat_threads was renamed to --vicat_cpus.'
+    }
+
+    def maxCpus = parsePositiveIntegerParameter(params.max_cpus, '--max_cpus')
+    def analysisCpuParameters = [
+        '--genomad_cpus': params.genomad_cpus,
+        '--virsorter2_cpus': params.virsorter2_cpus,
+        '--ct3_cpus': params.ct3_cpus,
+        '--deep6_cpus': params.deep6_cpus,
+        '--deepmicroclass2_cpus': params.deepmicroclass2_cpus,
+        '--virbot_cpus': params.virbot_cpus,
+        '--gianthunter_cpus': params.gianthunter_cpus,
+        '--vicat_orf_cpus': params.vicat_orf_cpus,
+        '--vicat_cpus': params.vicat_cpus,
+    ]
+    analysisCpuParameters.each { parameterName, rawValue ->
+        parsePositiveIntegerParameter(rawValue, parameterName)
+    }
+
+    println(
+        "viSUM resource budget: max_cpus=${maxCpus}, max_memory=${params.max_memory}; " +
+        "preferred tool CPUs (each capped at max_cpus)=" + analysisCpuParameters.collect { name, value ->
+            "${name.substring(2)}=${value}"
+        }.join(', ')
+    )
 
     def singleMode = params.input != null
     def multiMode  = params.prefix_many != null

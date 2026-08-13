@@ -4,9 +4,9 @@ process RUN_VIRSORTER2 {
 
     conda "bioconda::virsorter=${params.virsorter2_version}"
 
-    cpus params.threads
-    memory params.memory
-    time params.time
+    cpus { Math.min(params.virsorter2_cpus as int, params.max_cpus as int) }
+    memory params.virsorter2_memory
+    time params.virsorter2_time
 
     publishDir { "${params.outdir}/${prefix}_results/virsorter2" },
         mode: 'copy'
@@ -30,6 +30,11 @@ process RUN_VIRSORTER2 {
 
     """
     set -euo pipefail
+
+    export OMP_NUM_THREADS="${task.cpus}"
+    export MKL_NUM_THREADS="${task.cpus}"
+    export OPENBLAS_NUM_THREADS="${task.cpus}"
+    export NUMEXPR_NUM_THREADS="${task.cpus}"
 
     ln -s "${normalized_fasta}" "${prefix}.fasta"
 

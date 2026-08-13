@@ -6,7 +6,11 @@ process PREPARE_VICAT_DATABASE {
 
     // Validation of an existing database is lightweight. Reserve the large
     // build resources only when raw MetaVR inputs were supplied.
-    cpus { source_proteins ? params.vicat_build_threads : 2 }
+    cpus {
+        source_proteins
+            ? Math.min(params.vicat_build_cpus as int, params.max_cpus as int)
+            : 1
+    }
     memory { source_proteins ? params.vicat_build_memory : '4 GB' }
     time { source_proteins ? params.vicat_build_time : '1h' }
 
@@ -165,7 +169,7 @@ PY
         --metadata "\$SOURCE_METADATA" \
         --destination "\$DB_DEST" \
         --work-dir "\$BUILD_DIR" \
-        --threads "${params.vicat_build_threads}" \
+        --threads "${task.cpus}" \
         --memory-limit "${taxonomyMemory}" \
         --protein-sha256 "${protein_sha256}" \
         --metadata-sha256 "${metadata_sha256}" \

@@ -4,7 +4,7 @@ process RUN_DEEP6 {
 
     conda "${projectDir}/envs/deep6.yml"
 
-    cpus 1
+    cpus { Math.min(params.deep6_cpus as int, params.max_cpus as int) }
     memory params.deep6_memory
     time params.deep6_time
 
@@ -44,6 +44,9 @@ process RUN_DEEP6 {
 
     export CUDA_VISIBLE_DEVICES='-1'
     export OMP_NUM_THREADS="${task.cpus}"
+    export MKL_NUM_THREADS="${task.cpus}"
+    export OPENBLAS_NUM_THREADS="${task.cpus}"
+    export NUMEXPR_NUM_THREADS="${task.cpus}"
     export TF_NUM_INTRAOP_THREADS="${task.cpus}"
     export TF_NUM_INTEROP_THREADS='1'
 
@@ -84,11 +87,11 @@ process RUN_DEEP6 {
     )
     [[ -n "\$DEEP6_REVISION" ]] || DEEP6_REVISION='unknown'
 
-    printf 'sample_id\tinput_type\tminimum_length\tprediction_count\tdeep6_version\tdeep6_revision\traw_score_file\n' \
+    printf 'sample_id\tinput_type\tminimum_length\tprediction_count\tthreads\tdeep6_version\tdeep6_revision\traw_score_file\n' \
         > "\$METADATA_FILE"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${prefix}" "${type}" "${params.deep6_minlen}" "\$PREDICTION_COUNT" \
-        '1' "\$DEEP6_REVISION" "\$FINAL_SCORE_FILE" \
+        "${task.cpus}" '1' "\$DEEP6_REVISION" "\$FINAL_SCORE_FILE" \
         >> "\$METADATA_FILE"
 
     echo "Deep6 sample=${prefix} type=${type} predictions=\$PREDICTION_COUNT scores=\$FINAL_SCORE_FILE"

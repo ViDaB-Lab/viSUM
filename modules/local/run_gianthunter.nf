@@ -4,7 +4,7 @@ process RUN_GIANTHUNTER {
 
     conda "${projectDir}/envs/gianthunter.yml"
 
-    cpus params.threads
+    cpus { Math.min(params.gianthunter_cpus as int, params.max_cpus as int) }
     memory params.gianthunter_memory
     time params.gianthunter_time
 
@@ -27,6 +27,11 @@ process RUN_GIANTHUNTER {
     script:
     """
     set -euo pipefail
+
+    export OMP_NUM_THREADS="${task.cpus}"
+    export MKL_NUM_THREADS="${task.cpus}"
+    export OPENBLAS_NUM_THREADS="${task.cpus}"
+    export NUMEXPR_NUM_THREADS="${task.cpus}"
 
     if [[ "${type}" != 'dna' ]]; then
         echo "ERROR: GiantHunter received non-DNA sample '${prefix}' with type '${type}'." >&2

@@ -4,7 +4,7 @@ process RUN_DEEPMICROCLASS2 {
 
     conda "${projectDir}/envs/deepmicroclass2.yml"
 
-    cpus params.threads
+    cpus { Math.min(params.deepmicroclass2_cpus as int, params.max_cpus as int) }
     memory params.deepmicroclass2_memory
     time params.deepmicroclass2_time
 
@@ -60,6 +60,8 @@ process RUN_DEEPMICROCLASS2 {
     export CUDA_VISIBLE_DEVICES=''
     export OMP_NUM_THREADS="${task.cpus}"
     export MKL_NUM_THREADS="${task.cpus}"
+    export OPENBLAS_NUM_THREADS="${task.cpus}"
+    export NUMEXPR_NUM_THREADS="${task.cpus}"
 
     if ! python "${deepmicroclass2_installation}/predict.py" \
         --contig "${normalized_fasta}" \
@@ -110,12 +112,12 @@ process RUN_DEEPMICROCLASS2 {
         RUN_STATUS='completed_no_eligible_sequences'
     fi
 
-    printf 'sample_id\tinput_type\tmodel_mode\tminimum_length\tinput_sequence_count\teligible_sequence_count\tprediction_count\tclass_thresholds\tdeepmicroclass2_revision\tdevice\trun_status\tscore_file\n' \
+    printf 'sample_id\tinput_type\tmodel_mode\tminimum_length\tinput_sequence_count\teligible_sequence_count\tprediction_count\tclass_thresholds\tdeepmicroclass2_revision\tdevice\tthreads\trun_status\tscore_file\n' \
         > "\$METADATA_FILE"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${prefix}" "${type}" "${params.deepmicroclass2_model}" "\$MINIMUM_LENGTH" \
         "\$INPUT_COUNT" "\$ELIGIBLE_COUNT" "\$PREDICTION_COUNT" \
-        "\$CLASS_THRESHOLDS" "\$INSTALLED_REVISION" 'cpu' "\$RUN_STATUS" \
+        "\$CLASS_THRESHOLDS" "\$INSTALLED_REVISION" 'cpu' "${task.cpus}" "\$RUN_STATUS" \
         "\$FINAL_SCORE_FILE" \
         >> "\$METADATA_FILE"
 

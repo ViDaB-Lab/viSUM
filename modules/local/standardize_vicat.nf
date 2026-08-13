@@ -2,7 +2,7 @@ process STANDARDIZE_VICAT {
 
     tag "${prefix}"
     conda "${projectDir}/envs/vicat.yml"
-    cpus 2
+    cpus 1
     memory params.vicat_standardizer_memory
     time params.vicat_standardizer_time
 

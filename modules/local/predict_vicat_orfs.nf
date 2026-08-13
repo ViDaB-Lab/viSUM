@@ -2,7 +2,7 @@ process PREDICT_VICAT_ORFS {
 
     tag "${prefix}"
     conda "${projectDir}/envs/vicat.yml"
-    cpus params.vicat_orf_threads
+    cpus { Math.min(params.vicat_orf_cpus as int, params.max_cpus as int) }
     memory params.vicat_orf_memory
     time params.vicat_orf_time
 
@@ -25,6 +25,11 @@ process PREDICT_VICAT_ORFS {
     script:
     """
     set -euo pipefail
+
+    export OMP_NUM_THREADS="${task.cpus}"
+    export MKL_NUM_THREADS="${task.cpus}"
+    export OPENBLAS_NUM_THREADS="${task.cpus}"
+    export NUMEXPR_NUM_THREADS="${task.cpus}"
 
     LOG="${prefix}.vicat_orf_prediction.log"
     : > "\$LOG"
@@ -56,11 +61,12 @@ process PREDICT_VICAT_ORFS {
     [[ "${type}" == 'rna' ]] && RV_ORFS=\$(grep -c '^>' rv.faa || true)
     COMBINED_ORFS=\$(grep -c '^>' "${prefix}.vicat_orfs.faa" || true)
 
-    printf 'sample_id\tinput_type\tpyrodigal_gv_orfs\tpyrodigal_rv_orfs\tcombined_orfs\tcallers\n' \
+    printf 'sample_id\tinput_type\tpyrodigal_gv_orfs\tpyrodigal_rv_orfs\tcombined_orfs\tcallers\tthreads\n' \
         > "${prefix}.vicat_orf_run_metadata.tsv"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${prefix}" "${type}" "\$GV_ORFS" "\$RV_ORFS" "\$COMBINED_ORFS" \
         "\$([[ "${type}" == 'rna' ]] && echo 'pyrodigal-gv,pyrodigal-rv' || echo 'pyrodigal-gv')" \
+        "${task.cpus}" \
         >> "${prefix}.vicat_orf_run_metadata.tsv"
 
     echo "VICAT_ORFS sample=${prefix} type=${type} gv=\$GV_ORFS rv=\$RV_ORFS combined=\$COMBINED_ORFS"

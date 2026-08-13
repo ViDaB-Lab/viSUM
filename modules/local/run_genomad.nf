@@ -4,9 +4,9 @@ process RUN_GENOMAD {
 
     conda "bioconda::genomad=${params.genomad_version}"
 
-    cpus params.threads
-    memory params.memory
-    time params.time
+    cpus { Math.min(params.genomad_cpus as int, params.max_cpus as int) }
+    memory params.genomad_memory
+    time params.genomad_time
 
     publishDir { "${params.outdir}/${prefix}_results/genomad" },
         mode: 'copy'
@@ -31,6 +31,11 @@ process RUN_GENOMAD {
     def cleanupFlag = params.genomad_cleanup ? '--cleanup' : ''
     """
     set -euo pipefail
+
+    export OMP_NUM_THREADS="${task.cpus}"
+    export MKL_NUM_THREADS="${task.cpus}"
+    export OPENBLAS_NUM_THREADS="${task.cpus}"
+    export NUMEXPR_NUM_THREADS="${task.cpus}"
 
     ln -s "${normalized_fasta}" "${prefix}.fasta"
 

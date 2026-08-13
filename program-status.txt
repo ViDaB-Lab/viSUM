@@ -10,6 +10,13 @@ candidate/noncandidate FASTA files plus complete audit and summary tables. It
 does not reconcile taxonomy. The candidate FASTA is the intended input to the
 future CheckV quality/boundary stage.
 
+Resource scheduling now separates the total local executor budget
+(`max_cpus`/`max_memory`) from per-tool CPU, memory, and time requests. Utility
+tasks use one CPU; multithreaded discovery tools receive their supported CLI
+thread option from `task.cpus`, while Deep6 and DeepMicroClass2 are restricted
+through their native thread-pool environment variables. Shared-server,
+dedicated-server, and viCAT-database-build profiles are available.
+
 
 
 ###GENERAL VIRUS programs

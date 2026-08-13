@@ -4,9 +4,9 @@ process PREPARE_VIRSORTER2_DATABASE {
 
     conda "bioconda::virsorter=${params.virsorter2_version}"
 
-    cpus params.threads
-    memory params.memory
-    time params.time
+    cpus { Math.min(params.virsorter2_cpus as int, params.max_cpus as int) }
+    memory params.virsorter2_memory
+    time params.virsorter2_time
 
     publishDir "${params.outdir}/database_setup",
         mode: 'copy',

@@ -29,6 +29,48 @@ tool), `ambiguous` (viral and cellular/plasmid evidence), `likely_nonviral`
 Only the first three advance. These labels route candidates; they are not the
 pipeline's final viral-origin or taxonomy conclusions.
 
+Resource management
+===================
+
+viSUM separates the total local workflow budget from each program's task
+request. `--max_cpus` and `--max_memory` limit the resources that Nextflow may
+schedule concurrently across the complete local run. The safe defaults are 8
+logical CPUs and 48 GB RAM. Lightweight preparation, standardization, and gate
+processes use one CPU.
+
+Each compute-heavy discovery program has an independent preferred CPU option.
+Its effective task allocation is automatically capped at `--max_cpus`, so a
+user may safely lower the total budget without overriding every tool:
+
+  * `--genomad_cpus` (default 4)
+  * `--virsorter2_cpus` (default 4)
+  * `--ct3_cpus` (default 4)
+  * `--deep6_cpus` (default 1)
+  * `--deepmicroclass2_cpus` (default 4)
+  * `--virbot_cpus` (default 4)
+  * `--gianthunter_cpus` (default 4)
+  * `--vicat_orf_cpus` (default 4)
+  * `--vicat_cpus` (default 8; DIAMOND search)
+
+The corresponding `*_memory` and `*_time` parameters in `visum.config` provide
+per-task memory and runtime requests. Ordinary runs should normally change only
+the total budget. For example, a shared-server run capped at eight CPUs uses:
+
+    nextflow run visum_nextflow.nf -profile local_safe \
+      --max_cpus 8 --max_memory '48 GB' ...
+
+The `local_full` profile starts with a 32-CPU/128-GB budget for a dedicated
+machine. The separate `vicat_build` profile reserves 32 CPUs and 400 GB for the
+optional, unusually large MetaVR5 database construction; it is not needed when
+using an existing viCAT database.
+
+The old `--threads`, `--vicat_threads`, `--vicat_orf_threads`, and
+`--vicat_build_threads` options now fail with migration instructions. This is
+intentional: accepting them silently would make it unclear whether they limit
+one program or the entire workflow. CPU requests and the effective thread count
+passed to each discovery tool are recorded in Nextflow's trace and tool run
+metadata.
+
 vHARMONY will install all databases by itself (except for virbot)
 
 Estimate of space the person will need with all the db's downloaded. Manipulate params.db

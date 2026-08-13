@@ -4,10 +4,6 @@ process PREPARE_CENOTETAKER3_DATABASE {
 
     conda "bioconda::cenote-taker3=${params.ct3_version} conda-forge::wget"
 
-    cpus params.threads
-    memory params.memory
-    time params.time
-
     publishDir "${params.outdir}/database_setup",
         mode: 'copy',
         pattern: 'cenotetaker3_database_metadata.tsv'

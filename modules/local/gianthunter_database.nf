@@ -6,10 +6,6 @@ process PREPARE_GIANTHUNTER_DATABASE {
     // one persistent GiantHunter environment.
     conda "${projectDir}/envs/gianthunter.yml"
 
-    cpus params.threads
-    memory params.gianthunter_memory
-    time params.gianthunter_time
-
     publishDir "${params.outdir}/database_setup",
         mode: 'copy',
         pattern: 'gianthunter_database_metadata.tsv'
