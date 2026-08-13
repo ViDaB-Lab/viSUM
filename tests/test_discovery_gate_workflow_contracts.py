@@ -44,6 +44,7 @@ class DiscoveryGateWorkflowContractTests(unittest.TestCase):
 
         self.assertTrue(placeholder.is_file())
         self.assertIn("empty_discovery_evidence.tsv", workflow)
+        self.assertIn("joined.size() < 5 || joined[4] == null", workflow)
         self.assertIn("val(evidence_file_count)", module)
         self.assertIn("evidence_file_count > 0", module)
 

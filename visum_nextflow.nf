@@ -972,7 +972,7 @@ workflow {
         }
         .join(ch_discovery_evidence_by_sample, remainder: true)
         .map { joined ->
-            if( joined.size() == 4 ) {
+            if( joined.size() < 5 || joined[4] == null ) {
                 // A path input cannot stage an empty collection in Nextflow
                 // 26.04.x. Stage a valid header-only placeholder, while the
                 // explicit count tells the module not to pass it to Python.
