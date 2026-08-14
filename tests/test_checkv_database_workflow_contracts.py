@@ -48,6 +48,30 @@ class CheckVDatabaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("DISCOVERY_GATE.out.candidates", workflow)
         self.assertIn("RUN_CHECKV(", workflow)
 
+    def test_checkv_standardization_and_provirus_refinement_are_wired(self) -> None:
+        workflow = (REPOSITORY_ROOT / "visum_nextflow.nf").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("include { STANDARDIZE_CHECKV }", workflow)
+        self.assertIn("STANDARDIZE_CHECKV(ch_checkv_standardizer_input)", workflow)
+        self.assertIn("STANDARDIZE_CHECKV.out.evidence", workflow)
+        self.assertIn("include { REFINE_PROVIRAL_REGIONS }", workflow)
+        self.assertIn("REFINE_PROVIRAL_REGIONS(ch_provirus_refinement_inputs)", workflow)
+        self.assertIn("STANDARDIZE_GENOMAD.out.evidence", workflow)
+        self.assertIn("STANDARDIZE_CENOTETAKER3.out.evidence", workflow)
+
+    def test_refinement_module_publishes_fasta_mapping_and_audit(self) -> None:
+        module = (REPOSITORY_ROOT / "modules/local/refine_proviral_regions.nf").read_text(
+            encoding="utf-8"
+        )
+        for expected_output in (
+            "refined_candidates.fasta",
+            "provirus_region_map.tsv",
+            "provirus_boundary_audit.tsv",
+            "provirus_refinement_summary.tsv",
+        ):
+            self.assertIn(expected_output, module)
+
     def test_analysis_preserves_primary_reports_and_zero_candidate_runs(self) -> None:
         module = (REPOSITORY_ROOT / "modules/local/run_checkv.nf").read_text(
             encoding="utf-8"

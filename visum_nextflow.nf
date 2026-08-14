@@ -31,6 +31,8 @@ include { STANDARDIZE_VICAT } from './modules/local/standardize_vicat'
 include { DISCOVERY_GATE } from './modules/local/discovery_gate'
 include { PREPARE_CHECKV_DATABASE } from './modules/local/checkv_database'
 include { RUN_CHECKV } from './modules/local/run_checkv'
+include { STANDARDIZE_CHECKV } from './modules/local/standardize_checkv'
+include { REFINE_PROVIRAL_REGIONS } from './modules/local/refine_proviral_regions'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -245,6 +247,9 @@ workflow {
     // Every standardizer emits sparse, threshold-qualified evidence. These
     // channels are merged and grouped by sample for the discovery gate.
     ch_discovery_evidence = Channel.empty()
+    // Only boundary-capable tools contribute to post-discovery provirus
+    // refinement. Their normal evidence tables are reused directly.
+    ch_provirus_evidence = Channel.empty()
 
     println(
         "viSUM program selection: " +
@@ -319,6 +324,9 @@ workflow {
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_discovery_evidence = ch_discovery_evidence.mix(
+            STANDARDIZE_GENOMAD.out.evidence
+        )
+        ch_provirus_evidence = ch_provirus_evidence.mix(
             STANDARDIZE_GENOMAD.out.evidence
         )
     }
@@ -448,6 +456,9 @@ workflow {
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_discovery_evidence = ch_discovery_evidence.mix(
+            STANDARDIZE_CENOTETAKER3.out.evidence
+        )
+        ch_provirus_evidence = ch_provirus_evidence.mix(
             STANDARDIZE_CENOTETAKER3.out.evidence
         )
     }
@@ -1046,5 +1057,70 @@ workflow {
             proviruses, log, metadata ->
                 "CHECKV sample=${prefix} type=${type} quality=${quality.name} metadata=${metadata.name}"
         }
+
+        ch_checkv_for_standardizer = RUN_CHECKV.out.results.map {
+            prefix, type, quality, completeness, contamination, completeGenomes,
+            proviruses, log, metadata ->
+                tuple(
+                    prefix,
+                    type,
+                    quality,
+                    completeness,
+                    contamination,
+                    completeGenomes,
+                    metadata
+                )
+        }
+
+        ch_checkv_standardizer_input = ch_checkv_for_standardizer.join(
+            DISCOVERY_GATE.out.candidates.map {
+                prefix, type, candidates, audit, summary -> tuple(prefix, candidates)
+            }
+        )
+
+        STANDARDIZE_CHECKV(ch_checkv_standardizer_input)
+
+        STANDARDIZE_CHECKV.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
+        }
+        ch_provirus_evidence = ch_provirus_evidence.mix(
+            STANDARDIZE_CHECKV.out.evidence
+        )
+    }
+
+    ch_provirus_evidence_by_sample = ch_provirus_evidence
+        .map { prefix, tool, evidence -> tuple(prefix, evidence) }
+        .groupTuple()
+
+    ch_provirus_refinement_inputs = DISCOVERY_GATE.out.candidates
+        .join(ch_provirus_evidence_by_sample, remainder: true)
+        .map { joined ->
+            if( joined.size() < 6 || joined[5] == null ) {
+                return tuple(
+                    joined[0],
+                    joined[1],
+                    joined[2],
+                    joined[3],
+                    joined[4],
+                    0,
+                    file("${projectDir}/assets/empty_discovery_evidence.tsv")
+                )
+            }
+            tuple(
+                joined[0],
+                joined[1],
+                joined[2],
+                joined[3],
+                joined[4],
+                joined[5].size(),
+                joined[5]
+            )
+        }
+
+    REFINE_PROVIRAL_REGIONS(ch_provirus_refinement_inputs)
+
+    REFINE_PROVIRAL_REGIONS.out.refined.view {
+        prefix, type, refinedFasta, regionMap, boundaryAudit, summary ->
+            "REFINED sample=${prefix} type=${type} fasta=${refinedFasta.name} map=${regionMap.name}"
     }
 }
