@@ -33,9 +33,9 @@ CheckV database setup
 =====================
 
 CheckV is enabled as a post-discovery refinement tool for both DNA and RNA
-candidate sequences. Its analysis process is being added separately; the
-database setup currently supports the same persistent behavior as viSUM's
-other managed databases.
+candidate sequences. It runs only on sequences advanced by the discovery gate.
+CheckV quality and viral/proviral features add support, while an undetermined
+or absent quality estimate does not classify a candidate as nonviral.
 
 With the defaults, viSUM downloads the current official CheckV database once
 to `databases/checkv/checkv_db`, validates its genome, DIAMOND, and HMM assets,

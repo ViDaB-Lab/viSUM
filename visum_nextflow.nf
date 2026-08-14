@@ -30,6 +30,7 @@ include { RUN_VICAT_DIAMOND } from './modules/local/run_vicat_diamond'
 include { STANDARDIZE_VICAT } from './modules/local/standardize_vicat'
 include { DISCOVERY_GATE } from './modules/local/discovery_gate'
 include { PREPARE_CHECKV_DATABASE } from './modules/local/checkv_database'
+include { RUN_CHECKV } from './modules/local/run_checkv'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -1031,6 +1032,19 @@ workflow {
 
         PREPARE_CHECKV_DATABASE.out.database.view { database, metadata ->
             "CHECKV_DB database=${database} metadata=${metadata.name}"
+        }
+
+        ch_checkv_database = PREPARE_CHECKV_DATABASE.out.database
+
+        RUN_CHECKV(
+            DISCOVERY_GATE.out.candidates,
+            ch_checkv_database
+        )
+
+        RUN_CHECKV.out.results.view {
+            prefix, type, quality, completeness, contamination, completeGenomes,
+            proviruses, log, metadata ->
+                "CHECKV sample=${prefix} type=${type} quality=${quality.name} metadata=${metadata.name}"
         }
     }
 }
