@@ -29,6 +29,21 @@ tool), `ambiguous` (viral and cellular/plasmid evidence), `likely_nonviral`
 Only the first three advance. These labels route candidates; they are not the
 pipeline's final viral-origin or taxonomy conclusions.
 
+CheckV database setup
+=====================
+
+CheckV is enabled as a post-discovery refinement tool for both DNA and RNA
+candidate sequences. Its analysis process is being added separately; the
+database setup currently supports the same persistent behavior as viSUM's
+other managed databases.
+
+With the defaults, viSUM downloads the current official CheckV database once
+to `databases/checkv/checkv_db`, validates its genome, DIAMOND, and HMM assets,
+and reuses it on later runs. A pre-existing database can be supplied with
+`--checkv_db /absolute/path/to/checkv-db`. Supplying that option disables the
+automatic download path and causes an incomplete database to fail with a clear
+error. Use `--run_checkv false` to skip CheckV and its database setup.
+
 Resource management
 ===================
 

@@ -29,6 +29,7 @@ include { PREDICT_VICAT_ORFS } from './modules/local/predict_vicat_orfs'
 include { RUN_VICAT_DIAMOND } from './modules/local/run_vicat_diamond'
 include { STANDARDIZE_VICAT } from './modules/local/standardize_vicat'
 include { DISCOVERY_GATE } from './modules/local/discovery_gate'
+include { PREPARE_CHECKV_DATABASE } from './modules/local/checkv_database'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -137,6 +138,7 @@ workflow {
         '--gianthunter_cpus': params.gianthunter_cpus,
         '--vicat_orf_cpus': params.vicat_orf_cpus,
         '--vicat_cpus': params.vicat_cpus,
+        '--checkv_cpus': params.checkv_cpus,
     ]
     analysisCpuParameters.each { parameterName, rawValue ->
         parsePositiveIntegerParameter(rawValue, parameterName)
@@ -237,6 +239,7 @@ workflow {
         params.run_deepmicroclass2,
         '--run_deepmicroclass2'
     )
+    def runCheckv = parseBooleanParameter(params.run_checkv, '--run_checkv')
 
     // Every standardizer emits sparse, threshold-qualified evidence. These
     // channels are merged and grouped by sample for the discovery gate.
@@ -251,7 +254,8 @@ workflow {
         "VirBot=${runVirbot}, " +
         "DeepMicroClass2=${runDeepmicroclass2}, " +
         "GiantHunter=${runGianthunter}, " +
-        "viCAT=${runVicat}"
+        "viCAT=${runVicat}, " +
+        "CheckV=${runCheckv}"
     )
 
     NORMALIZE_FASTA(ch_samples)
@@ -1000,5 +1004,33 @@ workflow {
     DISCOVERY_GATE.out.candidates.view {
         prefix, type, candidates, audit, summary ->
             "DISCOVERY_GATE sample=${prefix} type=${type} candidates=${candidates.name} audit=${audit.name}"
+    }
+
+    if( runCheckv ) {
+        def userSuppliedDatabase = params.checkv_db != null
+        def checkvDatabasePath = userSuppliedDatabase
+            ? file(params.checkv_db).toString()
+            : file("${params.dbdir}/checkv/checkv_db").toString()
+        def checkvDatabaseSource = userSuppliedDatabase
+            ? 'user-supplied'
+            : 'viSUM-managed'
+        def checkvAutoDownload = parseBooleanParameter(
+            params.checkv_auto_download,
+            '--checkv_auto_download'
+        )
+
+        ch_checkv_database_request = Channel.of(
+            tuple(
+                checkvDatabasePath,
+                checkvDatabaseSource,
+                checkvAutoDownload
+            )
+        )
+
+        PREPARE_CHECKV_DATABASE(ch_checkv_database_request)
+
+        PREPARE_CHECKV_DATABASE.out.database.view { database, metadata ->
+            "CHECKV_DB database=${database} metadata=${metadata.name}"
+        }
     }
 }
