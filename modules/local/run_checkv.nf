@@ -51,16 +51,16 @@ process RUN_CHECKV {
 
     if [[ "\$INPUT_COUNT" -eq 0 ]]; then
         printf '%s\n' \
-            'contig_id	contig_length	provirus	proviral_length	gene_count	viral_genes	host_genes	checkv_quality	miuvig_quality	completeness	completeness_method	complete_genome_type	contamination	kmer_freq	warnings' \
+            'contig_id	contig_length	provirus	proviral_length	gene_count	viral_genes	host_genes	checkv_quality	miuvig_quality	completeness	completeness_method	contamination	kmer_freq	warnings' \
             > "\$RAW_DIRECTORY/quality_summary.tsv"
         printf '%s\n' \
-            'contig_id	contig_length	proviral_length	aai_expected_length	aai_completeness	aai_confidence	aai_error	aai_num_hits	aai_top_hit	aai_id	aai_af	hmm_completeness_lower	hmm_completeness_upper	hmm_hits' \
+            'contig_id	contig_length	viral_length	aai_expected_length	aai_completeness	aai_confidence	aai_error	aai_num_hits	aai_top_hit	aai_id	aai_af	hmm_completeness_lower	hmm_completeness_upper	hmm_num_hits	kmer_freq' \
             > "\$RAW_DIRECTORY/completeness.tsv"
         printf '%s\n' \
             'contig_id	contig_length	total_genes	viral_genes	host_genes	provirus	proviral_length	host_length	region_types	region_lengths	region_coords_bp	region_coords_genes	region_viral_genes	region_host_genes' \
             > "\$RAW_DIRECTORY/contamination.tsv"
         printf '%s\n' \
-            'contig_id	contig_length	prediction_type	confidence_level	confidence_reason	repeat_length	repeat_count' \
+            'contig_id	contig_length	kmer_freq	prediction_type	confidence_level	confidence_reason	repeat_length	repeat_count	repeat_n_freq	repeat_mode_base_freq	repeat_seq' \
             > "\$RAW_DIRECTORY/complete_genomes.tsv"
         : > "\$RAW_DIRECTORY/proviruses.fna"
         printf 'CheckV skipped: the discovery gate produced no candidate sequences.\n' \
@@ -125,13 +125,18 @@ process RUN_CHECKV {
     CHECKV_VERSION=\$(checkv --version 2>&1 | head -n 1)
     DATABASE_RELEASE=\$(awk -F '\t' 'NR == 2 { print \$5 }' \
         "${checkv_database_metadata}")
+    RESOLVED_DATABASE_PATH=\$(readlink -f "${checkv_database}")
+    if [[ -z "\$RESOLVED_DATABASE_PATH" || ! -d "\$RESOLVED_DATABASE_PATH" ]]; then
+        echo "ERROR: Could not resolve the persistent CheckV database path from '${checkv_database}'." >&2
+        exit 1
+    fi
 
     printf 'sample_id\tinput_type\tcandidate_sequence_count\tquality_summary_row_count\tdetermined_quality_count\tprovirus_count\tthreads\tcheckv_version\tdatabase_path\tdatabase_release\trun_status\tinput_fasta\n' \
         > "\$METADATA_FILE"
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${prefix}" "${type}" "\$INPUT_COUNT" "\$QUALITY_ROW_COUNT" \
         "\$DETERMINED_QUALITY_COUNT" "\$PROVIRUS_COUNT" "${task.cpus}" \
-        "\$CHECKV_VERSION" "${checkv_database}" "\$DATABASE_RELEASE" \
+        "\$CHECKV_VERSION" "\$RESOLVED_DATABASE_PATH" "\$DATABASE_RELEASE" \
         "\$RUN_STATUS" "${candidate_fasta.name}" \
         >> "\$METADATA_FILE"
 

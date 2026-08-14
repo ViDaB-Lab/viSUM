@@ -65,6 +65,39 @@ class CheckVDatabaseWorkflowContractTests(unittest.TestCase):
         ):
             self.assertIn(expected_output, module)
 
+    def test_zero_candidate_headers_match_checkv_1_1_1(self) -> None:
+        module = (REPOSITORY_ROOT / "modules/local/run_checkv.nf").read_text(
+            encoding="utf-8"
+        )
+        quality_header = (
+            "contig_id\tcontig_length\tprovirus\tproviral_length\tgene_count"
+            "\tviral_genes\thost_genes\tcheckv_quality\tmiuvig_quality"
+            "\tcompleteness\tcompleteness_method\tcontamination\tkmer_freq"
+            "\twarnings"
+        )
+        completeness_header = (
+            "contig_id\tcontig_length\tviral_length\taai_expected_length"
+            "\taai_completeness\taai_confidence\taai_error\taai_num_hits"
+            "\taai_top_hit\taai_id\taai_af\thmm_completeness_lower"
+            "\thmm_completeness_upper\thmm_num_hits\tkmer_freq"
+        )
+        complete_genomes_header = (
+            "contig_id\tcontig_length\tkmer_freq\tprediction_type"
+            "\tconfidence_level\tconfidence_reason\trepeat_length"
+            "\trepeat_count\trepeat_n_freq\trepeat_mode_base_freq\trepeat_seq"
+        )
+        self.assertIn(quality_header, module)
+        self.assertIn(completeness_header, module)
+        self.assertIn(complete_genomes_header, module)
+        self.assertNotIn("completeness_method\tcomplete_genome_type", module)
+
+    def test_run_metadata_records_resolved_database_path(self) -> None:
+        module = (REPOSITORY_ROOT / "modules/local/run_checkv.nf").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('readlink -f "${checkv_database}"', module)
+        self.assertIn('"\\$RESOLVED_DATABASE_PATH" "\\$DATABASE_RELEASE"', module)
+
 
 if __name__ == "__main__":
     unittest.main()
