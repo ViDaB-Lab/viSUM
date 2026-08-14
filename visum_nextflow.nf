@@ -243,6 +243,10 @@ workflow {
         '--run_deepmicroclass2'
     )
     def runCheckv = parseBooleanParameter(params.run_checkv, '--run_checkv')
+    def allowCt3OnlyRefinement = parseBooleanParameter(
+        params.allow_ct3_only_refinement,
+        '--allow_ct3_only_refinement'
+    )
 
     // Every standardizer emits sparse, threshold-qualified evidence. These
     // channels are merged and grouped by sample for the discovery gate.
@@ -1103,7 +1107,8 @@ workflow {
                     joined[3],
                     joined[4],
                     0,
-                    file("${projectDir}/assets/empty_discovery_evidence.tsv")
+                    file("${projectDir}/assets/empty_discovery_evidence.tsv"),
+                    allowCt3OnlyRefinement
                 )
             }
             tuple(
@@ -1113,7 +1118,8 @@ workflow {
                 joined[3],
                 joined[4],
                 joined[5].size(),
-                joined[5]
+                joined[5],
+                allowCt3OnlyRefinement
             )
         }
 

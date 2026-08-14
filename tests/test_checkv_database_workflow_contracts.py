@@ -59,6 +59,7 @@ class CheckVDatabaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("REFINE_PROVIRAL_REGIONS(ch_provirus_refinement_inputs)", workflow)
         self.assertIn("STANDARDIZE_GENOMAD.out.evidence", workflow)
         self.assertIn("STANDARDIZE_CENOTETAKER3.out.evidence", workflow)
+        self.assertIn("params.allow_ct3_only_refinement", workflow)
 
     def test_refinement_module_publishes_fasta_mapping_and_audit(self) -> None:
         module = (REPOSITORY_ROOT / "modules/local/refine_proviral_regions.nf").read_text(
@@ -71,6 +72,10 @@ class CheckVDatabaseWorkflowContractTests(unittest.TestCase):
             "provirus_refinement_summary.tsv",
         ):
             self.assertIn(expected_output, module)
+        self.assertIn("--allow-ct3-only-refinement", module)
+
+        config = (REPOSITORY_ROOT / "visum.config").read_text(encoding="utf-8")
+        self.assertIn("allow_ct3_only_refinement = false", config)
 
     def test_analysis_preserves_primary_reports_and_zero_candidate_runs(self) -> None:
         module = (REPOSITORY_ROOT / "modules/local/run_checkv.nf").read_text(

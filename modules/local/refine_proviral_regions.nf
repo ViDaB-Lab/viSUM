@@ -13,7 +13,8 @@ process REFINE_PROVIRAL_REGIONS {
           path(discovery_audit),
           path(discovery_summary),
           val(evidence_file_count),
-          path(evidence_files)
+          path(evidence_files),
+          val(allow_ct3_only_refinement)
 
     output:
     tuple val(prefix),
@@ -29,12 +30,16 @@ process REFINE_PROVIRAL_REGIONS {
     def evidenceArguments = evidence_file_count > 0
         ? evidenceList.collect { evidence -> "'${evidence}'" }.join(' ')
         : ''
+    def allowCt3OnlyArgument = allow_ct3_only_refinement
+        ? '--allow-ct3-only-refinement'
+        : ''
     """
     python3 "${projectDir}/bin/refine_proviral_regions.py" \
         --sample-id "${prefix}" \
         --input-type "${type}" \
         --candidate-fasta "${candidate_fasta}" \
         --evidence ${evidenceArguments} \
+        ${allowCt3OnlyArgument} \
         --output-fasta "${prefix}.refined_candidates.fasta" \
         --output-map "${prefix}.provirus_region_map.tsv" \
         --output-audit "${prefix}.provirus_boundary_audit.tsv" \

@@ -62,6 +62,9 @@ SUMMARY_COLUMNS = [
     "refined_region_count",
     "boundary_call_count",
     "boundary_conflict_count",
+    "ct3_only_boundary_call_count",
+    "ct3_only_locus_skipped_count",
+    "allow_ct3_only_refinement",
     "evidence_file_count",
 ]
 
@@ -94,6 +97,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-map", required=True, type=Path)
     parser.add_argument("--output-audit", required=True, type=Path)
     parser.add_argument("--output-summary", required=True, type=Path)
+    parser.add_argument(
+        "--allow-ct3-only-refinement",
+        "--allow_ct3_only_refinement",
+        action="store_true",
+        help=(
+            "Allow Cenote-Taker 3 boundaries to modify the FASTA without an "
+            "overlapping geNomad or CheckV boundary. Disabled by default; CT3-only "
+            "calls remain in the boundary audit while the parent stays unchanged."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -253,7 +266,14 @@ def group_loci(calls: list[BoundaryCall]) -> list[list[BoundaryCall]]:
     return loci
 
 
-def select_boundary(locus: list[BoundaryCall]) -> BoundaryCall:
+def select_boundary(
+    locus: list[BoundaryCall], allow_ct3_only_refinement: bool
+) -> BoundaryCall | None:
+    if (
+        not allow_ct3_only_refinement
+        and {call.tool for call in locus} == {"cenotetaker3"}
+    ):
+        return None
     priority = min(TOOL_PRIORITY[call.tool] for call in locus)
     eligible = [call for call in locus if TOOL_PRIORITY[call.tool] == priority]
     if len(eligible) != 1:
@@ -281,6 +301,8 @@ def run(args: argparse.Namespace) -> None:
     refined_region_count = 0
     conflict_count = 0
     unchanged_count = 0
+    ct3_only_boundary_call_count = 0
+    ct3_only_locus_skipped_count = 0
 
     for parent_id, sequence in fasta_records.items():
         parent_calls = calls_by_parent.get(parent_id, [])
@@ -304,12 +326,19 @@ def run(args: argparse.Namespace) -> None:
             )
             continue
 
-        refined_parent_count += 1
+        selected_loci: list[
+            tuple[int, list[BoundaryCall], BoundaryCall, list[str], str]
+        ] = []
         for locus_index, locus in enumerate(group_loci(parent_calls), start=1):
-            selected = select_boundary(locus)
+            selected = select_boundary(locus, args.allow_ct3_only_refinement)
             supporting_tools = sorted({call.tool for call in locus})
             distinct_boundaries = {(call.start, call.end) for call in locus}
-            if len(locus) == 1:
+            if supporting_tools == ["cenotetaker3"]:
+                ct3_only_boundary_call_count += len(locus)
+            if selected is None:
+                boundary_status = "not_selected_ct3_only_default"
+                ct3_only_locus_skipped_count += 1
+            elif len(locus) == 1:
                 boundary_status = "selected_single_tool"
             elif len(distinct_boundaries) == 1:
                 boundary_status = "selected_exact_agreement"
@@ -317,6 +346,53 @@ def run(args: argparse.Namespace) -> None:
                 boundary_status = "selected_boundary_conflict"
                 conflict_count += 1
 
+            locus_id = f"{parent_id}:locus_{locus_index}"
+            for call in locus:
+                audit_rows.append(
+                    {
+                        "sample_id": args.sample_id,
+                        "parent_sequence_id": parent_id,
+                        "locus_id": locus_id,
+                        "tool": call.tool,
+                        "call_sequence_id": call.sequence_id,
+                        "start": call.start,
+                        "end": call.end,
+                        "length": call.length,
+                        "selected": "true" if selected and call == selected else "false",
+                        "selected_tool": selected.tool if selected else "",
+                        "selected_start": selected.start if selected else "",
+                        "selected_end": selected.end if selected else "",
+                        "supporting_boundary_tools": ",".join(supporting_tools),
+                        "boundary_status": boundary_status,
+                    }
+                )
+            if selected is not None:
+                selected_loci.append(
+                    (locus_index, locus, selected, supporting_tools, boundary_status)
+                )
+
+        if not selected_loci:
+            unchanged_count += 1
+            refined_fasta.append((parent_id, sequence))
+            map_rows.append(
+                {
+                    "sample_id": args.sample_id,
+                    "input_type": args.input_type,
+                    "sequence_id": parent_id,
+                    "parent_sequence_id": "",
+                    "record_type": "input_contig",
+                    "coordinates": "",
+                    "original_length": len(sequence),
+                    "refined_length": len(sequence),
+                    "boundary_source": "",
+                    "supporting_boundary_tools": "cenotetaker3",
+                    "boundary_status": "unchanged_ct3_only_boundary_not_allowed",
+                }
+            )
+            continue
+
+        refined_parent_count += 1
+        for _, _, selected, supporting_tools, boundary_status in selected_loci:
             refined_sequence = sequence[selected.start - 1 : selected.end]
             output_id = f"{parent_id}|viral_region_{selected.start}_{selected.end}"
             refined_fasta.append((output_id, refined_sequence))
@@ -339,27 +415,6 @@ def run(args: argparse.Namespace) -> None:
                 }
             )
 
-            locus_id = f"{parent_id}:locus_{locus_index}"
-            for call in locus:
-                audit_rows.append(
-                    {
-                        "sample_id": args.sample_id,
-                        "parent_sequence_id": parent_id,
-                        "locus_id": locus_id,
-                        "tool": call.tool,
-                        "call_sequence_id": call.sequence_id,
-                        "start": call.start,
-                        "end": call.end,
-                        "length": call.length,
-                        "selected": "true" if call == selected else "false",
-                        "selected_tool": selected.tool,
-                        "selected_start": selected.start,
-                        "selected_end": selected.end,
-                        "supporting_boundary_tools": ",".join(supporting_tools),
-                        "boundary_status": boundary_status,
-                    }
-                )
-
     if len({identifier for identifier, _ in refined_fasta}) != len(refined_fasta):
         raise ValueError("Refined FASTA identifiers are not unique")
 
@@ -379,6 +434,11 @@ def run(args: argparse.Namespace) -> None:
                 "refined_region_count": refined_region_count,
                 "boundary_call_count": len(calls),
                 "boundary_conflict_count": conflict_count,
+                "ct3_only_boundary_call_count": ct3_only_boundary_call_count,
+                "ct3_only_locus_skipped_count": ct3_only_locus_skipped_count,
+                "allow_ct3_only_refinement": str(
+                    args.allow_ct3_only_refinement
+                ).lower(),
                 "evidence_file_count": len(args.evidence),
             }
         ],

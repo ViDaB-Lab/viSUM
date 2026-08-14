@@ -37,7 +37,11 @@ def read_fasta(path: Path) -> dict[str, str]:
 
 class RefineProviralRegionsTests(unittest.TestCase):
     def run_refiner(
-        self, directory: Path, evidence_paths: list[Path], input_type: str = "dna"
+        self,
+        directory: Path,
+        evidence_paths: list[Path],
+        input_type: str = "dna",
+        allow_ct3_only_refinement: bool = False,
     ) -> dict[str, Path]:
         paths = {
             "fasta": directory / "candidates.fasta",
@@ -65,6 +69,8 @@ class RefineProviralRegionsTests(unittest.TestCase):
             "--output-summary",
             str(paths["summary"]),
         ]
+        if allow_ct3_only_refinement:
+            argv.append("--allow-ct3-only-refinement")
         with patch.object(sys, "argv", argv):
             refine_proviral_regions.main()
         return paths
@@ -192,6 +198,98 @@ class RefineProviralRegionsTests(unittest.TestCase):
                 read_tsv(paths["map"])[0]["boundary_status"],
                 "unchanged_no_provirus_call",
             )
+
+    def test_ct3_only_boundary_is_audited_but_does_not_refine_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            original_sequence = "ACGT" * 30
+            (directory / "candidates.fasta").write_text(
+                f">sample__c000001\n{original_sequence}\n", encoding="utf-8"
+            )
+            ct3 = directory / "ct3.tsv"
+            write_evidence(
+                ct3,
+                [
+                    {
+                        "sample_id": "sample",
+                        "sequence_id": "sample__c000001|provirus_21_80",
+                        "parent_sequence_id": "sample__c000001",
+                        "record_type": "provirus",
+                        "coordinates": "21-80",
+                        "tool": "cenotetaker3",
+                        "classification": "virus",
+                    },
+                    {
+                        "sample_id": "sample",
+                        "sequence_id": "sample__c000001|provirus_91_110",
+                        "parent_sequence_id": "sample__c000001",
+                        "record_type": "provirus",
+                        "coordinates": "91-110",
+                        "tool": "cenotetaker3",
+                        "classification": "virus",
+                    },
+                ],
+            )
+            paths = self.run_refiner(directory, [ct3])
+
+            self.assertEqual(
+                read_fasta(paths["output"]), {"sample__c000001": original_sequence}
+            )
+            mapping = read_tsv(paths["map"])[0]
+            self.assertEqual(
+                mapping["boundary_status"],
+                "unchanged_ct3_only_boundary_not_allowed",
+            )
+            audit = read_tsv(paths["audit"])
+            self.assertEqual(len(audit), 2)
+            self.assertTrue(all(row["selected"] == "false" for row in audit))
+            self.assertTrue(all(row["selected_tool"] == "" for row in audit))
+            self.assertTrue(
+                all(
+                    row["boundary_status"] == "not_selected_ct3_only_default"
+                    for row in audit
+                )
+            )
+            summary = read_tsv(paths["summary"])[0]
+            self.assertEqual(summary["refined_parent_count"], "0")
+            self.assertEqual(summary["ct3_only_boundary_call_count"], "2")
+            self.assertEqual(summary["ct3_only_locus_skipped_count"], "2")
+            self.assertEqual(summary["allow_ct3_only_refinement"], "false")
+
+    def test_ct3_only_boundary_can_refine_when_explicitly_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            (directory / "candidates.fasta").write_text(
+                ">sample__c000001\n" + "A" * 100 + "\n", encoding="utf-8"
+            )
+            ct3 = directory / "ct3.tsv"
+            write_evidence(
+                ct3,
+                [
+                    {
+                        "sample_id": "sample",
+                        "sequence_id": "sample__c000001|provirus_21_80",
+                        "parent_sequence_id": "sample__c000001",
+                        "record_type": "provirus",
+                        "coordinates": "21-80",
+                        "tool": "cenotetaker3",
+                        "classification": "virus",
+                    }
+                ],
+            )
+            paths = self.run_refiner(
+                directory, [ct3], allow_ct3_only_refinement=True
+            )
+
+            fasta = read_fasta(paths["output"])
+            self.assertEqual(
+                fasta, {"sample__c000001|viral_region_21_80": "A" * 60}
+            )
+            self.assertEqual(read_tsv(paths["audit"])[0]["selected"], "true")
+            summary = read_tsv(paths["summary"])[0]
+            self.assertEqual(summary["refined_parent_count"], "1")
+            self.assertEqual(summary["ct3_only_boundary_call_count"], "1")
+            self.assertEqual(summary["allow_ct3_only_refinement"], "true")
 
 
 if __name__ == "__main__":
