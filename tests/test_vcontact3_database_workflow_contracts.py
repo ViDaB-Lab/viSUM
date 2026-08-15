@@ -40,6 +40,7 @@ class Vcontact3DatabaseWorkflowContractTests(unittest.TestCase):
         environment = (ROOT / "envs/vcontact3.yml").read_text(encoding="utf-8")
         self.assertIn("d57ae81e0be5ab57a8a14692a4cb8ab255ce2d52", environment)
         self.assertIn("mmseqs2", environment)
+        self.assertIn("pandas=2.1.4", environment)
 
 if __name__ == "__main__":
     unittest.main()
