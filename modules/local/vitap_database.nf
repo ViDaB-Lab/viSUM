@@ -89,7 +89,7 @@ process PREPARE_VITAP_DATABASE {
         printf '%s\t%s\tpassed\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "\$resolved_db" "\$DATABASE_SOURCE" "\$action" "\$release" \
             "\$vmr_file" "\$vmr_url" "\$vmr_sha" "\$version" \
-            "${task.cpus}" 'not-exposed-by-VITAP-upd' \
+            "${task.cpus}" 'explicit-wrapper-injection' \
             >> vitap_database_metadata.tsv
     }
 
@@ -259,7 +259,8 @@ process PREPARE_VITAP_DATABASE {
         printf 'Y\n' | python "\$PROCESS_DIR/run_vitap_update.py" \
             --vmr "\$PREPARED_CSV" \
             --out "\$BUILD_ROOT/\${SOURCE_STEM}_reformat.csv" \
-            --db "\$RELEASE"
+            --db "\$RELEASE" \
+            --threads "${task.cpus}"
     )
 
     STAGED_DATABASE="\$BUILD_ROOT/DB_\$RELEASE"

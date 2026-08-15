@@ -109,6 +109,41 @@ REGION_REPLACEMENT = '''    # Processing integrated viral sequences.
         os.remove(input_fasta)
         for fai in glob.glob(os.path.join(output_folder, "*.fai")):
             os.remove(fai)
+
+    # The managed VMR_Genome directory is a download cache shared across VMR
+    # releases. Remove retired accessions before VITAP merges every cached
+    # FASTA into the new release database.
+    expected_fasta_names = {
+        f"{row[0]}.fasta"
+        for row in rows
+        if row[-1] == "full_length"
+    }
+    for virus_id, regions in coordinate_regions.items():
+        expected_fasta_names.update(
+            f"{virus_id}.segment{index}.fasta"
+            for index in range(1, len(regions) + 1)
+        )
+    cached_fasta_paths = glob.glob(os.path.join(output_folder, "*.fasta"))
+    cached_fasta_names = {os.path.basename(path) for path in cached_fasta_paths}
+    missing_fasta_names = sorted(expected_fasta_names - cached_fasta_names)
+    if missing_fasta_names:
+        examples = ", ".join(missing_fasta_names[:10])
+        raise FileNotFoundError(
+            f"VITAP genome download is incomplete; missing "
+            f"{len(missing_fasta_names)} expected FASTA file(s): {examples}"
+        )
+    stale_fasta_paths = [
+        path
+        for path in cached_fasta_paths
+        if os.path.basename(path) not in expected_fasta_names
+    ]
+    for stale_path in stale_fasta_paths:
+        os.remove(stale_path)
+    if stale_fasta_paths:
+        print(
+            f"[viSUM] Removed {len(stale_fasta_paths)} stale genome FASTA "
+            f"file(s) not present in the current VMR."
+        )
     print("[INFO] All files successfully downloaded and processed")'''
 
 
@@ -157,14 +192,43 @@ def load_patched_updater() -> ModuleType:
     return module
 
 
+def configure_diamond_threads(module: ModuleType, threads: int) -> None:
+    """Inject the Nextflow CPU allocation into every DIAMOND subprocess."""
+    if threads < 1:
+        raise ValueError("--threads must be at least 1")
+    original_run = module.subprocess.run
+
+    def controlled_run(command, *args, **kwargs):
+        if (
+            isinstance(command, (list, tuple))
+            and len(command) >= 2
+            and Path(str(command[0])).name == "diamond"
+            and "--threads" not in command
+            and "-p" not in command
+        ):
+            command = [
+                command[0],
+                command[1],
+                "--threads",
+                str(threads),
+                *command[2:],
+            ]
+            print(f"[viSUM] DIAMOND command limited to {threads} thread(s).")
+        return original_run(command, *args, **kwargs)
+
+    module.subprocess.run = controlled_run
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--vmr", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--db", required=True)
+    parser.add_argument("--threads", required=True, type=int)
     args = parser.parse_args()
 
     updater = load_patched_updater()
+    configure_diamond_threads(updater, args.threads)
     updater.upd(SimpleNamespace(vmr=args.vmr, out=args.out, db=args.db))
 
 

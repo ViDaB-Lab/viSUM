@@ -56,6 +56,8 @@ class VitapDatabaseWorkflowContractTests(unittest.TestCase):
         self.assertIn(".visum_db_complete", module)
         self.assertIn("printf 'Y\\n' | python", module)
         self.assertIn('run_vitap_update.py', module)
+        self.assertIn('--threads "${task.cpus}"', module)
+        self.assertIn("explicit-wrapper-injection", module)
 
     def test_environment_pins_current_vitap_release(self) -> None:
         environment = (ROOT / "envs/vitap.yml").read_text(encoding="utf-8")
