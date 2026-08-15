@@ -85,10 +85,11 @@ process RUN_VCONTACT3 {
         mkdir -p "\$DOMAIN_OUTPUT"
 
         if [[ "\$INPUT_COUNT" -eq 0 ]]; then
+            mkdir -p "\$DOMAIN_OUTPUT/exports"
             printf 'Genome,GenomeName,Reference,Size_Kb\n' \
-                > "\$DOMAIN_OUTPUT/final_assignments.csv"
+                > "\$DOMAIN_OUTPUT/exports/final_assignments.csv"
             printf 'index,realm,rank\n' \
-                > "\$DOMAIN_OUTPUT/performance_metrics.csv"
+                > "\$DOMAIN_OUTPUT/exports/performance_metrics.csv"
             printf 'vConTACT3 skipped: provirus refinement produced no candidate sequences.\n' \
                 > "\$LOG_FILE"
             RUN_STATUS='skipped_no_refined_candidates'
@@ -112,14 +113,14 @@ process RUN_VCONTACT3 {
         fi
 
         for REQUIRED_FILE in final_assignments.csv performance_metrics.csv; do
-            if [[ ! -s "\$DOMAIN_OUTPUT/\$REQUIRED_FILE" ]]; then
+            if [[ ! -s "\$DOMAIN_OUTPUT/exports/\$REQUIRED_FILE" ]]; then
                 echo "ERROR: vConTACT3 \$DOMAIN run did not produce \$REQUIRED_FILE." >&2
                 exit 1
             fi
         done
 
-        cp "\$DOMAIN_OUTPUT/final_assignments.csv" "\$ASSIGNMENTS"
-        cp "\$DOMAIN_OUTPUT/performance_metrics.csv" "\$METRICS"
+        cp "\$DOMAIN_OUTPUT/exports/final_assignments.csv" "\$ASSIGNMENTS"
+        cp "\$DOMAIN_OUTPUT/exports/performance_metrics.csv" "\$METRICS"
 
         ASSIGNMENT_COUNT=\$(awk 'NR > 1 { count++ } END { print count + 0 }' "\$ASSIGNMENTS")
         USER_ASSIGNMENT_COUNT=\$(python -c "import csv,sys; rows=csv.DictReader(open(sys.argv[1], newline='', encoding='utf-8-sig')); print(sum(str(row.get('Reference', '')).strip().lower() in {'false','0'} for row in rows))" "\$ASSIGNMENTS")

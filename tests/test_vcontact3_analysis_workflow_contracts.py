@@ -31,6 +31,8 @@ class Vcontact3AnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn('--threads "${task.cpus}"', module)
         self.assertIn('--no-progress', module)
         self.assertIn('DOMAINS=(prokaryotes eukaryotes)', module)
+        self.assertIn(r'\$DOMAIN_OUTPUT/exports/final_assignments.csv', module)
+        self.assertIn(r'\$DOMAIN_OUTPUT/exports/performance_metrics.csv', module)
         self.assertIn('cpus { Math.min(params.vcontact3_cpus as int, params.max_cpus as int) }', module)
 
     def test_module_preserves_domain_specific_review_outputs(self) -> None:
