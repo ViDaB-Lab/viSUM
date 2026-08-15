@@ -33,6 +33,7 @@ include { PREPARE_CHECKV_DATABASE } from './modules/local/checkv_database'
 include { RUN_CHECKV } from './modules/local/run_checkv'
 include { STANDARDIZE_CHECKV } from './modules/local/standardize_checkv'
 include { REFINE_PROVIRAL_REGIONS } from './modules/local/refine_proviral_regions'
+include { PREPARE_VITAP_DATABASE } from './modules/local/vitap_database'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -142,6 +143,7 @@ workflow {
         '--vicat_orf_cpus': params.vicat_orf_cpus,
         '--vicat_cpus': params.vicat_cpus,
         '--checkv_cpus': params.checkv_cpus,
+        '--vitap_cpus': params.vitap_cpus,
     ]
     analysisCpuParameters.each { parameterName, rawValue ->
         parsePositiveIntegerParameter(rawValue, parameterName)
@@ -243,6 +245,7 @@ workflow {
         '--run_deepmicroclass2'
     )
     def runCheckv = parseBooleanParameter(params.run_checkv, '--run_checkv')
+    def runVitap = parseBooleanParameter(params.run_vitap, '--run_vitap')
     def allowCt3OnlyRefinement = parseBooleanParameter(
         params.allow_ct3_only_refinement,
         '--allow_ct3_only_refinement'
@@ -265,7 +268,8 @@ workflow {
         "DeepMicroClass2=${runDeepmicroclass2}, " +
         "GiantHunter=${runGianthunter}, " +
         "viCAT=${runVicat}, " +
-        "CheckV=${runCheckv}"
+        "CheckV=${runCheckv}, " +
+        "VITAP=${runVitap}"
     )
 
     NORMALIZE_FASTA(ch_samples)
@@ -980,6 +984,59 @@ workflow {
         ch_discovery_evidence = ch_discovery_evidence.mix(
             STANDARDIZE_VICAT.out.evidence
         )
+    }
+
+    // VITAP is a post-discovery taxonomy-refinement tool. For now, this gate
+    // prepares or validates its persistent database only; the analysis module
+    // will consume this output in the next implementation step.
+    if( runVitap ) {
+        def userSuppliedDatabase = params.vitap_db != null
+        if( userSuppliedDatabase && params.vitap_vmr != null ) {
+            error 'Use either --vitap_db PATH or --vitap_vmr PATH, not both.'
+        }
+
+        def vitapDatabasePath = userSuppliedDatabase
+            ? file(params.vitap_db).toString()
+            : file(params.vitap_dir).toString()
+        def vitapDatabaseSource = userSuppliedDatabase
+            ? 'user-supplied'
+            : 'viSUM-managed'
+        def vitapVmrSource = params.vitap_vmr == null
+            ? ''
+            : file(params.vitap_vmr).toString()
+        def vitapLabel = params.vitap_db_label == null
+            ? ''
+            : params.vitap_db_label.toString()
+        def vitapAutoDownload = parseBooleanParameter(
+            params.vitap_auto_download,
+            '--vitap_auto_download'
+        )
+        def vitapUpdateDatabase = parseBooleanParameter(
+            params.vitap_update_database,
+            '--vitap_update_database'
+        )
+        def vitapCleanupSource = parseBooleanParameter(
+            params.vitap_cleanup_source,
+            '--vitap_cleanup_source'
+        )
+
+        ch_vitap_database_request = Channel.of(
+            tuple(
+                vitapDatabasePath,
+                vitapDatabaseSource,
+                vitapVmrSource,
+                vitapLabel,
+                vitapAutoDownload,
+                vitapUpdateDatabase,
+                vitapCleanupSource
+            )
+        )
+
+        PREPARE_VITAP_DATABASE(ch_vitap_database_request)
+
+        PREPARE_VITAP_DATABASE.out.database.view { database, metadata ->
+            "VITAP_DB database=${database} metadata=${metadata.name}"
+        }
     }
 
     ch_discovery_evidence_by_sample = ch_discovery_evidence

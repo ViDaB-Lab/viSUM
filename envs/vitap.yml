@@ -1,0 +1,14 @@
+name: visum-vitap
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - vitap=1.12
+  - python=3.11
+  - openpyxl
+  - curl
+  - wget
+  - diamond=2.1.16
+  - entrez-direct=16.2
+  - seqkit
+  - taxonkit
