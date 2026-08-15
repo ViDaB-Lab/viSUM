@@ -51,6 +51,7 @@ class VitapDatabaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("skipped-user-supplied-database", module)
         self.assertIn(".visum_vmr_metadata.tsv", module)
         self.assertIn(".visum_db_complete", module)
+        self.assertIn("printf 'Y\\n' | VITAP upd", module)
 
     def test_environment_pins_current_vitap_release(self) -> None:
         environment = (ROOT / "envs/vitap.yml").read_text(encoding="utf-8")

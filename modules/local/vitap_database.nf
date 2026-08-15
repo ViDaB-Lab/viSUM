@@ -250,7 +250,7 @@ process PREPARE_VITAP_DATABASE {
     export POLARS_MAX_THREADS="\$OMP_NUM_THREADS"
     (
         cd "\$BUILD_ROOT"
-        printf '\n' | VITAP upd \
+        printf 'Y\n' | VITAP upd \
             --vmr "\$PREPARED_CSV" \
             -o "\$BUILD_ROOT/\${SOURCE_STEM}_reformat.csv" \
             -d "\$RELEASE"
