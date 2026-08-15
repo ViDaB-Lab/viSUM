@@ -13,7 +13,15 @@ class VitapDatabaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("params.vitap_db", workflow)
         self.assertIn("params.vitap_vmr", workflow)
         self.assertIn("params.vitap_update_database", workflow)
+        self.assertIn('file("${projectDir}/bin/prepare_vitap_vmr.py")', workflow)
         self.assertIn("PREPARE_VITAP_DATABASE(ch_vitap_database_request)", workflow)
+
+        module = (ROOT / "modules/local/vitap_database.nf").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("path(vmr_helper)", module)
+        self.assertIn('python "${vmr_helper}"', module)
+        self.assertNotIn('${projectDir}/bin/prepare_vitap_vmr.py', module)
 
     def test_module_validates_runtime_files_and_diamond_databases(self) -> None:
         module = (ROOT / "modules/local/vitap_database.nf").read_text(

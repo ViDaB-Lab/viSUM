@@ -19,7 +19,8 @@ process PREPARE_VITAP_DATABASE {
           val(database_label),
           val(auto_download),
           val(update_database),
-          val(cleanup_source)
+          val(cleanup_source),
+          path(vmr_helper)
 
     output:
     tuple path('vitap_database'),
@@ -211,7 +212,7 @@ process PREPARE_VITAP_DATABASE {
     if [[ -n "\$REQUESTED_LABEL" ]]; then
         PREPARE_ARGS+=(--label "\$REQUESTED_LABEL")
     fi
-    python "${projectDir}/bin/prepare_vitap_vmr.py" "\${PREPARE_ARGS[@]}"
+    python "${vmr_helper}" "\${PREPARE_ARGS[@]}"
 
     RELEASE=\$(awk -F '\t' 'NR == 2 {print \$1}' "\$PREPARED_METADATA")
     VMR_SHA=\$(awk -F '\t' 'NR == 2 {print \$4}' "\$PREPARED_METADATA")

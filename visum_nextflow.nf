@@ -1028,7 +1028,8 @@ workflow {
                 vitapLabel,
                 vitapAutoDownload,
                 vitapUpdateDatabase,
-                vitapCleanupSource
+                vitapCleanupSource,
+                file("${projectDir}/bin/prepare_vitap_vmr.py")
             )
         )
 
