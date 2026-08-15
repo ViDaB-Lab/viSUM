@@ -14,13 +14,16 @@ class VitapDatabaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("params.vitap_vmr", workflow)
         self.assertIn("params.vitap_update_database", workflow)
         self.assertIn('file("${projectDir}/bin/prepare_vitap_vmr.py")', workflow)
+        self.assertIn('file("${projectDir}/bin/run_vitap_update.py")', workflow)
         self.assertIn("PREPARE_VITAP_DATABASE(ch_vitap_database_request)", workflow)
 
         module = (ROOT / "modules/local/vitap_database.nf").read_text(
             encoding="utf-8"
         )
         self.assertIn("path(vmr_helper)", module)
+        self.assertIn("path(update_helper)", module)
         self.assertIn("[[ -s prepare_vitap_vmr.py ]]", module)
+        self.assertIn("[[ -s run_vitap_update.py ]]", module)
         self.assertIn('python prepare_vitap_vmr.py "\\${PREPARE_ARGS[@]}"', module)
         self.assertNotIn('python "${vmr_helper}"', module)
         self.assertNotIn('${projectDir}/bin/prepare_vitap_vmr.py', module)
@@ -51,7 +54,8 @@ class VitapDatabaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("skipped-user-supplied-database", module)
         self.assertIn(".visum_vmr_metadata.tsv", module)
         self.assertIn(".visum_db_complete", module)
-        self.assertIn("printf 'Y\\n' | VITAP upd", module)
+        self.assertIn("printf 'Y\\n' | python", module)
+        self.assertIn('run_vitap_update.py', module)
 
     def test_environment_pins_current_vitap_release(self) -> None:
         environment = (ROOT / "envs/vitap.yml").read_text(encoding="utf-8")

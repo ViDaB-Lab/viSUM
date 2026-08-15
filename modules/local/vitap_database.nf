@@ -20,7 +20,8 @@ process PREPARE_VITAP_DATABASE {
           val(auto_download),
           val(update_database),
           val(cleanup_source),
-          path(vmr_helper)
+          path(vmr_helper),
+          path(update_helper)
 
     output:
     tuple path('vitap_database'),
@@ -216,6 +217,10 @@ process PREPARE_VITAP_DATABASE {
         echo 'ERROR: Nextflow did not stage prepare_vitap_vmr.py.' >&2
         exit 1
     }
+    [[ -s run_vitap_update.py ]] || {
+        echo 'ERROR: Nextflow did not stage run_vitap_update.py.' >&2
+        exit 1
+    }
     python prepare_vitap_vmr.py "\${PREPARE_ARGS[@]}"
 
     RELEASE=\$(awk -F '\t' 'NR == 2 {print \$1}' "\$PREPARED_METADATA")
@@ -248,12 +253,13 @@ process PREPARE_VITAP_DATABASE {
     export OMP_NUM_THREADS="${task.cpus}"
     export OPENBLAS_NUM_THREADS="${task.cpus}"
     export POLARS_MAX_THREADS="\$OMP_NUM_THREADS"
+    PROCESS_DIR="\$PWD"
     (
         cd "\$BUILD_ROOT"
-        printf 'Y\n' | VITAP upd \
+        printf 'Y\n' | python "\$PROCESS_DIR/run_vitap_update.py" \
             --vmr "\$PREPARED_CSV" \
-            -o "\$BUILD_ROOT/\${SOURCE_STEM}_reformat.csv" \
-            -d "\$RELEASE"
+            --out "\$BUILD_ROOT/\${SOURCE_STEM}_reformat.csv" \
+            --db "\$RELEASE"
     )
 
     STAGED_DATABASE="\$BUILD_ROOT/DB_\$RELEASE"
