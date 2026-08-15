@@ -37,6 +37,7 @@ include { PREPARE_VITAP_DATABASE } from './modules/local/vitap_database'
 include { RUN_VITAP } from './modules/local/run_vitap'
 include { STANDARDIZE_VITAP } from './modules/local/standardize_vitap'
 include { PREPARE_VCONTACT3_DATABASE } from './modules/local/vcontact3_database'
+include { RUN_VCONTACT3 } from './modules/local/run_vcontact3'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -254,6 +255,13 @@ workflow {
         params.run_vcontact3,
         '--run_vcontact3'
     )
+    def vcontact3DbDomain = params.vcontact3_db_domain
+        ?.toString()
+        ?.trim()
+        ?.toLowerCase()
+    if( runVcontact3 && !(vcontact3DbDomain in ['both', 'prokaryotes', 'eukaryotes']) ) {
+        error "Invalid --vcontact3_db_domain '${params.vcontact3_db_domain}'. Use both, prokaryotes, or eukaryotes."
+    }
     def vitapIncludeLowConfidence = parseBooleanParameter(
         params.vitap_include_low_confidence,
         '--vitap_include_low_confidence'
@@ -1055,9 +1063,7 @@ workflow {
         ch_vitap_database = PREPARE_VITAP_DATABASE.out.database
     }
 
-    // Prepare or validate the persistent vConTACT3 reference database. The
-    // future analysis module will consume the post-gate, provirus-refined
-    // FASTA alongside this version-resolved database bundle.
+    // Prepare or validate the persistent vConTACT3 reference database.
     if( runVcontact3 ) {
         def userSuppliedDatabase = params.vcontact3_db != null
         def vcontact3DatabasePath = userSuppliedDatabase
@@ -1265,6 +1271,19 @@ workflow {
 
         STANDARDIZE_VITAP.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
+        }
+    }
+
+    if( runVcontact3 ) {
+        RUN_VCONTACT3(
+            REFINE_PROVIRAL_REGIONS.out.refined,
+            ch_vcontact3_database,
+            vcontact3DbDomain
+        )
+
+        RUN_VCONTACT3.out.results.view {
+            prefix, type, regionMap, assignments, metrics, logs, metadata ->
+                "VCONTACT3 sample=${prefix} type=${type} domain_mode=${vcontact3DbDomain} assignments=${assignments}"
         }
     }
 }
