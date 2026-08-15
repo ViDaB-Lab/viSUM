@@ -96,8 +96,11 @@ process RUN_VITAP {
             > "\$RAW_DIRECTORY/target_uniref90_taxa_fallback.out"
     fi
 
-    BEST_HEADER=\$(head -n 1 "\$RAW_DIRECTORY/best_determined_lineages.tsv")
-    ALL_HEADER=\$(head -n 1 "\$RAW_DIRECTORY/all_lineages.tsv")
+    # VITAP writes these tables through Python's csv module, which may use
+    # CRLF even on Linux. Remove only the trailing carriage return before
+    # comparing the schema; preserve the original upstream files unchanged.
+    BEST_HEADER=\$(head -n 1 "\$RAW_DIRECTORY/best_determined_lineages.tsv" | tr -d '\r')
+    ALL_HEADER=\$(head -n 1 "\$RAW_DIRECTORY/all_lineages.tsv" | tr -d '\r')
     if [[ "\$BEST_HEADER" != \$'Genome_ID\tlineage\tlineage_score/participation_index\tConfidence_level' ]]; then
         echo 'ERROR: VITAP best-lineage output has an unexpected schema.' >&2
         printf 'Observed header: %s\n' "\$BEST_HEADER" >&2

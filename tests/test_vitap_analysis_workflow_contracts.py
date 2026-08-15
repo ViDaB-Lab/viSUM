@@ -30,6 +30,7 @@ class VitapAnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn('export OMP_NUM_THREADS="${task.cpus}"', module)
         self.assertIn("skipped_no_refined_candidates", module)
         self.assertIn("Genome_ID\\tlineage\\tlineage_score/participation_index", module)
+        self.assertIn("tr -d '\\r'", module)
 
     def test_module_preserves_review_and_provenance_outputs(self) -> None:
         module = (ROOT / "modules/local/run_vitap.nf").read_text(encoding="utf-8")
