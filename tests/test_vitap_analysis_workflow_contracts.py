@@ -12,12 +12,15 @@ class VitapAnalysisWorkflowContractTests(unittest.TestCase):
         workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
 
         self.assertIn("include { RUN_VITAP }", workflow)
+        self.assertIn("include { STANDARDIZE_VITAP }", workflow)
         self.assertIn("RUN_VITAP(\n            REFINE_PROVIRAL_REGIONS.out.refined", workflow)
         self.assertLess(
             workflow.index("REFINE_PROVIRAL_REGIONS(ch_provirus_refinement_inputs)"),
             workflow.index("RUN_VITAP(\n            REFINE_PROVIRAL_REGIONS.out.refined"),
         )
         self.assertNotIn("run_vitap_assignment.py", workflow)
+        self.assertIn("STANDARDIZE_VITAP(\n            RUN_VITAP.out.results", workflow)
+        self.assertIn("STANDARDIZE_VITAP.out.evidence", workflow)
 
     def test_module_uses_refined_fasta_and_enforces_task_cpu_budget(self) -> None:
         module = (ROOT / "modules/local/run_vitap.nf").read_text(encoding="utf-8")
@@ -43,6 +46,18 @@ class VitapAnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn("pattern: '*.vitap_*.*'", module)
         self.assertNotIn('pattern: "${prefix}.vitap_*.*"', module)
         self.assertIn("vitap_include_low_confidence", (ROOT / "visum.config").read_text())
+
+    def test_standardizer_uses_refinement_map_and_vmr_taxonomy(self) -> None:
+        module = (ROOT / "modules/local/standardize_vitap.nf").read_text(encoding="utf-8")
+
+        self.assertIn("path(provirus_region_map)", module)
+        self.assertIn("--region-map", module)
+        self.assertIn("--best-lineages", module)
+        self.assertIn("--all-lineages", module)
+        self.assertIn("--uniref-fallback", module)
+        self.assertIn("--vmr", module)
+        self.assertIn('path("${prefix}.vitap_evidence.tsv")', module)
+        self.assertIn('path("${prefix}.vitap_standardization_audit.tsv")', module)
 
 
 if __name__ == "__main__":

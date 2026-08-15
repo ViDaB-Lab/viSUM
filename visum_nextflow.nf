@@ -35,6 +35,7 @@ include { STANDARDIZE_CHECKV } from './modules/local/standardize_checkv'
 include { REFINE_PROVIRAL_REGIONS } from './modules/local/refine_proviral_regions'
 include { PREPARE_VITAP_DATABASE } from './modules/local/vitap_database'
 include { RUN_VITAP } from './modules/local/run_vitap'
+include { STANDARDIZE_VITAP } from './modules/local/standardize_vitap'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -1205,6 +1206,15 @@ workflow {
         RUN_VITAP.out.results.view {
             prefix, type, regionMap, best, allLineages, fallback, log, metadata ->
                 "VITAP sample=${prefix} type=${type} best=${best.name} all=${allLineages.name}"
+        }
+
+        STANDARDIZE_VITAP(
+            RUN_VITAP.out.results,
+            ch_vitap_database
+        )
+
+        STANDARDIZE_VITAP.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
     }
 }

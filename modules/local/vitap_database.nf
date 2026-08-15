@@ -140,7 +140,8 @@ process PREPARE_VITAP_DATABASE {
             echo 'thresholds, uniref90.dmnd, uniref90.accession2taxid, and taxdmp/.' >&2
             exit 1
         fi
-        emit_database "\$RESOLVED_DATABASE" 'skipped-user-supplied-database'
+        emit_existing_managed_database "\$RESOLVED_DATABASE" \
+            'skipped-user-supplied-database'
         exit 0
     fi
 
