@@ -20,7 +20,9 @@ class VitapDatabaseWorkflowContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("path(vmr_helper)", module)
-        self.assertIn('python "${vmr_helper}"', module)
+        self.assertIn("[[ -s prepare_vitap_vmr.py ]]", module)
+        self.assertIn('python prepare_vitap_vmr.py "\\${PREPARE_ARGS[@]}"', module)
+        self.assertNotIn('python "${vmr_helper}"', module)
         self.assertNotIn('${projectDir}/bin/prepare_vitap_vmr.py', module)
 
     def test_module_validates_runtime_files_and_diamond_databases(self) -> None:

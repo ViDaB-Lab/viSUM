@@ -212,7 +212,11 @@ process PREPARE_VITAP_DATABASE {
     if [[ -n "\$REQUESTED_LABEL" ]]; then
         PREPARE_ARGS+=(--label "\$REQUESTED_LABEL")
     fi
-    python "${vmr_helper}" "\${PREPARE_ARGS[@]}"
+    [[ -s prepare_vitap_vmr.py ]] || {
+        echo 'ERROR: Nextflow did not stage prepare_vitap_vmr.py.' >&2
+        exit 1
+    }
+    python prepare_vitap_vmr.py "\${PREPARE_ARGS[@]}"
 
     RELEASE=\$(awk -F '\t' 'NR == 2 {print \$1}' "\$PREPARED_METADATA")
     VMR_SHA=\$(awk -F '\t' 'NR == 2 {print \$4}' "\$PREPARED_METADATA")
@@ -243,7 +247,7 @@ process PREPARE_VITAP_DATABASE {
     echo 'files are retained under the managed database root for diagnosis/retry.'
     export OMP_NUM_THREADS="${task.cpus}"
     export OPENBLAS_NUM_THREADS="${task.cpus}"
-    export POLARS_MAX_THREADS="${task.cpus}"
+    export POLARS_MAX_THREADS="\$OMP_NUM_THREADS"
     (
         cd "\$BUILD_ROOT"
         printf '\n' | VITAP upd \
