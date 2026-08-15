@@ -60,7 +60,7 @@ class ResourceWorkflowContractTests(unittest.TestCase):
             "run_gianthunter.nf": '--threads "${task.cpus}"',
             "predict_vicat_orfs.nf": '-j "${task.cpus}"',
             "run_vicat_diamond.nf": '--threads "${task.cpus}"',
-            "run_vitap.nf": '--threads "${task.cpus}"',
+            "run_vitap.nf": '-p "${task.cpus}"',
             "vicat_database.nf": '--threads "${task.cpus}"',
             "virsorter2_database.nf": "-j ${task.cpus}",
         }

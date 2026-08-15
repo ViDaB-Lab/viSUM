@@ -17,14 +17,16 @@ class VitapAnalysisWorkflowContractTests(unittest.TestCase):
             workflow.index("REFINE_PROVIRAL_REGIONS(ch_provirus_refinement_inputs)"),
             workflow.index("RUN_VITAP(\n            REFINE_PROVIRAL_REGIONS.out.refined"),
         )
-        self.assertIn('file("${projectDir}/bin/run_vitap_assignment.py")', workflow)
+        self.assertNotIn("run_vitap_assignment.py", workflow)
 
     def test_module_uses_refined_fasta_and_enforces_task_cpu_budget(self) -> None:
         module = (ROOT / "modules/local/run_vitap.nf").read_text(encoding="utf-8")
 
         self.assertIn("path(refined_fasta)", module)
         self.assertIn('cpus { Math.min(params.vitap_cpus as int, params.max_cpus as int) }', module)
-        self.assertIn('--threads "${task.cpus}"', module)
+        self.assertIn("VITAP assignment", module)
+        self.assertIn('-p "${task.cpus}"', module)
+        self.assertNotIn("run_vitap_assignment.py", module)
         self.assertIn('export OMP_NUM_THREADS="${task.cpus}"', module)
         self.assertIn("skipped_no_refined_candidates", module)
         self.assertIn("Genome_ID\\tlineage\\tlineage_score/participation_index", module)

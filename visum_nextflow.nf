@@ -1196,14 +1196,9 @@ workflow {
     }
 
     if( runVitap ) {
-        ch_vitap_assignment_runner = Channel.value(
-            file("${projectDir}/bin/run_vitap_assignment.py")
-        )
-
         RUN_VITAP(
             REFINE_PROVIRAL_REGIONS.out.refined,
             ch_vitap_database,
-            ch_vitap_assignment_runner,
             vitapIncludeLowConfidence
         )
 

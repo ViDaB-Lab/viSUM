@@ -23,7 +23,6 @@ process RUN_VITAP {
           path(provirus_boundary_audit),
           path(provirus_refinement_summary)
     tuple path(vitap_database), path(vitap_database_metadata)
-    path assignment_runner
     val include_low_confidence
 
     output:
@@ -39,7 +38,7 @@ process RUN_VITAP {
     path("${prefix}.vitap_raw"), emit: raw_output
 
     script:
-    def lowConfidenceArgument = include_low_confidence ? '--low-conf' : ''
+    def lowConfidenceArgument = include_low_confidence ? '--low_conf' : ''
     """
     set -euo pipefail
 
@@ -70,11 +69,11 @@ process RUN_VITAP {
             > "\$LOG_FILE"
         RUN_STATUS='skipped_no_refined_candidates'
     else
-        if ! python "${assignment_runner}" \
-            --fasta "${refined_fasta}" \
-            --db "${vitap_database}" \
-            --out "\$RAW_DIRECTORY" \
-            --threads "${task.cpus}" \
+        if ! VITAP assignment \
+            -i "${refined_fasta}" \
+            -d "${vitap_database}" \
+            -p "${task.cpus}" \
+            -o "\$RAW_DIRECTORY" \
             ${lowConfidenceArgument} \
             > "\$LOG_FILE" 2>&1; then
             echo "ERROR: VITAP assignment failed for sample '${prefix}'." >&2
