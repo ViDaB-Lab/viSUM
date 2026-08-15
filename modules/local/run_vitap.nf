@@ -13,7 +13,7 @@ process RUN_VITAP {
     // be very large and are reproducible from the refined FASTA and database.
     publishDir { "${params.outdir}/${prefix}_results/vitap" },
         mode: 'copy',
-        pattern: "${prefix}.vitap_*.*"
+        pattern: '*.vitap_*.*'
 
     input:
     tuple val(prefix),

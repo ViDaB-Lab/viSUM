@@ -37,6 +37,8 @@ class VitapAnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn('path("${prefix}.vitap_uniref90_fallback.tsv")', module)
         self.assertIn("path(provirus_region_map)", module)
         self.assertIn('path("${prefix}.vitap_raw")', module)
+        self.assertIn("pattern: '*.vitap_*.*'", module)
+        self.assertNotIn('pattern: "${prefix}.vitap_*.*"', module)
         self.assertIn("vitap_include_low_confidence", (ROOT / "visum.config").read_text())
 
 
