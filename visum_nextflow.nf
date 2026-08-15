@@ -1085,8 +1085,7 @@ workflow {
                 vcontact3DatabaseSource,
                 vcontact3AutoDownload,
                 vcontact3UpdateDatabase,
-                vcontact3CleanupArchive,
-                file("${projectDir}/bin/validate_vcontact3_database.py")
+                vcontact3CleanupArchive
             )
         )
 

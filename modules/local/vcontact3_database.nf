@@ -17,8 +17,7 @@ process PREPARE_VCONTACT3_DATABASE {
           val(database_source),
           val(auto_download),
           val(update_database),
-          val(cleanup_archive),
-          path(database_validator)
+          val(cleanup_archive)
 
     output:
     tuple path('vcontact3_database'),
@@ -38,12 +37,6 @@ process PREPARE_VCONTACT3_DATABASE {
     UPDATE_DATABASE="!{update_database}"
     CLEANUP_ARCHIVE="!{cleanup_archive}"
     REQUESTED_VERSION='latest'
-    VALIDATOR="$PWD/validate_vcontact3_database.py"
-
-    [[ -s "$VALIDATOR" ]] || {
-        echo 'ERROR: Nextflow did not stage validate_vcontact3_database.py.' >&2
-        exit 1
-    }
 
     vcontact3_version() {
         python -c "from importlib.metadata import version; print(version('vcontact3'))"
@@ -57,24 +50,35 @@ process PREPARE_VCONTACT3_DATABASE {
         }
     }
 
-    validate_database() {
-        python "$VALIDATOR" "$1" --field summary >/dev/null 2>&1
+    manifest_path() {
+        local candidate="$1"
+        if [[ -f "$candidate" ]]; then
+            [[ "$candidate" == *.json ]] || return 1
+            readlink -f "$candidate"
+            return
+        fi
+        [[ -d "$candidate" ]] || return 1
+        find "$candidate" -maxdepth 1 -type f -name '???.json' -size +0c \
+            | sort \
+            | tail -n 1
     }
 
     installed_version() {
-        python "$VALIDATOR" "$1" --field version
+        local manifest
+        manifest=$(manifest_path "$1") || return 1
+        basename "$manifest" .json
     }
 
-    manifest_path() {
-        python "$VALIDATOR" "$1" --field manifest
-    }
-
-    database_domains() {
-        python "$VALIDATOR" "$1" --field domains
-    }
-
-    checked_file_count() {
-        python "$VALIDATOR" "$1" --field checked_files
+    validate_database() {
+        local candidate="$1"
+        local manifest version release_dir
+        manifest=$(manifest_path "$candidate") || return 1
+        version=$(basename "$manifest" .json)
+        [[ "$version" =~ ^[0-9]{3}$ ]] || return 1
+        python -m json.tool "$manifest" >/dev/null 2>&1 || return 1
+        release_dir="$(dirname "$manifest")/v$version"
+        [[ -d "$release_dir" ]] || return 1
+        find "$release_dir" -type f -size +0c -print -quit | grep -q .
     }
 
     archive_status() {
@@ -90,19 +94,18 @@ process PREPARE_VCONTACT3_DATABASE {
     write_metadata() {
         local resolved_path="$1"
         local action="$2"
-        local version manifest domains checked archive_state software_version
+        local version manifest checked archive_state software_version
         version=$(installed_version "$resolved_path")
         manifest=$(manifest_path "$resolved_path")
-        domains=$(database_domains "$resolved_path")
-        checked=$(checked_file_count "$resolved_path")
+        checked=$(find "$(dirname "$manifest")/v$version" -type f -size +0c | wc -l)
         archive_state=$(archive_status "$(dirname "$manifest")" "$version")
         software_version=$(vcontact3_version)
 
-        printf 'database_path\tdatabase_source\tvalidation\tinstallation_action\trequested_version\tinstalled_version\tmanifest_path\tdomains\tvalidated_file_count\tarchive_status\tvcontact3_version\tupdate_requested\n' > vcontact3_database_metadata.tsv
-        printf '%s\t%s\tpassed\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf 'database_path\tdatabase_source\tvalidation\tinstallation_action\trequested_version\tinstalled_version\tmanifest_path\textracted_file_count\tarchive_status\tvcontact3_version\tupdate_requested\n' > vcontact3_database_metadata.tsv
+        printf '%s\t%s\tpassed\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "$resolved_path" "$DATABASE_SOURCE" "$action" \
-            "$REQUESTED_VERSION" "$version" "$manifest" "$domains" \
-            "$checked" "$archive_state" "$software_version" \
+            "$REQUESTED_VERSION" "$version" "$manifest" "$checked" \
+            "$archive_state" "$software_version" \
             "$UPDATE_DATABASE" >> vcontact3_database_metadata.tsv
     }
 
@@ -123,8 +126,8 @@ process PREPARE_VCONTACT3_DATABASE {
         if ! validate_database "$RESOLVED_DATABASE"; then
             echo 'ERROR: The user-supplied vConTACT3 database failed validation:' >&2
             echo "       $DATABASE_PATH" >&2
-            echo 'Expected an official three-digit JSON manifest, both prokaryotic' >&2
-            echo 'and eukaryotic RefSeq data, identity tables, and the v232+ VOGDB files.' >&2
+            echo 'Expected the official three-digit JSON manifest and its extracted' >&2
+            echo 'v<version>/ directory, as produced by vcontact3 prepare_databases.' >&2
             exit 1
         fi
         emit_database "$RESOLVED_DATABASE" 'skipped-user-supplied-database'
