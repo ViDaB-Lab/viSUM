@@ -42,6 +42,7 @@ class ResourceWorkflowContractTests(unittest.TestCase):
             "run_gianthunter.nf": "params.gianthunter_cpus",
             "predict_vicat_orfs.nf": "params.vicat_orf_cpus",
             "run_vicat_diamond.nf": "params.vicat_cpus",
+            "run_vitap.nf": "params.vitap_cpus",
         }
         for module_name, declaration in expected.items():
             with self.subTest(module=module_name):
@@ -59,6 +60,7 @@ class ResourceWorkflowContractTests(unittest.TestCase):
             "run_gianthunter.nf": '--threads "${task.cpus}"',
             "predict_vicat_orfs.nf": '-j "${task.cpus}"',
             "run_vicat_diamond.nf": '--threads "${task.cpus}"',
+            "run_vitap.nf": '--threads "${task.cpus}"',
             "vicat_database.nf": '--threads "${task.cpus}"',
             "virsorter2_database.nf": "-j ${task.cpus}",
         }
@@ -98,6 +100,7 @@ class ResourceWorkflowContractTests(unittest.TestCase):
             "gianthunter_cpus",
             "vicat_orf_cpus",
             "vicat_cpus",
+            "vitap_cpus",
         ):
             self.assertIn(f"'--{parameter}': params.{parameter}", self.workflow)
 

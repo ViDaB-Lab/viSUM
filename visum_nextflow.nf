@@ -34,6 +34,7 @@ include { RUN_CHECKV } from './modules/local/run_checkv'
 include { STANDARDIZE_CHECKV } from './modules/local/standardize_checkv'
 include { REFINE_PROVIRAL_REGIONS } from './modules/local/refine_proviral_regions'
 include { PREPARE_VITAP_DATABASE } from './modules/local/vitap_database'
+include { RUN_VITAP } from './modules/local/run_vitap'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -246,6 +247,10 @@ workflow {
     )
     def runCheckv = parseBooleanParameter(params.run_checkv, '--run_checkv')
     def runVitap = parseBooleanParameter(params.run_vitap, '--run_vitap')
+    def vitapIncludeLowConfidence = parseBooleanParameter(
+        params.vitap_include_low_confidence,
+        '--vitap_include_low_confidence'
+    )
     def allowCt3OnlyRefinement = parseBooleanParameter(
         params.allow_ct3_only_refinement,
         '--allow_ct3_only_refinement'
@@ -986,9 +991,8 @@ workflow {
         )
     }
 
-    // VITAP is a post-discovery taxonomy-refinement tool. For now, this gate
-    // prepares or validates its persistent database only; the analysis module
-    // will consume this output in the next implementation step.
+    // Prepare or validate the persistent VITAP database now. Taxonomic
+    // assignment runs later against the post-gate, provirus-refined FASTA.
     if( runVitap ) {
         def userSuppliedDatabase = params.vitap_db != null
         if( userSuppliedDatabase && params.vitap_vmr != null ) {
@@ -1039,6 +1043,8 @@ workflow {
         PREPARE_VITAP_DATABASE.out.database.view { database, metadata ->
             "VITAP_DB database=${database} metadata=${metadata.name}"
         }
+
+        ch_vitap_database = PREPARE_VITAP_DATABASE.out.database
     }
 
     ch_discovery_evidence_by_sample = ch_discovery_evidence
@@ -1187,5 +1193,23 @@ workflow {
     REFINE_PROVIRAL_REGIONS.out.refined.view {
         prefix, type, refinedFasta, regionMap, boundaryAudit, summary ->
             "REFINED sample=${prefix} type=${type} fasta=${refinedFasta.name} map=${regionMap.name}"
+    }
+
+    if( runVitap ) {
+        ch_vitap_assignment_runner = Channel.value(
+            file("${projectDir}/bin/run_vitap_assignment.py")
+        )
+
+        RUN_VITAP(
+            REFINE_PROVIRAL_REGIONS.out.refined,
+            ch_vitap_database,
+            ch_vitap_assignment_runner,
+            vitapIncludeLowConfidence
+        )
+
+        RUN_VITAP.out.results.view {
+            prefix, type, regionMap, best, allLineages, fallback, log, metadata ->
+                "VITAP sample=${prefix} type=${type} best=${best.name} all=${allLineages.name}"
+        }
     }
 }
