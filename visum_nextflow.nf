@@ -36,6 +36,7 @@ include { REFINE_PROVIRAL_REGIONS } from './modules/local/refine_proviral_region
 include { PREPARE_VITAP_DATABASE } from './modules/local/vitap_database'
 include { RUN_VITAP } from './modules/local/run_vitap'
 include { STANDARDIZE_VITAP } from './modules/local/standardize_vitap'
+include { PREPARE_VCONTACT3_DATABASE } from './modules/local/vcontact3_database'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -146,6 +147,7 @@ workflow {
         '--vicat_cpus': params.vicat_cpus,
         '--checkv_cpus': params.checkv_cpus,
         '--vitap_cpus': params.vitap_cpus,
+        '--vcontact3_cpus': params.vcontact3_cpus,
     ]
     analysisCpuParameters.each { parameterName, rawValue ->
         parsePositiveIntegerParameter(rawValue, parameterName)
@@ -248,6 +250,10 @@ workflow {
     )
     def runCheckv = parseBooleanParameter(params.run_checkv, '--run_checkv')
     def runVitap = parseBooleanParameter(params.run_vitap, '--run_vitap')
+    def runVcontact3 = parseBooleanParameter(
+        params.run_vcontact3,
+        '--run_vcontact3'
+    )
     def vitapIncludeLowConfidence = parseBooleanParameter(
         params.vitap_include_low_confidence,
         '--vitap_include_low_confidence'
@@ -275,7 +281,8 @@ workflow {
         "GiantHunter=${runGianthunter}, " +
         "viCAT=${runVicat}, " +
         "CheckV=${runCheckv}, " +
-        "VITAP=${runVitap}"
+        "VITAP=${runVitap}, " +
+        "vConTACT3=${runVcontact3}"
     )
 
     NORMALIZE_FASTA(ch_samples)
@@ -1046,6 +1053,50 @@ workflow {
         }
 
         ch_vitap_database = PREPARE_VITAP_DATABASE.out.database
+    }
+
+    // Prepare or validate the persistent vConTACT3 reference database. The
+    // future analysis module will consume the post-gate, provirus-refined
+    // FASTA alongside this version-resolved database bundle.
+    if( runVcontact3 ) {
+        def userSuppliedDatabase = params.vcontact3_db != null
+        def vcontact3DatabasePath = userSuppliedDatabase
+            ? file(params.vcontact3_db).toString()
+            : file(params.vcontact3_dir).toString()
+        def vcontact3DatabaseSource = userSuppliedDatabase
+            ? 'user-supplied'
+            : 'viSUM-managed'
+        def vcontact3AutoDownload = parseBooleanParameter(
+            params.vcontact3_auto_download,
+            '--vcontact3_auto_download'
+        )
+        def vcontact3UpdateDatabase = parseBooleanParameter(
+            params.vcontact3_update_database,
+            '--vcontact3_update_database'
+        )
+        def vcontact3CleanupArchive = parseBooleanParameter(
+            params.vcontact3_cleanup_archive,
+            '--vcontact3_cleanup_archive'
+        )
+
+        ch_vcontact3_database_request = Channel.of(
+            tuple(
+                vcontact3DatabasePath,
+                vcontact3DatabaseSource,
+                vcontact3AutoDownload,
+                vcontact3UpdateDatabase,
+                vcontact3CleanupArchive,
+                file("${projectDir}/bin/validate_vcontact3_database.py")
+            )
+        )
+
+        PREPARE_VCONTACT3_DATABASE(ch_vcontact3_database_request)
+
+        PREPARE_VCONTACT3_DATABASE.out.database.view { database, metadata ->
+            "VCONTACT3_DB database=${database} metadata=${metadata.name}"
+        }
+
+        ch_vcontact3_database = PREPARE_VCONTACT3_DATABASE.out.database
     }
 
     ch_discovery_evidence_by_sample = ch_discovery_evidence
