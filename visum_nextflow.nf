@@ -38,6 +38,7 @@ include { RUN_VITAP } from './modules/local/run_vitap'
 include { STANDARDIZE_VITAP } from './modules/local/standardize_vitap'
 include { PREPARE_VCONTACT3_DATABASE } from './modules/local/vcontact3_database'
 include { RUN_VCONTACT3 } from './modules/local/run_vcontact3'
+include { STANDARDIZE_VCONTACT3 } from './modules/local/standardize_vcontact3'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -1284,6 +1285,12 @@ workflow {
         RUN_VCONTACT3.out.results.view {
             prefix, type, regionMap, assignments, metrics, logs, metadata ->
                 "VCONTACT3 sample=${prefix} type=${type} domain_mode=${vcontact3DbDomain} assignments=${assignments}"
+        }
+
+        STANDARDIZE_VCONTACT3(RUN_VCONTACT3.out.results)
+
+        STANDARDIZE_VCONTACT3.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
     }
 }

@@ -74,7 +74,7 @@ process RUN_VCONTACT3 {
         exit 1
     fi
 
-    printf 'sample_id\tinput_type\tdatabase_domain\trefined_sequence_count\tassignment_row_count\tuser_assignment_row_count\tthreads\tvcontact3_version\tdatabase_path\tdatabase_version\trun_status\tinput_fasta\n' \
+    printf 'sample_id\tinput_type\tdatabase_domain\trefined_sequence_count\tassignment_row_count\tcandidate_assignment_row_count\tclustered_candidate_count\tthreads\tvcontact3_version\tdatabase_path\tdatabase_version\trun_status\tinput_fasta\n' \
         > "\$METADATA_FILE"
 
     for DOMAIN in "\${DOMAINS[@]}"; do
@@ -123,11 +123,13 @@ process RUN_VCONTACT3 {
         cp "\$DOMAIN_OUTPUT/exports/performance_metrics.csv" "\$METRICS"
 
         ASSIGNMENT_COUNT=\$(awk 'NR > 1 { count++ } END { print count + 0 }' "\$ASSIGNMENTS")
-        USER_ASSIGNMENT_COUNT=\$(python -c "import csv,sys; rows=csv.DictReader(open(sys.argv[1], newline='', encoding='utf-8-sig')); print(sum(str(row.get('Reference', '')).strip().lower() in {'false','0'} for row in rows))" "\$ASSIGNMENTS")
+        CANDIDATE_ASSIGNMENT_COUNT=\$(python -c "import csv,sys; ids={row['sequence_id'].strip() for row in csv.DictReader(open(sys.argv[2], newline='', encoding='utf-8-sig'), delimiter='\\t')}; rows=csv.DictReader(open(sys.argv[1], newline='', encoding='utf-8-sig')); print(sum(bool({str(row.get(key, '')).strip() for key in ('Genome','GenomeName')} & ids) for row in rows))" "\$ASSIGNMENTS" "${provirus_region_map}")
+        CLUSTERED_CANDIDATE_COUNT=\$(python -c "import csv,sys; ids={row['sequence_id'].strip() for row in csv.DictReader(open(sys.argv[2], newline='', encoding='utf-8-sig'), delimiter='\\t')}; rows=csv.DictReader(open(sys.argv[1], newline='', encoding='utf-8-sig')); print(sum(bool({str(row.get(key, '')).strip() for key in ('Genome','GenomeName')} & ids) and str(row.get('Reference', '')).strip().lower() in {'false','0'} for row in rows))" "\$ASSIGNMENTS" "${provirus_region_map}")
 
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
             "${prefix}" "${type}" "\$DOMAIN" "\$INPUT_COUNT" \
-            "\$ASSIGNMENT_COUNT" "\$USER_ASSIGNMENT_COUNT" "${task.cpus}" \
+            "\$ASSIGNMENT_COUNT" "\$CANDIDATE_ASSIGNMENT_COUNT" \
+            "\$CLUSTERED_CANDIDATE_COUNT" "${task.cpus}" \
             "\$VCONTACT3_VERSION" "\$RESOLVED_DATABASE_PATH" \
             "\$DATABASE_VERSION" "\$RUN_STATUS" "${refined_fasta.name}" \
             >> "\$METADATA_FILE"

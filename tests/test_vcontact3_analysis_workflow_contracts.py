@@ -12,6 +12,7 @@ class Vcontact3AnalysisWorkflowContractTests(unittest.TestCase):
         workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
 
         self.assertIn("include { RUN_VCONTACT3 }", workflow)
+        self.assertIn("include { STANDARDIZE_VCONTACT3 }", workflow)
         self.assertIn("RUN_VCONTACT3(\n            REFINE_PROVIRAL_REGIONS.out.refined", workflow)
         self.assertLess(
             workflow.index("REFINE_PROVIRAL_REGIONS(ch_provirus_refinement_inputs)"),
@@ -19,6 +20,7 @@ class Vcontact3AnalysisWorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("vcontact3DbDomain", workflow)
         self.assertIn("['both', 'prokaryotes', 'eukaryotes']", workflow)
+        self.assertIn("STANDARDIZE_VCONTACT3(RUN_VCONTACT3.out.results)", workflow)
 
     def test_module_uses_official_command_and_resource_budget(self) -> None:
         module = (ROOT / "modules/local/run_vcontact3.nf").read_text(encoding="utf-8")
@@ -42,7 +44,19 @@ class Vcontact3AnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn('path("${prefix}.vcontact3_*_performance_metrics.csv")', module)
         self.assertIn('path("${prefix}.vcontact3_run_metadata.tsv")', module)
         self.assertIn("skipped_no_refined_candidates", module)
-        self.assertIn("user_assignment_row_count", module)
+        self.assertIn("candidate_assignment_row_count", module)
+        self.assertIn("clustered_candidate_count", module)
+
+    def test_standardizer_publishes_formal_evidence_and_group_membership(self) -> None:
+        module = (ROOT / "modules/local/standardize_vcontact3.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("standardize_vcontact3.py", module)
+        self.assertIn('path("${prefix}.vcontact3_evidence.tsv")', module)
+        self.assertIn('path("${prefix}.vcontact3_group_membership.tsv")', module)
+        self.assertIn("--assignments", module)
+        self.assertIn("--region-map", module)
 
     def test_config_documents_domain_mode(self) -> None:
         config = (ROOT / "visum.config").read_text(encoding="utf-8")
@@ -50,6 +64,8 @@ class Vcontact3AnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn("vcontact3_db_domain       = 'both'", config)
         self.assertIn("prokaryotes", config)
         self.assertIn("eukaryotes", config)
+        self.assertIn("vcontact3_standardizer_memory", config)
+        self.assertIn("vcontact3_standardizer_time", config)
 
 
 if __name__ == "__main__":
