@@ -15,6 +15,9 @@ OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + [
     "fdr",
     "genetic_code",
     "marker_enrichment",
+    "n_uscg",
+    "evidence_strength",
+    "strength_basis",
 ]
 
 VIRUS_REQUIRED = {
@@ -52,6 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input-type", required=True, choices=("dna", "rna"))
     parser.add_argument("--header-map", required=True, type=Path)
     parser.add_argument("--virus-summary", required=True, type=Path)
+    parser.add_argument("--virus-genes", required=True, type=Path)
     parser.add_argument("--plasmid-summary", required=True, type=Path)
     parser.add_argument("--run-metadata", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
@@ -97,6 +101,9 @@ def load_run_metadata(
             "sample_id",
             "input_type",
             "genomad_version",
+            "input_sequence_count",
+            "score_calibration_requested",
+            "score_calibration_applied",
             "run_status",
             "virus_call_count",
             "plasmid_call_count",
@@ -116,12 +123,34 @@ def load_run_metadata(
         raise ValueError(f"Unrecognized geNomad run status: {row['run_status']}")
     parse_nonnegative_int(row["virus_call_count"], "virus call count", sample_id)
     parse_nonnegative_int(row["plasmid_call_count"], "plasmid call count", sample_id)
+    parse_nonnegative_int(row["input_sequence_count"], "input sequence count", sample_id)
+    parse_bool(row["score_calibration_requested"], "score_calibration_requested")
+    calibration_applied = parse_bool(
+        row["score_calibration_applied"], "score_calibration_applied"
+    )
+    expected_applied = (
+        parse_bool(
+            row["score_calibration_requested"], "score_calibration_requested"
+        )
+        and int(row["input_sequence_count"]) >= 1000
+    )
+    if calibration_applied != expected_applied:
+        raise ValueError(
+            "geNomad calibration metadata disagrees with its >=1,000-sequence rule"
+        )
     return row
 
 
 def clean_missing(value: str | None) -> str:
     value = "" if value is None else value.strip()
     return "" if value.lower() in {"", "na", "nan", "none"} else value
+
+
+def parse_bool(value: str, label: str) -> bool:
+    normalized = clean_missing(value).lower()
+    if normalized not in {"true", "false"}:
+        raise ValueError(f"{label} must be true or false; found: {value}")
+    return normalized == "true"
 
 
 def validate_score(value: str, label: str, sequence_id: str) -> str:
@@ -142,6 +171,51 @@ def parse_nonnegative_int(value: str, label: str, sequence_id: str) -> int:
     if numeric < 0:
         raise ValueError(f"{label} must be nonnegative for {sequence_id}: {value}")
     return numeric
+
+
+def parse_float(value: str, label: str, sequence_id: str) -> float:
+    value = clean_missing(value)
+    if not value:
+        raise ValueError(f"Missing {label} for {sequence_id}")
+    return float(value)
+
+
+def load_virus_gene_metrics(
+    path: Path, virus_rows: list[dict[str, str]]
+) -> dict[str, int]:
+    gene_rows = read_tsv(path, {"gene", "uscg"})
+    expected_gene_counts = {
+        row["seq_name"].strip(): parse_nonnegative_int(
+            row["n_genes"], "gene count", row["seq_name"].strip()
+        )
+        for row in virus_rows
+    }
+    observed_gene_counts = {sequence_id: 0 for sequence_id in expected_gene_counts}
+    uscg_counts = {sequence_id: 0 for sequence_id in expected_gene_counts}
+
+    for row in gene_rows:
+        gene_id = row["gene"].strip()
+        sequence_id, separator, gene_number = gene_id.rpartition("_")
+        if not separator or not gene_number.isdigit():
+            raise ValueError(f"Unexpected geNomad virus gene identifier: {gene_id}")
+        if sequence_id not in expected_gene_counts:
+            raise ValueError(
+                f"Virus gene does not map to a virus-summary sequence: {gene_id}"
+            )
+        uscg = clean_missing(row["uscg"])
+        if uscg not in {"0", "1"}:
+            raise ValueError(f"Invalid USCG indicator for {gene_id}: {row['uscg']}")
+        observed_gene_counts[sequence_id] += 1
+        uscg_counts[sequence_id] += int(uscg)
+
+    for sequence_id, expected_count in expected_gene_counts.items():
+        observed_count = observed_gene_counts[sequence_id]
+        if observed_count != expected_count:
+            raise ValueError(
+                "geNomad virus summary and virus-gene table disagree for "
+                f"{sequence_id}: expected {expected_count}, found {observed_count}"
+            )
+    return uscg_counts
 
 
 def resolve_identity(
@@ -188,6 +262,8 @@ def standardize_row(
     classification: str,
     sample_id: str,
     header_records: dict[str, dict[str, str]],
+    calibration_applied: bool,
+    n_uscg: int | None = None,
 ) -> dict[str, str]:
     sequence_id = row["seq_name"].strip()
     if not sequence_id:
@@ -197,9 +273,46 @@ def standardize_row(
     parent_id, record_type, coordinates = resolve_identity(
         sequence_id, coordinates, header_records
     )
-    score_type = "virus_score" if classification == "virus" else "plasmid_score"
-    score = validate_score(row[score_type], score_type, sequence_id)
+    source_score_type = "virus_score" if classification == "virus" else "plasmid_score"
+    score = validate_score(row[source_score_type], source_score_type, sequence_id)
+    score_type = (
+        f"calibrated_{classification}_probability"
+        if calibration_applied
+        else source_score_type
+    )
     taxonomy = clean_missing(row.get("taxonomy", ""))
+    n_genes = parse_nonnegative_int(row["n_genes"], "gene count", sequence_id)
+    n_hallmarks = parse_nonnegative_int(
+        row["n_hallmarks"], "hallmark count", sequence_id
+    )
+    marker_enrichment = parse_float(
+        row["marker_enrichment"], "marker enrichment", sequence_id
+    )
+    fdr = clean_missing(row.get("fdr", ""))
+    parsed_fdr: float | None = None
+    if fdr:
+        parsed_fdr = float(validate_score(fdr, "FDR", sequence_id))
+    if calibration_applied and parsed_fdr is None:
+        raise ValueError(f"Calibrated geNomad call lacks an FDR for {sequence_id}")
+    if not calibration_applied and parsed_fdr is not None:
+        raise ValueError(f"Uncalibrated geNomad call unexpectedly has an FDR: {sequence_id}")
+
+    evidence_strength = "qualified"
+    strength_basis = "genomad_default_summary"
+    if classification == "virus":
+        if n_uscg is None:
+            raise ValueError(f"Missing USCG count for geNomad virus: {sequence_id}")
+        passes_conservative = (
+            float(score) >= 0.80
+            and (parsed_fdr is None or parsed_fdr <= 0.05)
+            and n_genes >= 1
+            and marker_enrichment >= 1.50
+            and n_hallmarks >= 1
+            and n_uscg <= 2
+        )
+        if passes_conservative:
+            evidence_strength = "strong"
+            strength_basis = "genomad_conservative_preset"
 
     output = {
         "sample_id": sample_id,
@@ -213,11 +326,14 @@ def standardize_row(
         "score_type": score_type,
         "length": row["length"].strip(),
         "topology": clean_missing(row.get("topology", "")),
-        "n_genes": row["n_genes"].strip(),
-        "n_hallmarks": row["n_hallmarks"].strip(),
-        "fdr": clean_missing(row.get("fdr", "")),
+        "n_genes": str(n_genes),
+        "n_hallmarks": str(n_hallmarks),
+        "fdr": fdr,
         "genetic_code": row["genetic_code"].strip(),
         "marker_enrichment": row["marker_enrichment"].strip(),
+        "n_uscg": "" if n_uscg is None else str(n_uscg),
+        "evidence_strength": evidence_strength,
+        "strength_basis": strength_basis,
     }
     output.update(taxonomy_fields(taxonomy, classification))
     return output
@@ -231,6 +347,10 @@ def main() -> None:
     evidence_rows: list[dict[str, str]] = []
     virus_rows = read_tsv(args.virus_summary, VIRUS_REQUIRED)
     plasmid_rows = read_tsv(args.plasmid_summary, PLASMID_REQUIRED)
+    virus_uscg_counts = load_virus_gene_metrics(args.virus_genes, virus_rows)
+    calibration_applied = parse_bool(
+        metadata["score_calibration_applied"], "score_calibration_applied"
+    )
 
     virus_call_count = parse_nonnegative_int(
         metadata["virus_call_count"], "virus call count", args.sample_id
@@ -257,6 +377,8 @@ def main() -> None:
                 "virus",
                 args.sample_id,
                 header_records,
+                calibration_applied,
+                virus_uscg_counts[row["seq_name"].strip()],
             )
         )
     for row in plasmid_rows:
@@ -266,6 +388,7 @@ def main() -> None:
                 "plasmid",
                 args.sample_id,
                 header_records,
+                calibration_applied,
             )
         )
 

@@ -106,6 +106,8 @@ def test_locus_voting_and_zero_hit_contig(tmp_path: Path) -> None:
     assert evidence_rows[0]["classification_rank"] == "species"
     assert evidence_rows[0]["taxonomy_conflict"] == "true"
     assert evidence_rows[0]["score"] == "1"
+    assert evidence_rows[0]["evidence_strength"] == "qualified"
+    assert evidence_rows[0]["strength_basis"] == "vicat_viral_protein_homology"
     assert len(audit_rows) == 4
     assert {row["reference_id"] for row in audit_rows} == {"repA", "repB", "repC"}
     assert all(row["orf_taxonomy_support_threshold"] == "0.6" for row in audit_rows)
@@ -192,6 +194,8 @@ def test_conflicted_references_remain_viral_hits_and_abstain_below_safe_rank(tmp
     assert evidence_row["hit_loci"] == "3"
     assert evidence_row["score"] == "1"
     assert evidence_row["classification"] == "virus"
+    assert evidence_row["evidence_strength"] == "qualified"
+    assert evidence_row["strength_basis"] == "vicat_viral_protein_homology"
     assert evidence_row["classification_rank"] == "species"
     assert evidence_row["r__Realm"] == "r__R"
     assert evidence_row["f__Family"] == "f__A"

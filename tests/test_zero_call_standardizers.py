@@ -26,11 +26,27 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
 
 
 class ZeroCallStandardizerTests(unittest.TestCase):
+    def test_virsorter2_uses_author_recommended_strength_cutoffs(self) -> None:
+        self.assertIsNone(standardize_virsorter2.classify_evidence_strength(0.4999))
+        self.assertEqual(
+            standardize_virsorter2.classify_evidence_strength(0.50),
+            ("qualified", "virsorter2_default_cutoff"),
+        )
+        self.assertEqual(
+            standardize_virsorter2.classify_evidence_strength(0.8999),
+            ("qualified", "virsorter2_default_cutoff"),
+        )
+        self.assertEqual(
+            standardize_virsorter2.classify_evidence_strength(0.90),
+            ("strong", "virsorter2_high_confidence_cutoff"),
+        )
+
     def test_genomad_zero_viruses_preserves_plasmid_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_directory:
             directory = Path(temp_directory)
             header_map = directory / "header_map.tsv"
             virus_summary = directory / "virus_summary.tsv"
+            virus_genes = directory / "virus_genes.tsv"
             plasmid_summary = directory / "plasmid_summary.tsv"
             metadata = directory / "metadata.tsv"
             output = directory / "evidence.tsv"
@@ -51,6 +67,7 @@ class ZeroCallStandardizerTests(unittest.TestCase):
                 sorted(standardize_genomad.VIRUS_REQUIRED),
                 [],
             )
+            write_tsv(virus_genes, ["gene", "uscg"], [])
             write_tsv(
                 plasmid_summary,
                 sorted(standardize_genomad.PLASMID_REQUIRED),
@@ -73,7 +90,10 @@ class ZeroCallStandardizerTests(unittest.TestCase):
                 [
                     "sample_id",
                     "input_type",
+                    "input_sequence_count",
                     "genomad_version",
+                    "score_calibration_requested",
+                    "score_calibration_applied",
                     "run_status",
                     "virus_call_count",
                     "plasmid_call_count",
@@ -82,7 +102,10 @@ class ZeroCallStandardizerTests(unittest.TestCase):
                     {
                         "sample_id": "sample",
                         "input_type": "dna",
+                        "input_sequence_count": "1",
                         "genomad_version": "1.12.0",
+                        "score_calibration_requested": "true",
+                        "score_calibration_applied": "false",
                         "run_status": "completed_no_viruses_detected",
                         "virus_call_count": "0",
                         "plasmid_call_count": "1",
@@ -100,6 +123,8 @@ class ZeroCallStandardizerTests(unittest.TestCase):
                 str(header_map),
                 "--virus-summary",
                 str(virus_summary),
+                "--virus-genes",
+                str(virus_genes),
                 "--plasmid-summary",
                 str(plasmid_summary),
                 "--run-metadata",
@@ -114,6 +139,134 @@ class ZeroCallStandardizerTests(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["classification"], "plasmid")
             self.assertEqual(rows[0]["sequence_id"], "sample__c000001")
+            self.assertEqual(rows[0]["evidence_strength"], "qualified")
+            self.assertEqual(rows[0]["n_uscg"], "")
+
+    def test_genomad_counts_uscgs_and_applies_official_conservative_preset(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_directory:
+            directory = Path(temp_directory)
+            header_map = directory / "header_map.tsv"
+            virus_summary = directory / "virus_summary.tsv"
+            virus_genes = directory / "virus_genes.tsv"
+            plasmid_summary = directory / "plasmid_summary.tsv"
+            metadata = directory / "metadata.tsv"
+            output = directory / "evidence.tsv"
+            sequence_ids = ["sample__c000001", "sample__c000002"]
+
+            write_tsv(
+                header_map,
+                ["sample_id", "sequence_id", "record_type"],
+                [
+                    {
+                        "sample_id": "sample",
+                        "sequence_id": sequence_id,
+                        "record_type": "input_contig",
+                    }
+                    for sequence_id in sequence_ids
+                ],
+            )
+            virus_rows = []
+            for sequence_id in sequence_ids:
+                virus_rows.append(
+                    {
+                        "seq_name": sequence_id,
+                        "length": "5000",
+                        "topology": "No terminal repeats",
+                        "coordinates": "NA",
+                        "n_genes": "3",
+                        "genetic_code": "11",
+                        "virus_score": "0.9000",
+                        "fdr": "0.0400",
+                        "n_hallmarks": "1",
+                        "marker_enrichment": "2.0000",
+                        "taxonomy": "Viruses;Duplodnaviria;;;;;",
+                    }
+                )
+            write_tsv(
+                virus_summary,
+                sorted(standardize_genomad.VIRUS_REQUIRED),
+                virus_rows,
+            )
+            write_tsv(
+                virus_genes,
+                ["gene", "uscg"],
+                [
+                    {"gene": "sample__c000001_1", "uscg": "1"},
+                    {"gene": "sample__c000001_2", "uscg": "0"},
+                    {"gene": "sample__c000001_3", "uscg": "0"},
+                    {"gene": "sample__c000002_1", "uscg": "1"},
+                    {"gene": "sample__c000002_2", "uscg": "1"},
+                    {"gene": "sample__c000002_3", "uscg": "1"},
+                ],
+            )
+            write_tsv(
+                plasmid_summary,
+                sorted(standardize_genomad.PLASMID_REQUIRED),
+                [],
+            )
+            write_tsv(
+                metadata,
+                [
+                    "sample_id",
+                    "input_type",
+                    "input_sequence_count",
+                    "genomad_version",
+                    "score_calibration_requested",
+                    "score_calibration_applied",
+                    "run_status",
+                    "virus_call_count",
+                    "plasmid_call_count",
+                ],
+                [
+                    {
+                        "sample_id": "sample",
+                        "input_type": "dna",
+                        "input_sequence_count": "1000",
+                        "genomad_version": "1.12.0",
+                        "score_calibration_requested": "true",
+                        "score_calibration_applied": "true",
+                        "run_status": "completed_with_virus_calls",
+                        "virus_call_count": "2",
+                        "plasmid_call_count": "0",
+                    }
+                ],
+            )
+
+            argv = [
+                "standardize_genomad.py",
+                "--sample-id",
+                "sample",
+                "--input-type",
+                "dna",
+                "--header-map",
+                str(header_map),
+                "--virus-summary",
+                str(virus_summary),
+                "--virus-genes",
+                str(virus_genes),
+                "--plasmid-summary",
+                str(plasmid_summary),
+                "--run-metadata",
+                str(metadata),
+                "--output",
+                str(output),
+            ]
+            with patch.object(sys, "argv", argv):
+                standardize_genomad.main()
+
+            rows = {row["sequence_id"]: row for row in read_tsv(output)}
+            self.assertEqual(rows[sequence_ids[0]]["n_uscg"], "1")
+            self.assertEqual(rows[sequence_ids[0]]["evidence_strength"], "strong")
+            self.assertEqual(
+                rows[sequence_ids[0]]["strength_basis"],
+                "genomad_conservative_preset",
+            )
+            self.assertEqual(rows[sequence_ids[1]]["n_uscg"], "3")
+            self.assertEqual(rows[sequence_ids[1]]["evidence_strength"], "qualified")
+            self.assertEqual(
+                rows[sequence_ids[1]]["score_type"],
+                "calibrated_virus_probability",
+            )
 
     def test_virsorter2_zero_viruses_writes_header_only_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_directory:

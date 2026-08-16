@@ -177,6 +177,11 @@ class StandardizeVirBotTests(unittest.TestCase):
         row = rows[0]
         self.assertEqual(row["classification"], "virus")
         self.assertEqual(row["score_type"], "virbot_rna_viral_gene_fraction")
+        self.assertEqual(row["evidence_strength"], "qualified")
+        self.assertEqual(
+            row["strength_basis"],
+            "virbot_adaptive_protein_cutoffs_and_gene_fraction",
+        )
         self.assertEqual(row["c__Class"], "c__Bunyaviricetes")
         self.assertEqual(row["o__Order"], "o__Hareavirales")
         self.assertEqual(row["f__Family"], "f__Nairoviridae")

@@ -40,7 +40,10 @@ METADATA_REQUIRED = {
     "score_file",
     "virus_fasta",
 }
-OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS
+OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + [
+    "evidence_strength",
+    "strength_basis",
+]
 VIRBOT_MINIMUM_GENE_FRACTION = 0.0625
 
 
@@ -357,6 +360,8 @@ def main() -> None:
             "topology": "",
             "n_genes": str(n_genes),
             "n_hallmarks": "",
+            "evidence_strength": "qualified",
+            "strength_basis": "virbot_adaptive_protein_cutoffs_and_gene_fraction",
         }
         output.update(validated_taxonomy(row["Likely_taxa"], ictv_index))
         evidence_rows.append(output)

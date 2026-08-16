@@ -196,6 +196,11 @@ class StandardizeDeepMicroClass2Tests(unittest.TestCase):
                     row["score_type"],
                     "deepmicroclass2_top_class_probability",
                 )
+                self.assertEqual(row["evidence_strength"], "qualified")
+                self.assertEqual(
+                    row["strength_basis"],
+                    "deepmicroclass2_top_class_official_threshold",
+                )
 
     def test_bacterial_fallback_is_not_cellular_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_directory:

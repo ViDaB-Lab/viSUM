@@ -24,6 +24,8 @@ OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + [
     "dna_rep_hallmark_genes",
     "rdrp_hallmark_genes",
     "genetic_code",
+    "evidence_strength",
+    "strength_basis",
 ]
 
 SUMMARY_REQUIRED = {
@@ -413,7 +415,10 @@ def main() -> None:
         )
         total_hallmarks = virion_count + dna_rep_count + rdrp_count
         if total_hallmarks < 1:
-            raise ValueError(f"CT3 virus call contains no hallmark support: {call_id}")
+            # CT3 permits a user-selected zero-hallmark discovery threshold.
+            # Preserve such calls in CT3's native outputs, but do not treat
+            # them as qualified viral evidence in viSUM.
+            continue
 
         sequence_id, parent_id, record_type, coordinates, parent_length = (
             resolve_identity(
@@ -427,6 +432,15 @@ def main() -> None:
             raise ValueError(f"Duplicate standardized CT3 sequence_id: {sequence_id}")
         evidence_ids.add(sequence_id)
 
+        topology = clean_missing(row["end_feature"])
+        is_linear = record_type == "provirus" or not topology
+        if is_linear and total_hallmarks >= 2:
+            evidence_strength = "strong"
+            strength_basis = "cenotetaker3_two_hallmark_linear_recommendation"
+        else:
+            evidence_strength = "qualified"
+            strength_basis = "cenotetaker3_default_hallmark_requirement"
+
         output = {
             "sample_id": args.sample_id,
             "sequence_id": sequence_id,
@@ -438,7 +452,7 @@ def main() -> None:
             "score": "",
             "score_type": "",
             "length": str(actual_length),
-            "topology": clean_missing(row["end_feature"]),
+            "topology": topology,
             "n_genes": str(reported_gene_count),
             "n_hallmarks": str(total_hallmarks),
             "parent_length": str(parent_length),
@@ -449,6 +463,8 @@ def main() -> None:
             "dna_rep_hallmark_genes": clean_missing(row["rep_hallmark_genes"]),
             "rdrp_hallmark_genes": clean_missing(row["RDRP_hallmark_genes"]),
             "genetic_code": clean_missing(row["gcode"]),
+            "evidence_strength": evidence_strength,
+            "strength_basis": strength_basis,
         }
         output.update(parse_taxonomy(row["taxonomy_hierarchy"]))
         evidence_rows.append(output)

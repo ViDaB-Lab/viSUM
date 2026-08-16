@@ -154,6 +154,14 @@ class StandardizeDeep6Tests(unittest.TestCase):
                 self.assertEqual(row["score"], "0.90")
                 self.assertEqual(row["score_type"], "deep6_top_class_score")
                 self.assertEqual(row["record_type"], "input_contig")
+                self.assertEqual(row["evidence_strength"], "qualified")
+                self.assertEqual(
+                    row["strength_basis"],
+                    "deep6_top_score_and_median_thresholds",
+                )
+
+            for deep6_class in ("duplo", "mono", "ribo", "vari"):
+                self.assertEqual(by_class[deep6_class]["evidence_strength"], "qualified")
 
     def test_zero_predictions_writes_header_only_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_directory:

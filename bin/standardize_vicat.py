@@ -23,7 +23,11 @@ EXTRA_COLUMNS = [
     "taxonomy_eligible_loci", "taxonomy_supporting_loci",
     "classification_rank", "taxonomy_conflict", "reference_taxonomy_conflict_loci",
 ]
-OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + EXTRA_COLUMNS
+OUTPUT_COLUMNS = (
+    CORE_EVIDENCE_COLUMNS
+    + ["evidence_strength", "strength_basis"]
+    + EXTRA_COLUMNS
+)
 LOCUS_COLUMNS = [
     "sample_id", "sequence_id", "locus_id", "coordinates", "strand", "orf_ids",
     "orf_callers", "protein_length", "has_qualified_hit", "qualified_hit_count",
@@ -514,6 +518,8 @@ def main() -> None:
                 "topology": "",
                 "n_genes": total_loci,
                 "n_hallmarks": "",
+                "evidence_strength": "qualified",
+                "strength_basis": "vicat_viral_protein_homology",
                 **taxonomy,
                 "orf_loci": total_loci,
                 "hit_loci": hit_loci,

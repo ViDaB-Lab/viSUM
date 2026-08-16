@@ -68,7 +68,11 @@ SCORE_REQUIRED = {
     "confidence",
     *DEEPMICROCLASS2_CLASSES,
 }
-OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + ["deepmicroclass2_class"]
+OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + [
+    "deepmicroclass2_class",
+    "evidence_strength",
+    "strength_basis",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -368,6 +372,8 @@ def main() -> None:
             "n_genes": "",
             "n_hallmarks": "",
             "deepmicroclass2_class": top_class,
+            "evidence_strength": "qualified",
+            "strength_basis": "deepmicroclass2_top_class_official_threshold",
         }
         output.update(taxonomy_fields(top_class, classification))
         evidence_rows.append(output)

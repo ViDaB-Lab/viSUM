@@ -217,12 +217,20 @@ class StandardizeGiantHunterTests(unittest.TestCase):
         self.assertEqual(
             taxonomy["score_type"], "gianthunter_weighted_lca_support"
         )
+        self.assertEqual(taxonomy["evidence_strength"], "qualified")
+        self.assertEqual(
+            taxonomy["strength_basis"], "gianthunter_ncldv_taxonomy_call"
+        )
         self.assertEqual(taxonomy["g__Genus"], "g__Cervidpoxvirus")
         self.assertEqual(taxonomy["s__Species"], "s__unclassified")
         self.assertEqual(taxonomy["n_genes"], "2")
 
         model = by_id["contig_model"]
         self.assertEqual(model["score_type"], "gianthunter_model_score")
+        self.assertEqual(model["evidence_strength"], "qualified")
+        self.assertEqual(
+            model["strength_basis"], "gianthunter_model_positive"
+        )
         self.assertEqual(model["r__Realm"], "r__Varidnaviria")
         self.assertEqual(model["k__Kingdom"], "k__Bamfordvirae")
         self.assertEqual(model["p__Phylum"], "p__Nucleocytoviricota")

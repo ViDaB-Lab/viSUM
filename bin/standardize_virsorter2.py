@@ -16,6 +16,8 @@ OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + [
     "viral_gene_percent",
     "cellular_gene_percent",
     "max_score_group",
+    "evidence_strength",
+    "strength_basis",
 ]
 
 SCORE_REQUIRED = {
@@ -165,6 +167,15 @@ def parse_percentage(value: str, label: str, sequence_id: str) -> str:
     return cleaned
 
 
+def classify_evidence_strength(score: float) -> tuple[str, str] | None:
+    """Apply the score cutoffs recommended by the VirSorter2 authors."""
+    if score >= 0.90:
+        return "strong", "virsorter2_high_confidence_cutoff"
+    if score >= 0.50:
+        return "qualified", "virsorter2_default_cutoff"
+    return None
+
+
 def parse_positive_int(value: str, label: str, sequence_id: str) -> int:
     cleaned = clean_missing(value)
     if not cleaned:
@@ -309,6 +320,13 @@ def main() -> None:
         score, score_text = parse_score(row["max_score"], "maximum score", sequence_id)
         if score + 1e-9 < min_score:
             raise ValueError(f"VirSorter2 call is below the configured cutoff: {sequence_id}")
+        strength = classify_evidence_strength(score)
+        if strength is None:
+            # A user may run VirSorter2 below its documented default cutoff for
+            # exploratory purposes. Such rows remain in the native score table
+            # but are not formal evidence for the viSUM discovery gate.
+            continue
+        evidence_strength, strength_basis = strength
         max_group = row["max_score_group"].strip()
         if max_group not in groups:
             raise ValueError(
@@ -353,6 +371,8 @@ def main() -> None:
                 row["cellular"], "cellular gene percentage", sequence_id
             ),
             "max_score_group": max_group,
+            "evidence_strength": evidence_strength,
+            "strength_basis": strength_basis,
         }
         output.update(unclassified_taxonomy("virus"))
         evidence_rows.append(output)

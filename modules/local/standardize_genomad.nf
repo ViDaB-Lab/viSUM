@@ -11,6 +11,7 @@ process STANDARDIZE_GENOMAD {
     tuple val(prefix),
           val(type),
           path(virus_summary),
+          path(virus_genes),
           path(plasmid_summary),
           path(run_metadata),
           path(header_map)
@@ -28,6 +29,7 @@ process STANDARDIZE_GENOMAD {
         --input-type "${type}" \
         --header-map "${header_map}" \
         --virus-summary "${virus_summary}" \
+        --virus-genes "${virus_genes}" \
         --plasmid-summary "${plasmid_summary}" \
         --run-metadata "${run_metadata}" \
         --output "${prefix}.genomad_evidence.tsv"

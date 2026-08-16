@@ -13,7 +13,11 @@ from evidence_schema import CORE_EVIDENCE_COLUMNS, unclassified_taxonomy
 
 DEEP6_CLASSES = ("duplo", "euk", "mono", "pro", "ribo", "vari")
 SCORE_REQUIRED = {"name", "length", *DEEP6_CLASSES}
-OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + ["deep6_class"]
+OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + [
+    "deep6_class",
+    "evidence_strength",
+    "strength_basis",
+]
 
 CLASSIFICATION_MAP = {
     "duplo": "virus",
@@ -268,6 +272,8 @@ def main() -> None:
             "n_genes": "",
             "n_hallmarks": "",
             "deep6_class": deep6_class,
+            "evidence_strength": "qualified",
+            "strength_basis": "deep6_top_score_and_median_thresholds",
         }
         output.update(taxonomy_fields(deep6_class, classification))
         evidence_rows.append(output)

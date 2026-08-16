@@ -106,6 +106,15 @@ class StandardizeCheckVTests(unittest.TestCase):
                 "viral_length": (
                     row["proviral_length"] if row["provirus"] == "Yes" else row["contig_length"]
                 ),
+                "aai_confidence": (
+                    "medium" if row["contig_id"] == "sample__c000002" else "low"
+                ),
+                "aai_id": "75.0" if row["contig_id"] == "sample__c000002" else "35.0",
+                "aai_af": "0.80" if row["contig_id"] == "sample__c000002" else "0.20",
+                "aai_num_hits": "5" if row["contig_id"] == "sample__c000002" else "1",
+                "hmm_completeness_lower": "NA",
+                "hmm_completeness_upper": "NA",
+                "hmm_num_hits": "0",
             }
             for row in quality_rows
         ]
@@ -214,12 +223,20 @@ class StandardizeCheckVTests(unittest.TestCase):
             self.assertEqual(provirus["length"], "60")
             self.assertEqual(provirus["topology"], "Provirus")
             self.assertEqual(provirus["d__Domain"], "d__Viruses")
+            self.assertEqual(provirus["evidence_strength"], "qualified")
+            self.assertEqual(provirus["strength_basis"], "checkv_provirus_boundary")
 
             high_quality = next(
                 row for row in rows if row["sequence_id"] == "sample__c000002"
             )
             self.assertEqual(high_quality["checkv_quality"], "High-quality")
             self.assertEqual(high_quality["score"], "95.0")
+            self.assertEqual(high_quality["evidence_strength"], "strong")
+            self.assertEqual(
+                high_quality["strength_basis"],
+                "checkv_high_quality_confident_aai",
+            )
+            self.assertEqual(high_quality["aai_confidence"], "medium")
             self.assertFalse(
                 any(row["sequence_id"] == "sample__c000003" for row in rows)
             )
@@ -233,6 +250,32 @@ class StandardizeCheckVTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as raised:
                 self.run_standardizer(paths)
             self.assertIn("proviral coordinates disagree", str(raised.exception))
+
+    def test_high_quality_hmm_only_call_remains_qualified(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            paths = self.build_inputs(Path(temporary_directory))
+            rows = read_tsv(paths["completeness.tsv"])
+            high_quality = next(
+                row for row in rows if row["contig_id"] == "sample__c000002"
+            )
+            high_quality["aai_confidence"] = "low"
+            high_quality["hmm_completeness_lower"] = "92.0"
+            high_quality["hmm_completeness_upper"] = "100.0"
+            high_quality["hmm_num_hits"] = "3"
+            write_tsv(paths["completeness.tsv"], list(rows[0]), rows)
+
+            self.run_standardizer(paths)
+            evidence = next(
+                row
+                for row in read_tsv(paths["evidence.tsv"])
+                if row["sequence_id"] == "sample__c000002"
+            )
+            self.assertEqual(evidence["evidence_strength"], "qualified")
+            self.assertEqual(
+                evidence["strength_basis"], "checkv_determined_viral_quality"
+            )
+            self.assertEqual(evidence["hmm_completeness_lower"], "92.0")
+            self.assertEqual(evidence["hmm_hit_count"], "3")
 
     def test_zero_candidates_writes_header_only_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

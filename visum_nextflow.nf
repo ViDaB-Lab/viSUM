@@ -39,6 +39,7 @@ include { STANDARDIZE_VITAP } from './modules/local/standardize_vitap'
 include { PREPARE_VCONTACT3_DATABASE } from './modules/local/vcontact3_database'
 include { RUN_VCONTACT3 } from './modules/local/run_vcontact3'
 include { STANDARDIZE_VCONTACT3 } from './modules/local/standardize_vcontact3'
+include { VIHARMONY } from './modules/local/viharmony'
 
 
 def validatePrefix(rawPrefix, source) {
@@ -121,6 +122,26 @@ def parsePositiveIntegerParameter(rawValue, parameterName) {
 }
 
 
+def parseNonnegativeIntegerParameter(rawValue, parameterName) {
+    Integer parsedValue
+    try {
+        parsedValue = rawValue as Integer
+    }
+    catch( Exception ignored ) {
+        throw new IllegalArgumentException(
+            "Invalid value '${rawValue}' for ${parameterName}. Use a nonnegative integer."
+        )
+    }
+
+    if( parsedValue < 0 ) {
+        throw new IllegalArgumentException(
+            "Invalid value '${rawValue}' for ${parameterName}. Use a nonnegative integer."
+        )
+    }
+    return parsedValue
+}
+
+
 workflow {
 
     if( params.threads != null ) {
@@ -154,6 +175,14 @@ workflow {
     analysisCpuParameters.each { parameterName, rawValue ->
         parsePositiveIntegerParameter(rawValue, parameterName)
     }
+    parseNonnegativeIntegerParameter(
+        params.ct3_linear_minhall,
+        '--ct3_linear_minhall'
+    )
+    parseNonnegativeIntegerParameter(
+        params.ct3_circ_minhall,
+        '--ct3_circ_minhall'
+    )
 
     println(
         "viSUM resource budget: max_cpus=${maxCpus}, max_memory=${params.max_memory}; " +
@@ -237,6 +266,10 @@ workflow {
     }
 
     def runGenomad = parseBooleanParameter(params.run_genomad, '--run_genomad')
+    parseBooleanParameter(
+        params.genomad_score_calibration,
+        '--genomad_score_calibration'
+    )
     def runVirsorter2 = parseBooleanParameter(params.run_virsorter2, '--run_virsorter2')
     def runCenotetaker3 = parseBooleanParameter(params.run_cenotetaker3, '--run_cenotetaker3')
     def runDeep6 = parseBooleanParameter(params.run_deep6, '--run_deep6')
@@ -271,10 +304,21 @@ workflow {
         params.allow_ct3_only_refinement,
         '--allow_ct3_only_refinement'
     )
+    def harmonizerAudit = params.harmonizer_audit?.toString()?.trim()?.toLowerCase()
+    if( !(harmonizerAudit in ['none', 'compact', 'full']) ) {
+        error "Invalid --harmonizer_audit '${params.harmonizer_audit}'. Use none, compact, or full."
+    }
+    def harmonizerIctvCsv = file(params.harmonizer_ictv_csv)
+    if( !harmonizerIctvCsv.exists() ) {
+        error "viHARMONY ICTV taxonomy file was not found: ${harmonizerIctvCsv}"
+    }
 
     // Every standardizer emits sparse, threshold-qualified evidence. These
     // channels are merged and grouped by sample for the discovery gate.
     ch_discovery_evidence = Channel.empty()
+    // viHARMONY consumes every standardized evidence table, including tools
+    // that do not participate in the first discovery gate.
+    ch_harmony_evidence = Channel.empty()
     // Only boundary-capable tools contribute to post-discovery provirus
     // refinement. Their normal evidence tables are reused directly.
     ch_provirus_evidence = Channel.empty()
@@ -338,7 +382,7 @@ workflow {
 
         ch_genomad_for_standardizer = RUN_GENOMAD.out.results.map {
             prefix, type, review, virusSummary, virusFasta, virusGenes, virusProteins, plasmidSummary, metadata ->
-                tuple(prefix, type, virusSummary, plasmidSummary, metadata)
+                tuple(prefix, type, virusSummary, virusGenes, plasmidSummary, metadata)
         }
 
         ch_genomad_standardizer_input = ch_genomad_for_standardizer
@@ -356,6 +400,7 @@ workflow {
         ch_discovery_evidence = ch_discovery_evidence.mix(
             STANDARDIZE_GENOMAD.out.evidence
         )
+        ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_GENOMAD.out.evidence)
         ch_provirus_evidence = ch_provirus_evidence.mix(
             STANDARDIZE_GENOMAD.out.evidence
         )
@@ -418,6 +463,7 @@ workflow {
         ch_discovery_evidence = ch_discovery_evidence.mix(
             STANDARDIZE_VIRSORTER2.out.evidence
         )
+        ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VIRSORTER2.out.evidence)
     }
 
     if( runCenotetaker3 ) {
@@ -488,6 +534,7 @@ workflow {
         ch_discovery_evidence = ch_discovery_evidence.mix(
             STANDARDIZE_CENOTETAKER3.out.evidence
         )
+        ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_CENOTETAKER3.out.evidence)
         ch_provirus_evidence = ch_provirus_evidence.mix(
             STANDARDIZE_CENOTETAKER3.out.evidence
         )
@@ -601,6 +648,7 @@ workflow {
         ch_discovery_evidence = ch_discovery_evidence.mix(
             STANDARDIZE_DEEP6.out.evidence
         )
+        ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_DEEP6.out.evidence)
     }
 
     if( runDeepmicroclass2 ) {
@@ -685,6 +733,7 @@ workflow {
         ch_discovery_evidence = ch_discovery_evidence.mix(
             STANDARDIZE_DEEPMICROCLASS2.out.evidence
         )
+        ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_DEEPMICROCLASS2.out.evidence)
     }
 
     if( runVirbot ) {
@@ -775,6 +824,7 @@ workflow {
         ch_discovery_evidence = ch_discovery_evidence.mix(
             STANDARDIZE_VIRBOT.out.evidence
         )
+        ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VIRBOT.out.evidence)
     }
 
     if( runGianthunter ) {
@@ -885,6 +935,7 @@ workflow {
         ch_discovery_evidence = ch_discovery_evidence.mix(
             STANDARDIZE_GIANTHUNTER.out.evidence
         )
+        ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_GIANTHUNTER.out.evidence)
     }
 
     if( runVicat ) {
@@ -1006,6 +1057,7 @@ workflow {
         ch_discovery_evidence = ch_discovery_evidence.mix(
             STANDARDIZE_VICAT.out.evidence
         )
+        ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VICAT.out.evidence)
     }
 
     // Prepare or validate the persistent VITAP database now. Taxonomic
@@ -1213,6 +1265,7 @@ workflow {
         ch_provirus_evidence = ch_provirus_evidence.mix(
             STANDARDIZE_CHECKV.out.evidence
         )
+        ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_CHECKV.out.evidence)
     }
 
     ch_provirus_evidence_by_sample = ch_provirus_evidence
@@ -1273,6 +1326,7 @@ workflow {
         STANDARDIZE_VITAP.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
+        ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VITAP.out.evidence)
     }
 
     if( runVcontact3 ) {
@@ -1292,5 +1346,66 @@ workflow {
         STANDARDIZE_VCONTACT3.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
+        ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VCONTACT3.out.evidence)
+    }
+
+    ch_harmony_evidence_by_sample = ch_harmony_evidence
+        .map { prefix, tool, evidence -> tuple(prefix, evidence) }
+        .groupTuple()
+
+    ch_harmony_evidence_for_sample = NORMALIZE_FASTA.out.normalized_records
+        .map { prefix, type, fasta, headerMap -> tuple(prefix) }
+        .join(ch_harmony_evidence_by_sample, remainder: true)
+        .map { joined ->
+            if( joined.size() < 2 || joined[1] == null ) {
+                return tuple(
+                    joined[0],
+                    0,
+                    file("${projectDir}/assets/empty_discovery_evidence.tsv")
+                )
+            }
+            tuple(joined[0], joined[1].size(), joined[1])
+        }
+
+    if( runVcontact3 ) {
+        ch_vcontact3_groups_for_harmony = STANDARDIZE_VCONTACT3.out.groups
+            .map { prefix, groups -> tuple(prefix, 1, groups) }
+    } else {
+        ch_vcontact3_groups_for_harmony = ch_samples.map { prefix, type, fasta ->
+            tuple(prefix, 0, file("${projectDir}/assets/empty_vcontact3_groups.tsv"))
+        }
+    }
+
+    ch_harmony_inputs = REFINE_PROVIRAL_REGIONS.out.refined
+        .map { prefix, type, refined, regionMap, boundaryAudit, summary ->
+            tuple(prefix, type, refined, regionMap)
+        }
+        .join(
+            NORMALIZE_FASTA.out.normalized_records.map {
+                prefix, type, fasta, headerMap -> tuple(prefix, fasta, headerMap)
+            }
+        )
+        .join(
+            DISCOVERY_GATE.out.candidates.map {
+                prefix, type, candidates, audit, summary -> tuple(prefix, audit)
+            }
+        )
+        .join(ch_harmony_evidence_for_sample)
+        .join(ch_vcontact3_groups_for_harmony)
+        .map { prefix, type, refined, regionMap, normalized, headerMap, discoveryAudit,
+               evidenceFileCount, evidenceFiles, groupCount, groupFiles ->
+            tuple(
+                prefix, type, normalized, headerMap, discoveryAudit, refined,
+                regionMap, evidenceFileCount, evidenceFiles, groupCount,
+                groupFiles, harmonizerIctvCsv, harmonizerAudit
+            )
+        }
+
+    VIHARMONY(ch_harmony_inputs)
+
+    VIHARMONY.out.results.view { prefix, normalizedFasta, originalFasta, metadata,
+                                reviewQueue, disposition, sequenceMap, manifest,
+                                databaseFasta, databaseMetadata ->
+        "VIHARMONY sample=${prefix} fasta=${normalizedFasta.name} metadata=${metadata.name}"
     }
 }

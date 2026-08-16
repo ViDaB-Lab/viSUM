@@ -161,7 +161,7 @@ class StandardizeCenoteTaker3Tests(unittest.TestCase):
             base_summary = {
                 "organism": "Generated pseudo-species that must be ignored",
                 "end_feature": "None",
-                "virion_hallmark_genes": "Capsid protein",
+                "virion_hallmark_genes": "Capsid protein|Terminase",
                 "rep_hallmark_genes": "",
                 "RDRP_hallmark_genes": "",
                 "ORF_caller": "prodigal-gv",
@@ -174,8 +174,8 @@ class StandardizeCenoteTaker3Tests(unittest.TestCase):
                     "contig": "ct3_run_1",
                     "input_name": "sample__c000001",
                     "virus_seq_length": "10",
-                    "gene_count": "1",
-                    "virion_hallmark_count": "1",
+                    "gene_count": "2",
+                    "virion_hallmark_count": "2",
                     "rep_hallmark_count": "0",
                     "RDRP_hallmark_count": "0",
                     "taxonomy_hierarchy": "-_Viruses;-_Varidnaviria;k_Bamfordvirae;f_Eupolintoviridae",
@@ -206,8 +206,15 @@ class StandardizeCenoteTaker3Tests(unittest.TestCase):
                 {
                     "contig": "ct3_run_1",
                     "gene_start": "1",
-                    "gene_stop": "10",
+                    "gene_stop": "5",
                     "gene_name": "ct3_run_1_1",
+                    "chunk_name": "NaN",
+                },
+                {
+                    "contig": "ct3_run_1",
+                    "gene_start": "6",
+                    "gene_stop": "10",
+                    "gene_name": "ct3_run_1_2",
                     "chunk_name": "NaN",
                 },
                 {
@@ -235,6 +242,11 @@ class StandardizeCenoteTaker3Tests(unittest.TestCase):
             self.assertEqual(rows[0]["f__Family"], "f__Eupolintoviridae")
             self.assertEqual(rows[0]["g__Genus"], "g__unclassified")
             self.assertEqual(rows[0]["s__Species"], "s__unclassified")
+            self.assertEqual(rows[0]["evidence_strength"], "strong")
+            self.assertEqual(
+                rows[0]["strength_basis"],
+                "cenotetaker3_two_hallmark_linear_recommendation",
+            )
 
             self.assertEqual(
                 rows[1]["sequence_id"], "sample__c000002|provirus_8_12"
@@ -245,6 +257,11 @@ class StandardizeCenoteTaker3Tests(unittest.TestCase):
             self.assertEqual(rows[1]["length"], "5")
             self.assertEqual(rows[1]["d__Domain"], "d__Viruses")
             self.assertEqual(rows[1]["r__Realm"], "r__unclassified")
+            self.assertEqual(rows[1]["evidence_strength"], "qualified")
+            self.assertEqual(
+                rows[1]["strength_basis"],
+                "cenotetaker3_default_hallmark_requirement",
+            )
 
     def test_zero_call_run_writes_header_only_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_directory:
@@ -255,6 +272,45 @@ class StandardizeCenoteTaker3Tests(unittest.TestCase):
                 [],
                 "",
                 "completed_no_viruses_detected",
+            )
+            self.assertEqual(rows, [])
+
+    def test_zero_hallmark_exploratory_call_is_not_formal_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_directory:
+            rows = self.run_standardizer(
+                Path(temp_directory),
+                [
+                    {
+                        "contig": "ct3_run_1",
+                        "input_name": "sample__c000001",
+                        "organism": "unclassified virus",
+                        "virus_seq_length": "10",
+                        "end_feature": "None",
+                        "gene_count": "1",
+                        "virion_hallmark_count": "0",
+                        "rep_hallmark_count": "0",
+                        "RDRP_hallmark_count": "0",
+                        "virion_hallmark_genes": "",
+                        "rep_hallmark_genes": "",
+                        "RDRP_hallmark_genes": "",
+                        "taxonomy_hierarchy": "unclassified virus",
+                        "ORF_caller": "prodigal-gv",
+                        "gcode": "11",
+                        "avg_read_depth": "NaN",
+                    }
+                ],
+                [],
+                [
+                    {
+                        "contig": "ct3_run_1",
+                        "gene_start": "1",
+                        "gene_stop": "10",
+                        "gene_name": "ct3_run_1_1",
+                        "chunk_name": "NaN",
+                    }
+                ],
+                ">ct3_run_1\nAAAAAAAAAA\n",
+                "completed_with_virus_calls",
             )
             self.assertEqual(rows, [])
 

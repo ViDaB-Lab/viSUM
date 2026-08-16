@@ -11,6 +11,8 @@ from evidence_schema import CORE_EVIDENCE_COLUMNS, unclassified_taxonomy
 
 
 OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + [
+    "evidence_strength",
+    "strength_basis",
     "checkv_quality",
     "miuvig_quality",
     "completeness",
@@ -22,6 +24,13 @@ OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + [
     "host_genes",
     "complete_genome_prediction",
     "complete_genome_confidence",
+    "aai_confidence",
+    "aai_identity",
+    "aai_alignment_fraction",
+    "aai_hit_count",
+    "hmm_completeness_lower",
+    "hmm_completeness_upper",
+    "hmm_hit_count",
     "warnings",
 ]
 
@@ -41,7 +50,18 @@ QUALITY_REQUIRED = {
     "warnings",
 }
 
-COMPLETENESS_REQUIRED = {"contig_id", "contig_length", "viral_length"}
+COMPLETENESS_REQUIRED = {
+    "contig_id",
+    "contig_length",
+    "viral_length",
+    "aai_confidence",
+    "aai_id",
+    "aai_af",
+    "aai_num_hits",
+    "hmm_completeness_lower",
+    "hmm_completeness_upper",
+    "hmm_num_hits",
+}
 
 CONTAMINATION_REQUIRED = {
     "contig_id",
@@ -235,6 +255,7 @@ def is_confident_complete_call(row: dict[str, str] | None) -> bool:
 def build_evidence_row(
     sample_id: str,
     quality: dict[str, str],
+    completeness_detail: dict[str, str],
     complete_call: dict[str, str] | None,
     sequence_id: str,
     parent_sequence_id: str,
@@ -243,6 +264,20 @@ def build_evidence_row(
     length: int,
 ) -> dict[str, str]:
     completeness = clean_missing(quality["completeness"])
+    checkv_quality = clean_missing(quality["checkv_quality"])
+    aai_confidence = clean_missing(completeness_detail["aai_confidence"])
+    confident_aai = aai_confidence.lower() in {"medium", "high"}
+    high_completeness_tier = checkv_quality.lower() in {"complete", "high-quality"}
+    if high_completeness_tier and confident_aai:
+        evidence_strength = "strong"
+        strength_basis = "checkv_high_quality_confident_aai"
+    else:
+        evidence_strength = "qualified"
+        strength_basis = (
+            "checkv_provirus_boundary"
+            if record_type == "provirus"
+            else "checkv_determined_viral_quality"
+        )
     output = {
         "sample_id": sample_id,
         "sequence_id": sequence_id,
@@ -263,7 +298,9 @@ def build_evidence_row(
         ),
         "n_genes": clean_missing(quality["gene_count"]),
         "n_hallmarks": "",
-        "checkv_quality": clean_missing(quality["checkv_quality"]),
+        "evidence_strength": evidence_strength,
+        "strength_basis": strength_basis,
+        "checkv_quality": checkv_quality,
         "miuvig_quality": clean_missing(quality["miuvig_quality"]),
         "completeness": completeness,
         "completeness_method": clean_missing(quality["completeness_method"]),
@@ -278,6 +315,17 @@ def build_evidence_row(
         "complete_genome_confidence": (
             clean_missing(complete_call["confidence_level"]) if complete_call else ""
         ),
+        "aai_confidence": aai_confidence,
+        "aai_identity": clean_missing(completeness_detail["aai_id"]),
+        "aai_alignment_fraction": clean_missing(completeness_detail["aai_af"]),
+        "aai_hit_count": clean_missing(completeness_detail["aai_num_hits"]),
+        "hmm_completeness_lower": clean_missing(
+            completeness_detail["hmm_completeness_lower"]
+        ),
+        "hmm_completeness_upper": clean_missing(
+            completeness_detail["hmm_completeness_upper"]
+        ),
+        "hmm_hit_count": clean_missing(completeness_detail["hmm_num_hits"]),
         "warnings": clean_missing(quality["warnings"]),
     }
     output.update(unclassified_taxonomy("virus"))
@@ -371,6 +419,7 @@ def run(args: argparse.Namespace) -> None:
                     build_evidence_row(
                         args.sample_id,
                         quality,
+                        completeness_rows[contig_id],
                         complete_call,
                         sequence_id,
                         contig_id,
@@ -384,6 +433,7 @@ def run(args: argparse.Namespace) -> None:
                 build_evidence_row(
                     args.sample_id,
                     quality,
+                    completeness_rows[contig_id],
                     complete_call,
                     contig_id,
                     "",

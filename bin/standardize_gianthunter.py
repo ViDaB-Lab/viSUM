@@ -63,7 +63,7 @@ RUN_STATUSES = {
     "completed_no_giant_virus_calls",
     "completed_with_giant_virus_calls",
 }
-OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS
+OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + ["evidence_strength", "strength_basis"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -458,6 +458,11 @@ def main() -> None:
             if raw_lineage.casefold() == "unclassified"
             else "gianthunter_weighted_lca_support"
         )
+        strength_basis = (
+            "gianthunter_model_positive"
+            if raw_lineage.casefold() == "unclassified"
+            else "gianthunter_ncldv_taxonomy_call"
+        )
         output = {
             "sample_id": args.sample_id,
             "sequence_id": sequence_id,
@@ -472,6 +477,8 @@ def main() -> None:
             "topology": "",
             "n_genes": str(n_genes) if n_genes else "",
             "n_hallmarks": "",
+            "evidence_strength": "qualified",
+            "strength_basis": strength_basis,
         }
         output.update(
             validated_taxonomy(raw_lineage, sequence_id, ictv_index)
