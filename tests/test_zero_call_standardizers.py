@@ -349,6 +349,68 @@ class ZeroCallStandardizerTests(unittest.TestCase):
 
             self.assertEqual(read_tsv(output), [])
 
+    def test_virsorter2_ignores_unscored_lt2gene_diagnostic_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_directory:
+            directory = Path(temp_directory)
+            header_map = directory / "header_map.tsv"
+            score_table = directory / "score.tsv"
+            boundary_table = directory / "boundary.tsv"
+            metadata = directory / "metadata.tsv"
+            output = directory / "evidence.tsv"
+
+            write_tsv(
+                header_map,
+                ["sample_id", "sequence_id", "length"],
+                [{"sample_id": "sample", "sequence_id": "sample__c000001", "length": "2000"}],
+            )
+            score_columns = sorted(
+                standardize_virsorter2.SCORE_REQUIRED | {"dsDNAphage", "ssDNA"}
+            )
+            score_row = {column: "" for column in score_columns}
+            score_row.update(
+                {
+                    "seqname": "sample__c000001||lt2gene",
+                    "length": "300",
+                    "hallmark": "1",
+                    "viral": "100",
+                    "cellular": "0",
+                }
+            )
+            write_tsv(score_table, score_columns, [score_row])
+            write_tsv(
+                boundary_table,
+                sorted(standardize_virsorter2.BOUNDARY_REQUIRED),
+                [],
+            )
+            write_tsv(
+                metadata,
+                [
+                    "sample_id", "input_type", "virsorter2_version",
+                    "classifier_groups", "min_length", "min_score",
+                    "run_status", "virus_call_count",
+                ],
+                [{
+                    "sample_id": "sample", "input_type": "rna",
+                    "virsorter2_version": "2.2.4",
+                    "classifier_groups": "dsDNAphage,ssDNA",
+                    "min_length": "1500", "min_score": "0.5",
+                    "run_status": "completed_with_virus_calls",
+                    "virus_call_count": "1",
+                }],
+            )
+
+            argv = [
+                "standardize_virsorter2.py", "--sample-id", "sample",
+                "--input-type", "rna", "--header-map", str(header_map),
+                "--score-table", str(score_table), "--boundary-table",
+                str(boundary_table), "--run-metadata", str(metadata),
+                "--output", str(output),
+            ]
+            with patch.object(sys, "argv", argv):
+                standardize_virsorter2.main()
+
+            self.assertEqual(read_tsv(output), [])
+
 
 if __name__ == "__main__":
     unittest.main()

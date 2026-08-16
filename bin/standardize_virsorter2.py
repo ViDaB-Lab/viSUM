@@ -317,6 +317,12 @@ def main() -> None:
         if region_length > parent_length:
             raise ValueError(f"VirSorter2 region exceeds its parent for {sequence_id}")
 
+        # VirSorter2 keeps ``lt2gene`` entries for short regions that could not
+        # be assigned a classifier score. They are native diagnostic rows, not
+        # viral calls, so they should not enter viSUM evidence.
+        if call_type == "lt2gene" and not clean_missing(row["max_score"]):
+            continue
+
         score, score_text = parse_score(row["max_score"], "maximum score", sequence_id)
         if score + 1e-9 < min_score:
             raise ValueError(f"VirSorter2 call is below the configured cutoff: {sequence_id}")
