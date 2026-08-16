@@ -22,7 +22,8 @@ process VIHARMONY {
           val(group_file_count),
           path(vcontact3_groups),
           path(ictv_msl),
-          val(audit_mode)
+          val(audit_mode),
+          val(vcontact3_min_taxonomy_length)
 
     output:
     tuple val(prefix),
@@ -61,6 +62,7 @@ process VIHARMONY {
         --ictv-msl "${ictv_msl}" \
         --evidence ${evidenceArguments} \
         --vcontact3-groups ${groupArguments} \
+        --vcontact3-min-taxonomy-length "${vcontact3_min_taxonomy_length}" \
         --audit-mode "${audit_mode}" \
         --output-prefix "${prefix}"
     """

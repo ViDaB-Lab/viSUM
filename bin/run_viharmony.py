@@ -45,6 +45,7 @@ METADATA_COLUMNS = [
     "plasmid_conflict_tools", "strict_taxonomy", "strict_taxonomy_rank",
     "analysis_taxonomy", "analysis_taxonomy_rank", "taxonomy_confidence",
     "taxonomy_supporting_tools", "taxonomy_conflict", "vcontact3_groups",
+    "vcontact3_group_status",
 ]
 
 
@@ -60,6 +61,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ictv-msl", required=True, type=Path)
     parser.add_argument("--evidence", nargs="*", default=[], type=Path)
     parser.add_argument("--vcontact3-groups", nargs="*", default=[], type=Path)
+    parser.add_argument("--vcontact3-min-taxonomy-length", type=int, default=1000)
     parser.add_argument("--audit-mode", choices=("none", "compact", "full"), default="compact")
     parser.add_argument("--output-prefix", required=True, type=Path)
     return parser.parse_args()
@@ -203,7 +205,100 @@ def taxonomy_string(lineage: dict[str, str]) -> str:
     return ";".join(f"{PREFIXES[rank]}{lineage.get(rank) or 'unclassified'}" for rank in RANKS)
 
 
-def decide_taxonomy(rows: list[dict[str, str]], msl: set[tuple[str, ...]]) -> tuple[dict[str, str], str, str, list[str], list[dict[str, object]]]:
+def synthetic_group_prediction(value: str) -> bool:
+    return (value or "").strip().lower().startswith(("novel_", "unplaced_"))
+
+
+def group_parent_context_agrees(
+    group: dict[str, str], target_rank: str, strict: dict[str, str]
+) -> bool:
+    """Require at least one named vConTACT3 parent and agreement with strict taxonomy."""
+    target_index = RANKS.index(target_rank)
+    named_context: list[tuple[str, str]] = []
+    for parent_rank in RANKS[1:target_index]:
+        prediction = (group.get(f"{parent_rank}_prediction") or "").strip()
+        if (
+            prediction
+            and prediction.lower() not in {"default", "singleton", "unclassified"}
+            and not synthetic_group_prediction(prediction)
+        ):
+            named_context.append((parent_rank, prediction))
+    return bool(named_context) and all(
+        strict.get(rank, "") == taxon for rank, taxon in named_context
+    )
+
+
+def apply_vcontact3_groups(
+    groups: list[dict[str, str]],
+    strict: dict[str, str],
+    sequence_length: int,
+    minimum_length: int,
+    sample_id: str,
+) -> tuple[dict[str, str], list[str], list[str], list[dict[str, object]]]:
+    """Add only unambiguous, ancestry-compatible project groups."""
+    analysis = dict(strict)
+    labels: list[str] = []
+    statuses: set[str] = set()
+    audit_rows: list[dict[str, object]] = []
+
+    for rank in RANKS[1:-1]:
+        candidates: list[tuple[str, dict[str, str]]] = []
+        for group in groups:
+            prediction = (group.get(f"{rank}_prediction") or "").strip()
+            if synthetic_group_prediction(prediction):
+                labels.append(f"{rank}:{prediction}")
+                candidates.append((prediction, group))
+        if not candidates:
+            continue
+
+        unique_predictions = sorted({prediction for prediction, _ in candidates})
+        if sequence_length < minimum_length:
+            reason = "below_vcontact3_minimum_length"
+            statuses.add(reason)
+        elif len(unique_predictions) > 1:
+            reason = "ambiguous_vcontact3_groups"
+            statuses.add(reason)
+        elif analysis.get(rank):
+            reason = "strict_rank_already_classified"
+            statuses.add(reason)
+        elif any(
+            group_parent_context_agrees(group, rank, strict)
+            for _, group in candidates
+        ):
+            reason = "selected_compatible_project_group"
+            statuses.add(reason)
+            analysis[rank] = f"viharmony_{sample_id}_{unique_predictions[0]}"
+        else:
+            reason = "incompatible_or_unknown_parent_context"
+            statuses.add(reason)
+
+        accepted_prediction = (
+            unique_predictions[0]
+            if reason == "selected_compatible_project_group"
+            else ""
+        )
+        for prediction in unique_predictions:
+            audit_rows.append({
+                "tool": "vcontact3_group",
+                "method_family": "gene_sharing_network",
+                "rank": rank,
+                "taxon": prediction,
+                "tier": "auxiliary",
+                "valid": reason == "selected_compatible_project_group",
+                "accepted": prediction == accepted_prediction,
+                "reason": reason,
+            })
+
+    if not labels:
+        statuses.add("no_project_group")
+    return analysis, sorted(set(labels)), sorted(statuses), audit_rows
+
+
+def decide_taxonomy(
+    rows: list[dict[str, str]],
+    msl: set[tuple[str, ...]],
+    vcontact3_minimum_length: int = 1000,
+) -> tuple[dict[str, str], str, str, list[str], list[dict[str, object]]]:
     votes: list[dict[str, object]] = []
     for row in rows:
         tool = row.get("tool", "").strip().lower()
@@ -212,11 +307,20 @@ def decide_taxonomy(rows: list[dict[str, str]], msl: set[tuple[str, ...]]) -> tu
         lineage = {rank: clean_taxon(row.get(column, ""), rank) for rank, column in RANK_COLUMNS.items()}
         lineage["domain"] = "Viruses"
         valid = lineage_is_valid(lineage, msl)
+        reason = "pending" if valid else "invalid_configured_ictv_msl"
+        if tool == "vcontact3":
+            try:
+                sequence_length = int(float(row.get("length", "0") or 0))
+            except ValueError:
+                sequence_length = 0
+            if sequence_length < vcontact3_minimum_length:
+                valid = False
+                reason = "below_vcontact3_minimum_length"
         tier = vote_tier(row)
         for rank in RANKS[1:]:
             taxon = lineage.get(rank, "")
             if taxon:
-                votes.append({"tool": tool, "method_family": METHOD_FAMILY[tool], "rank": rank, "taxon": taxon, "tier": tier, "valid": valid, "accepted": False, "reason": "pending" if valid else "invalid_configured_ictv_msl", "_lineage": lineage})
+                votes.append({"tool": tool, "method_family": METHOD_FAMILY[tool], "rank": rank, "taxon": taxon, "tier": tier, "valid": valid, "accepted": False, "reason": reason, "_lineage": lineage})
 
     accepted = {rank: "" for rank in RANKS}
     accepted["domain"] = "Viruses"
@@ -295,6 +399,9 @@ def sha256(path: Path) -> str:
 
 
 def run(args: argparse.Namespace) -> None:
+    minimum_vcontact3_length = getattr(args, "vcontact3_min_taxonomy_length", 1000)
+    if minimum_vcontact3_length < 0:
+        raise ValueError("vConTACT3 minimum taxonomy length must be nonnegative")
     normalized = read_fasta(args.normalized_fasta)
     refined = read_fasta(args.refined_fasta)
     header_columns, header_rows = read_tsv(args.header_map)
@@ -366,14 +473,20 @@ def run(args: argparse.Namespace) -> None:
         for row in rows:
             tool = row.get("tool", "").strip().lower()
             classification = row.get("classification", "").strip().lower()
+            effective_strength = row.get("evidence_strength", "").strip().lower()
+            if tool == "deep6" and classification == "virus" and not effective_strength:
+                effective_strength = "qualified"
             if tool in ORIGIN_TOOLS:
                 tools_by_class[classification].add(tool)
                 if classification == "virus":
-                    if row.get("evidence_strength", "qualified").strip().lower() == "strong":
+                    if effective_strength == "strong":
                         strong_tools.add(tool)
                     else:
                         qualified_tools.add(tool)
             audit = dict(row)
+            if tool == "deep6" and classification == "virus" and not row.get("evidence_strength", "").strip():
+                audit["evidence_strength"] = "qualified"
+                audit["strength_basis"] = "legacy_deep6_confident_prediction"
             audit["final_sequence_id"] = final_id
             audit["applied_scope"] = "region" if row.get("sequence_id") == final_id else "parent"
             evidence_audit_rows.append(audit)
@@ -386,21 +499,25 @@ def run(args: argparse.Namespace) -> None:
         else:
             viral_confidence = "provisional"
 
-        strict, strict_rank, tax_confidence, tax_tools, vote_rows = decide_taxonomy(rows, msl)
+        strict, strict_rank, tax_confidence, tax_tools, vote_rows = decide_taxonomy(
+            rows, msl, minimum_vcontact3_length
+        )
         for vote in vote_rows:
             vote["sample_id"] = args.sample_id
             vote["final_sequence_id"] = final_id
             taxonomy_audit_rows.append(vote)
 
-        analysis = dict(strict)
-        group_labels: list[str] = []
-        for group in groups_by_sequence.get(final_id, []):
-            for rank in RANKS[1:-1]:
-                prediction = (group.get(f"{rank}_prediction") or "").strip()
-                if prediction.startswith(("novel_", "unplaced_")):
-                    group_labels.append(f"{rank}:{prediction}")
-                    if not analysis.get(rank):
-                        analysis[rank] = f"viharmony_{args.sample_id}_{prediction}"
+        analysis, group_labels, group_statuses, group_audit = apply_vcontact3_groups(
+            groups_by_sequence.get(final_id, []),
+            strict,
+            len(sequence),
+            minimum_vcontact3_length,
+            args.sample_id,
+        )
+        for vote in group_audit:
+            vote["sample_id"] = args.sample_id
+            vote["final_sequence_id"] = final_id
+            taxonomy_audit_rows.append(vote)
 
         coords = region["coordinates"].strip() or "NA"
         record_type = region["record_type"].strip()
@@ -431,6 +548,7 @@ def run(args: argparse.Namespace) -> None:
             "taxonomy_supporting_tools": ",".join(tax_tools) or "NA",
             "taxonomy_conflict": "true" if any(vote["reason"] == "rank_tie" for vote in vote_rows) else "false",
             "vcontact3_groups": ",".join(sorted(set(group_labels))) or "NA",
+            "vcontact3_group_status": ",".join(group_statuses),
         }
         metadata_rows.append(metadata)
         reasons = []
@@ -438,6 +556,8 @@ def run(args: argparse.Namespace) -> None:
         if cellular: reasons.append("cellular_conflict")
         if plasmid: reasons.append("plasmid_conflict")
         if metadata["taxonomy_conflict"] == "true": reasons.append("taxonomy_conflict")
+        if "ambiguous_vcontact3_groups" in group_statuses: reasons.append("vcontact3_group_ambiguity")
+        if "incompatible_or_unknown_parent_context" in group_statuses: reasons.append("vcontact3_group_context_conflict")
         if strict_rank == "domain": reasons.append("taxonomy_unclassified")
         if reasons:
             review_rows.append({"final_sequence_id": final_id, "review_reasons": ",".join(reasons), **metadata})
@@ -508,14 +628,19 @@ def run(args: argparse.Namespace) -> None:
 
     manifest_path = Path(f"{prefix}.harmonizer_manifest.json")
     manifest = {
-        "schema_version": "viharmony-0.1",
+        "schema_version": "viharmony-0.2",
         "sample_id": args.sample_id,
         "input_type": args.input_type,
         "ictv_msl": args.ictv_msl.name,
         "ictv_msl_release": msl_release,
         "audit_mode": args.audit_mode,
         "tools_present": sorted({row.get("tool", "") for row in evidence_rows if row.get("tool")}),
-        "policy": {"viral_confidence": "high=2+ strong; supported=1 strong or 2+ qualified; provisional=1 qualified", "taxonomy": "configured-ICTV-MSL-validated method-aware rank voting"},
+        "policy": {
+            "viral_confidence": "high=2+ strong; supported=1 strong or 2+ qualified; provisional=1 qualified",
+            "taxonomy": "configured-ICTV-MSL-validated method-aware rank voting",
+            "vcontact3_min_taxonomy_length": minimum_vcontact3_length,
+            "vcontact3_project_groups": "ancestry-compatible, unambiguous groups only",
+        },
         "outputs": {},
     }
     for label, path in outputs.items():

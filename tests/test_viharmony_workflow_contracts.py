@@ -24,11 +24,13 @@ class ViharmonyWorkflowContractTests(unittest.TestCase):
         ):
             self.assertIn(suffix, module)
         self.assertIn("--audit-mode", module)
+        self.assertIn("--vcontact3-min-taxonomy-length", module)
 
     def test_config_exposes_audit_and_msl_parameters(self) -> None:
         config = (ROOT / "visum.config").read_text(encoding="utf-8")
         self.assertIn("harmonizer_audit", config)
         self.assertIn("harmonizer_ictv_csv", config)
+        self.assertIn("vcontact3_min_taxonomy_length", config)
 
 
 if __name__ == "__main__":

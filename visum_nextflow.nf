@@ -308,6 +308,10 @@ workflow {
     if( !(harmonizerAudit in ['none', 'compact', 'full']) ) {
         error "Invalid --harmonizer_audit '${params.harmonizer_audit}'. Use none, compact, or full."
     }
+    def vcontact3MinTaxonomyLength = params.vcontact3_min_taxonomy_length as int
+    if( vcontact3MinTaxonomyLength < 0 ) {
+        error "Invalid --vcontact3_min_taxonomy_length '${params.vcontact3_min_taxonomy_length}'. Use zero or a positive integer."
+    }
     def harmonizerIctvCsv = file(params.harmonizer_ictv_csv)
     if( !harmonizerIctvCsv.exists() ) {
         error "viHARMONY ICTV taxonomy file was not found: ${harmonizerIctvCsv}"
@@ -1397,7 +1401,8 @@ workflow {
             tuple(
                 prefix, type, normalized, headerMap, discoveryAudit, refined,
                 regionMap, evidenceFileCount, evidenceFiles, groupCount,
-                groupFiles, harmonizerIctvCsv, harmonizerAudit
+                groupFiles, harmonizerIctvCsv, harmonizerAudit,
+                vcontact3MinTaxonomyLength
             )
         }
 

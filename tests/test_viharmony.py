@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import json
 import sys
 import tempfile
@@ -71,6 +72,7 @@ class ViharmonyTests(unittest.TestCase):
             for sequence_id, tool, strength in [
                 ("sample__c000001", "genomad", "strong"),
                 ("sample__c000001", "virsorter2", "strong"),
+                ("sample__c000001", "deep6", ""),
                 ("sample__c000002", "genomad", "qualified"),
                 ("sample__c000002|viral_region_11_80", "vitap", ""),
             ]:
@@ -86,14 +88,20 @@ class ViharmonyTests(unittest.TestCase):
             write_tsv(evidence, evidence_columns, rows)
 
             groups = directory / "groups.tsv"
-            write_tsv(groups, ["sequence_id", "genus_prediction"], [
-                {"sequence_id": "sample__c000002|viral_region_11_80", "genus_prediction": "novel_genus_7_of_Chiyouviridae"}
+            write_tsv(groups, ["sequence_id", "realm_prediction", "family_prediction", "genus_prediction"], [
+                {
+                    "sequence_id": "sample__c000002|viral_region_11_80",
+                    "realm_prediction": "Adnaviria",
+                    "family_prediction": "Chiyouviridae",
+                    "genus_prediction": "novel_genus_7_of_Chiyouviridae",
+                }
             ])
             args = Namespace(
                 sample_id="sample", input_type="dna", normalized_fasta=normalized,
                 header_map=header_map, discovery_gate=gate, refined_fasta=refined,
                 region_map=region_map, ictv_msl=msl, evidence=[evidence],
                 vcontact3_groups=[groups], audit_mode="full",
+                vcontact3_min_taxonomy_length=1,
                 output_prefix=directory / "sample",
             )
             run_viharmony.run(args)
@@ -106,8 +114,72 @@ class ViharmonyTests(unittest.TestCase):
             self.assertIn("g__viharmony_sample_novel_genus_7_of_Chiyouviridae", metadata[1]["analysis_taxonomy"])
             self.assertIn(">original-two|provirus_11_80", (directory / "sample.final.original_ids.fasta").read_text(encoding="utf-8"))
             self.assertTrue((directory / "sample.evidence_audit.tsv.gz").exists())
+            with gzip.open(directory / "sample.evidence_audit.tsv.gz", "rt", encoding="utf-8", newline="") as handle:
+                audit = list(csv.DictReader(handle, delimiter="\t"))
+            deep6 = next(row for row in audit if row["tool"] == "deep6")
+            self.assertEqual(deep6["evidence_strength"], "qualified")
             manifest = json.loads((directory / "sample.harmonizer_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], "viharmony-0.1")
+            self.assertEqual(manifest["schema_version"], "viharmony-0.2")
+
+    def test_vcontact3_groups_require_length_context_and_unique_rank(self) -> None:
+        strict = {rank: "" for rank in run_viharmony.RANKS}
+        strict.update({"domain": "Viruses", "realm": "Floreoviria", "family": "Polyomaviridae"})
+
+        short = [{
+            "realm_prediction": "Floreoviria",
+            "genus_prediction": "novel_genus_1_of_Polyomaviridae",
+        }]
+        analysis, labels, statuses, audit = run_viharmony.apply_vcontact3_groups(
+            short, strict, 556, 1000, "sample"
+        )
+        self.assertFalse(analysis["genus"])
+        self.assertIn("below_vcontact3_minimum_length", statuses)
+        self.assertEqual(audit[0]["reason"], "below_vcontact3_minimum_length")
+        self.assertTrue(labels)
+
+        compatible_analysis, _, statuses, _ = run_viharmony.apply_vcontact3_groups(
+            short, strict, 1500, 1000, "sample"
+        )
+        self.assertEqual(
+            compatible_analysis["genus"],
+            "viharmony_sample_novel_genus_1_of_Polyomaviridae",
+        )
+        self.assertIn("selected_compatible_project_group", statuses)
+
+        incompatible = [{
+            "realm_prediction": "Monodnaviria",
+            "genus_prediction": "novel_genus_1_within_Monodnaviria",
+        }]
+        incompatible_analysis, _, statuses, _ = run_viharmony.apply_vcontact3_groups(
+            incompatible, strict, 1500, 1000, "sample"
+        )
+        self.assertFalse(incompatible_analysis["genus"])
+        self.assertIn("incompatible_or_unknown_parent_context", statuses)
+
+        ambiguous = [
+            {"realm_prediction": "Floreoviria", "genus_prediction": "novel_genus_1"},
+            {"realm_prediction": "Floreoviria", "genus_prediction": "novel_genus_2"},
+        ]
+        ambiguous_analysis, _, statuses, _ = run_viharmony.apply_vcontact3_groups(
+            ambiguous, strict, 1500, 1000, "sample"
+        )
+        self.assertFalse(ambiguous_analysis["genus"])
+        self.assertIn("ambiguous_vcontact3_groups", statuses)
+
+    def test_short_vcontact3_formal_vote_is_audit_only(self) -> None:
+        msl = {("Floreoviria", "Shotokuvirae", "Cossaviricota", "Papovaviricetes", "Sepolyvirales", "Polyomaviridae", "", "")}
+        row = {
+            "tool": "vcontact3", "classification": "virus", "length": "556",
+            "vcontact3_assignment_method": "realm_only",
+            "d__Domain": "d__Viruses", "r__Realm": "r__Floreoviria",
+        }
+        strict, rank, confidence, tools, votes = run_viharmony.decide_taxonomy(
+            [row], msl, 1000
+        )
+        self.assertEqual(rank, "domain")
+        self.assertEqual(confidence, "unclassified")
+        self.assertEqual(tools, [])
+        self.assertEqual(votes[0]["reason"], "below_vcontact3_minimum_length")
 
     def test_zero_candidates_still_writes_disposition_and_all_final_headers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
