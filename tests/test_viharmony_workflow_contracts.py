@@ -26,10 +26,14 @@ class ViharmonyWorkflowContractTests(unittest.TestCase):
         self.assertIn("--audit-mode", module)
         self.assertIn("--vcontact3-min-taxonomy-length", module)
 
-    def test_config_exposes_audit_and_msl_parameters(self) -> None:
+    def test_config_uses_one_canonical_msl_parameter(self) -> None:
         config = (ROOT / "visum.config").read_text(encoding="utf-8")
+        workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
         self.assertIn("harmonizer_audit", config)
-        self.assertIn("harmonizer_ictv_csv", config)
+        self.assertIn('ictv_csv = "${projectDir}/assets/ICTV_VMR_MSL41.csv"', config)
+        self.assertNotIn("harmonizer_ictv_csv", config)
+        self.assertIn("def ictvCsv = file(params.ictv_csv)", workflow)
+        self.assertNotIn("harmonizerIctvCsv", workflow)
         self.assertIn("vcontact3_min_taxonomy_length", config)
 
 

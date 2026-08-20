@@ -312,9 +312,9 @@ workflow {
     if( vcontact3MinTaxonomyLength < 0 ) {
         error "Invalid --vcontact3_min_taxonomy_length '${params.vcontact3_min_taxonomy_length}'. Use zero or a positive integer."
     }
-    def harmonizerIctvCsv = file(params.harmonizer_ictv_csv)
-    if( !harmonizerIctvCsv.exists() ) {
-        error "viHARMONY ICTV taxonomy file was not found: ${harmonizerIctvCsv}"
+    def ictvCsv = file(params.ictv_csv)
+    if( !ictvCsv.exists() ) {
+        error "Canonical ICTV taxonomy file was not found: ${ictvCsv}"
     }
 
     // Every standardizer emits sparse, threshold-qualified evidence. These
@@ -749,11 +749,6 @@ workflow {
         if( !(virbotTaxaMode in ['TOP', 'LCA']) ) {
             error "Invalid --virbot_taxa '${params.virbot_taxa}'. Use TOP or LCA."
         }
-        def virbotIctvCsv = file(params.ictv_csv)
-        if( !virbotIctvCsv.exists() ) {
-            error "ICTV taxonomy file required by VirBot was not found: ${params.ictv_csv}"
-        }
-
         def userSuppliedInstallation = params.virbot_dir != null
         def virbotInstallationPath = userSuppliedInstallation
             ? file(params.virbot_dir).toString()
@@ -819,7 +814,7 @@ workflow {
 
         STANDARDIZE_VIRBOT(
             ch_virbot_standardizer_input,
-            virbotIctvCsv
+            ictvCsv
         )
 
         STANDARDIZE_VIRBOT.out.evidence.view { prefix, tool, evidence ->
@@ -832,11 +827,6 @@ workflow {
     }
 
     if( runGianthunter ) {
-        def gianthunterIctvCsv = file(params.ictv_csv)
-        if( !gianthunterIctvCsv.exists() ) {
-            error "GiantHunter ICTV taxonomy file not found: ${gianthunterIctvCsv}"
-        }
-
         def gianthunterMinimumLength
         try {
             gianthunterMinimumLength = params.gianthunter_min_length as Integer
@@ -930,7 +920,7 @@ workflow {
 
         STANDARDIZE_GIANTHUNTER(
             ch_gianthunter_standardizer_input,
-            gianthunterIctvCsv
+            ictvCsv
         )
 
         STANDARDIZE_GIANTHUNTER.out.evidence.view { prefix, tool, evidence ->
@@ -1401,7 +1391,7 @@ workflow {
             tuple(
                 prefix, type, normalized, headerMap, discoveryAudit, refined,
                 regionMap, evidenceFileCount, evidenceFiles, groupCount,
-                groupFiles, harmonizerIctvCsv, harmonizerAudit,
+                groupFiles, ictvCsv, harmonizerAudit,
                 vcontact3MinTaxonomyLength
             )
         }

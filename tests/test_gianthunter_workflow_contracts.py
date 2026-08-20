@@ -65,7 +65,7 @@ class GiantHunterWorkflowContractTests(unittest.TestCase):
             self.workflow,
         )
         self.assertIn("STANDARDIZE_GIANTHUNTER(", self.workflow)
-        self.assertIn("gianthunterIctvCsv", self.workflow)
+        self.assertIn("STANDARDIZE_GIANTHUNTER(\n            ch_gianthunter_standardizer_input,\n            ictvCsv", self.workflow)
         self.assertIn("standardize_gianthunter.py", self.standardizer)
         self.assertIn("--gene-annotations", self.standardizer)
         self.assertNotIn("--virus-fasta", self.standardizer)
