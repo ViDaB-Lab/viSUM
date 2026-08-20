@@ -307,7 +307,7 @@ class StandardizeVcontact3Tests(unittest.TestCase):
             self.assertEqual(singleton["candidate_assignment_status"], "singleton")
             self.assertEqual(singleton["standardization_decision"], "singleton")
 
-    def test_missing_candidate_assignment_is_rejected(self) -> None:
+    def test_missing_candidate_assignment_is_recorded_as_neutral(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             paths = self.build_inputs(Path(temporary_directory))
             with paths["prokaryotes"].open(
@@ -321,8 +321,32 @@ class StandardizeVcontact3Tests(unittest.TestCase):
                 rows,
                 ",",
             )
-            with self.assertRaisesRegex(ValueError, "missing 1 refined candidates"):
-                self.run_standardizer(paths)
+            self.run_standardizer(paths)
+            evidence = read_tsv(paths["evidence"])
+            groups = read_tsv(paths["groups"])
+
+            self.assertEqual(len(groups), 8)
+            self.assertNotIn(
+                (
+                    "sample__c000003",
+                    "prokaryotes",
+                ),
+                {
+                    (row["sequence_id"], row["vcontact3_database_domain"])
+                    for row in evidence
+                },
+            )
+            missing = next(
+                row
+                for row in groups
+                if row["sequence_id"] == "sample__c000003"
+                and row["database_domain"] == "prokaryotes"
+            )
+            self.assertEqual(missing["candidate_assignment_status"], "not_reported")
+            self.assertEqual(
+                missing["standardization_decision"], "no_vcontact3_result"
+            )
+            self.assertEqual(missing["realm_prediction"], "")
 
     def test_zero_candidates_writes_header_only_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

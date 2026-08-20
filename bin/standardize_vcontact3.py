@@ -300,13 +300,6 @@ def load_candidate_assignments(
                 f"{sequence_id}"
             )
         candidates[sequence_id] = row
-    missing = candidate_ids.difference(candidates)
-    if missing:
-        preview = ", ".join(sorted(missing)[:5])
-        raise ValueError(
-            f"vConTACT3 output {path} is missing {len(missing)} refined candidates: "
-            f"{preview}"
-        )
     return candidates
 
 
@@ -506,7 +499,22 @@ def main() -> None:
             candidates = load_candidate_assignments(assignment_paths[domain], regions)
             database_version = clean(metadata[domain]["database_version"])
             for sequence_id, region in regions.items():
-                row = candidates[sequence_id]
+                row = candidates.get(sequence_id)
+                if row is None:
+                    group_row = build_group_row(
+                        args.sample_id,
+                        args.input_type,
+                        sequence_id,
+                        region,
+                        {},
+                        domain,
+                        database_version,
+                        "",
+                    )
+                    group_row["candidate_assignment_status"] = "not_reported"
+                    group_row["standardization_decision"] = "no_vcontact3_result"
+                    group_rows.append(group_row)
+                    continue
                 (
                     taxonomy,
                     deepest,
