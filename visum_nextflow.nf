@@ -142,7 +142,140 @@ def parseNonnegativeIntegerParameter(rawValue, parameterName) {
 }
 
 
+def visumHelp() {
+    return '''
+viSUM 0.1.0 — viral sequence discovery, refinement, and taxonomy harmonization
+
+USAGE
+  Single FASTA:
+    nextflow run visum_nextflow.nf -c visum.config \\
+      --input INPUT.fasta --prefix SAMPLE --type dna|rna [options]
+
+  Multiple FASTAs:
+    nextflow run visum_nextflow.nf -c visum.config \\
+      --prefix_many samples.csv --indir INPUT_DIRECTORY [options]
+
+  Help only:
+    nextflow run visum_nextflow.nf -c visum.config --help
+
+INPUT
+  --input PATH                 Input FASTA for a single sample.
+  --prefix TEXT                Sample identifier for single-sample mode.
+                               Allowed: letters, numbers, ., _, and -.
+  --type dna|rna               Input type. RNA mode supports mixed DNA/RNA
+                               viruses in metatranscriptomic assemblies.
+  --prefix_many PATH           CSV with header: prefix,type,fasta.
+  --indir PATH                 Base directory for FASTAs in --prefix_many.
+
+OUTPUT AND RESOURCES
+  --outdir PATH                Results directory [results].
+  --dbdir PATH                 Persistent managed databases [databases].
+  --tooldir PATH               Persistent managed tool bundles [tools].
+  --max_cpus INT               Total local CPU budget [8].
+  --max_memory MEMORY          Total local memory budget [48 GB].
+  --harmonizer_audit MODE      none, compact, or full [compact].
+  --ictv_csv PATH              Canonical ICTV rank table
+                               [assets/ICTV_VMR_MSL41.csv].
+
+PROGRAM SELECTION
+  --run_genomad BOOL           geNomad discovery [true].
+  --run_virsorter2 BOOL        VirSorter2 discovery [true].
+  --run_cenotetaker3 BOOL      Cenote-Taker 3 discovery [true].
+  --run_deep6 BOOL             Deep6; runs only for RNA inputs [true].
+  --run_deepmicroclass2 BOOL   DeepMicroClass2; DNA inputs only [true].
+  --run_virbot BOOL            VirBot; RNA inputs only [true].
+  --run_gianthunter BOOL       GiantHunter; DNA inputs only [true].
+  --run_vicat BOOL             viCAT discovery/taxonomy [false].
+  --run_checkv BOOL            CheckV candidate quality/refinement [true].
+  --run_vitap BOOL             VITAP taxonomy refinement [false].
+  --run_vcontact3 BOOL         vConTACT3 taxonomy refinement [false].
+
+COMMON ANALYSIS OPTIONS
+  --genomad_score_calibration BOOL  Calibrate geNomad scores when supported
+                                    by sample size [true].
+  --genomad_splits INT              0 is fastest; increase to lower memory [0].
+  --vs2_min_length INT              VirSorter2 minimum length [1500].
+  --vs2_min_score FLOAT             VirSorter2 minimum score [0.5].
+  --ct3_minlen_circ INT             CT3 circular minimum length [1000].
+  --ct3_circ_minhall INT            CT3 circular hallmark minimum [1].
+  --ct3_minlen_linear INT           CT3 linear minimum length [1000].
+  --ct3_linear_minhall INT          CT3 linear hallmark minimum [1].
+  --deep6_minlen INT                Deep6 minimum sequence length [250].
+  --deep6_min_score FLOAT           Deep6 minimum winning score [0.7].
+  --deep6_median_multiplier FLOAT   Required winner/median ratio [1.25].
+  --deepmicroclass2_model MODEL     8class, high_precision, or 300bp [8class].
+  --virbot_sensitive BOOL           Add VirBot DIAMOND search [false].
+  --virbot_taxa TOP|LCA             VirBot taxonomy method [TOP].
+  --gianthunter_min_length INT      GiantHunter minimum length [3000].
+  --gianthunter_reject FLOAT        Minimum aligned-protein fraction [0.1].
+  --gianthunter_query_cover INT     Minimum query coverage percent [40].
+  --allow_ct3_only_refinement BOOL  Permit uncorroborated CT3 trimming [false].
+  --vitap_include_low_confidence BOOL
+                                    Retain VITAP low-confidence calls [false].
+  --vcontact3_db_domain MODE        both, prokaryotes, or eukaryotes [both].
+  --vcontact3_min_taxonomy_length INT
+                                    Shorter calls remain audit-only [1000].
+
+viCAT OPTIONS
+  --vicat_diamond_sensitivity MODE  faster through ultra-sensitive [sensitive].
+  --vicat_min_bitscore FLOAT        Minimum DIAMOND bit score [50].
+  --vicat_min_query_cover INT       Minimum query coverage percent [30].
+  --vicat_top_percent FLOAT         Top-hit score window [5].
+  --vicat_block_size FLOAT          DIAMOND block size [2.0].
+  --vicat_index_chunks INT          DIAMOND index chunks [4].
+  --vicat_locus_overlap FLOAT       GV/RV ORF overlap threshold [0.80].
+  --vicat_orf_taxonomy_support FLOAT
+                                    Within-ORF taxonomy support [0.60].
+  --vicat_contig_taxonomy_support FLOAT
+                                    Across-ORF taxonomy support [0.60].
+
+DATABASE AND INSTALLATION OVERRIDES
+  --genomad_db PATH            Existing geNomad database.
+  --virsorter2_db PATH         Existing VirSorter2 database.
+  --ct3_db PATH                Existing Cenote-Taker 3 database.
+  --deep6_dir PATH             Existing Deep6 installation.
+  --deep6_model PATH           Existing Deep6 model directory.
+  --deepmicroclass2_dir PATH   Existing DeepMicroClass2 installation.
+  --virbot_dir PATH            Existing VirBot installation.
+  --gianthunter_db PATH        Existing GiantHunter database.
+  --checkv_db PATH             Existing CheckV database.
+  --vicat_db PATH              Existing viCAT database.
+  --vicat_metavr_proteins PATH MetaVR proteins for a local viCAT build.
+  --vicat_metavr_metadata PATH MetaVR metadata for a local viCAT build.
+  --vitap_db PATH              Existing VITAP database.
+  --vitap_vmr PATH             VMR workbook/CSV for a VITAP build.
+  --vitap_update_database BOOL Check for a newer VMR [false].
+  --vcontact3_db PATH          Existing vConTACT3 database or manifest.
+  --vcontact3_update_database BOOL
+                               Resolve and install the latest release [false].
+
+PER-TOOL RESOURCE OVERRIDES
+  --genomad_cpus INT           --virsorter2_cpus INT
+  --ct3_cpus INT               --deep6_cpus INT
+  --deepmicroclass2_cpus INT   --virbot_cpus INT
+  --gianthunter_cpus INT       --vicat_orf_cpus INT
+  --vicat_cpus INT             --checkv_cpus INT
+  --vitap_cpus INT             --vcontact3_cpus INT
+
+  Each tool also has a corresponding --*_memory and --*_time option in
+  visum.config. Tool CPU requests are capped by --max_cpus.
+
+NOTES
+  BOOL values must be true or false. Use -resume to reuse completed work.
+  Advanced version pins, download URLs, checksums, and database-build controls
+  are documented in visum.config and normally should not be changed.
+'''.stripIndent().trim()
+}
+
+
 workflow {
+
+    def helpRequested = params.help == true ||
+        params.help?.toString()?.trim()?.toLowerCase() == 'true'
+    if( helpRequested ) {
+        println visumHelp()
+        return
+    }
 
     if( params.threads != null ) {
         error '--threads is no longer used because it could not distinguish a total workflow budget from per-tool threads. Use --max_cpus and, when needed, a tool-specific --*_cpus option.'
