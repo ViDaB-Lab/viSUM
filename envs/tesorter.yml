@@ -1,0 +1,7 @@
+name: visum-tesorter
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - tesorter=1.5.1
+

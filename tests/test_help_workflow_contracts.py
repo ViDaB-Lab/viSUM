@@ -33,7 +33,7 @@ class HelpWorkflowContractTests(unittest.TestCase):
         for switch in (
             "run_genomad", "run_virsorter2", "run_cenotetaker3", "run_deep6",
             "run_deepmicroclass2", "run_virbot", "run_gianthunter", "run_vicat",
-            "run_checkv", "run_vitap", "run_vcontact3",
+            "run_checkv", "run_tesorter", "run_vitap", "run_vcontact3",
         ):
             self.assertIn(f"--{switch}", help_text)
 

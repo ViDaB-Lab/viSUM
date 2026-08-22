@@ -33,6 +33,7 @@ include { PREPARE_CHECKV_DATABASE } from './modules/local/checkv_database'
 include { RUN_CHECKV } from './modules/local/run_checkv'
 include { STANDARDIZE_CHECKV } from './modules/local/standardize_checkv'
 include { REFINE_PROVIRAL_REGIONS } from './modules/local/refine_proviral_regions'
+include { RUN_TESORTER } from './modules/local/run_tesorter'
 include { PREPARE_VITAP_DATABASE } from './modules/local/vitap_database'
 include { RUN_VITAP } from './modules/local/run_vitap'
 include { STANDARDIZE_VITAP } from './modules/local/standardize_vitap'
@@ -187,6 +188,7 @@ PROGRAM SELECTION
   --run_gianthunter BOOL       GiantHunter; DNA inputs only [true].
   --run_vicat BOOL             viCAT discovery/taxonomy [false].
   --run_checkv BOOL            CheckV candidate quality/refinement [true].
+  --run_tesorter BOOL          TEsorter retroelement evidence [true].
   --run_vitap BOOL             VITAP taxonomy refinement [false].
   --run_vcontact3 BOOL         vConTACT3 taxonomy refinement [false].
 
@@ -255,6 +257,7 @@ PER-TOOL RESOURCE OVERRIDES
   --deepmicroclass2_cpus INT   --virbot_cpus INT
   --gianthunter_cpus INT       --vicat_orf_cpus INT
   --vicat_cpus INT             --checkv_cpus INT
+  --tesorter_cpus INT
   --vitap_cpus INT             --vcontact3_cpus INT
 
   Each tool also has a corresponding --*_memory and --*_time option in
@@ -302,6 +305,7 @@ workflow {
         '--vicat_orf_cpus': params.vicat_orf_cpus,
         '--vicat_cpus': params.vicat_cpus,
         '--checkv_cpus': params.checkv_cpus,
+        '--tesorter_cpus': params.tesorter_cpus,
         '--vitap_cpus': params.vitap_cpus,
         '--vcontact3_cpus': params.vcontact3_cpus,
     ]
@@ -417,6 +421,7 @@ workflow {
         '--run_deepmicroclass2'
     )
     def runCheckv = parseBooleanParameter(params.run_checkv, '--run_checkv')
+    def runTesorter = parseBooleanParameter(params.run_tesorter, '--run_tesorter')
     def runVitap = parseBooleanParameter(params.run_vitap, '--run_vitap')
     def runVcontact3 = parseBooleanParameter(
         params.run_vcontact3,
@@ -471,6 +476,7 @@ workflow {
         "GiantHunter=${runGianthunter}, " +
         "viCAT=${runVicat}, " +
         "CheckV=${runCheckv}, " +
+        "TEsorter=${runTesorter}, " +
         "VITAP=${runVitap}, " +
         "vConTACT3=${runVcontact3}"
     )
@@ -1431,6 +1437,15 @@ workflow {
     REFINE_PROVIRAL_REGIONS.out.refined.view {
         prefix, type, refinedFasta, regionMap, boundaryAudit, summary ->
             "REFINED sample=${prefix} type=${type} fasta=${refinedFasta.name} map=${regionMap.name}"
+    }
+
+    if( runTesorter ) {
+        RUN_TESORTER(REFINE_PROVIRAL_REGIONS.out.refined)
+
+        RUN_TESORTER.out.results.view {
+            prefix, type, regionMap, classifications, domains, domainGff, log, metadata ->
+                "TESORTER sample=${prefix} type=${type} classifications=${classifications.name}"
+        }
     }
 
     if( runVitap ) {

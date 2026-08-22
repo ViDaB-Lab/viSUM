@@ -43,6 +43,7 @@ class ResourceWorkflowContractTests(unittest.TestCase):
             "predict_vicat_orfs.nf": "params.vicat_orf_cpus",
             "run_vicat_diamond.nf": "params.vicat_cpus",
             "run_vitap.nf": "params.vitap_cpus",
+            "run_tesorter.nf": "params.tesorter_cpus",
         }
         for module_name, declaration in expected.items():
             with self.subTest(module=module_name):
@@ -61,6 +62,7 @@ class ResourceWorkflowContractTests(unittest.TestCase):
             "predict_vicat_orfs.nf": '-j "${task.cpus}"',
             "run_vicat_diamond.nf": '--threads "${task.cpus}"',
             "run_vitap.nf": '-p "${task.cpus}"',
+            "run_tesorter.nf": '-p "${task.cpus}"',
             "vicat_database.nf": '--threads "${task.cpus}"',
             "virsorter2_database.nf": "-j ${task.cpus}",
         }
@@ -101,6 +103,7 @@ class ResourceWorkflowContractTests(unittest.TestCase):
             "vicat_orf_cpus",
             "vicat_cpus",
             "vitap_cpus",
+            "tesorter_cpus",
         ):
             self.assertIn(f"'--{parameter}': params.{parameter}", self.workflow)
 
