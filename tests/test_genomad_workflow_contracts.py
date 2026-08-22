@@ -21,6 +21,8 @@ class GenomadWorkflowContractTests(unittest.TestCase):
         self.assertIn("score_calibration_applied", module)
         self.assertIn("FDR_CALL_COUNT", module)
         self.assertIn("_score_calibration", module)
+        self.assertIn('fdr_value != "nan"', module)
+        self.assertNotIn('/^(|na|nan|none)$/', module)
         self.assertNotIn('"\\$INPUT_SEQUENCE_COUNT" -ge 1000', module)
 
     def test_virus_gene_table_is_wired_into_standardization(self) -> None:

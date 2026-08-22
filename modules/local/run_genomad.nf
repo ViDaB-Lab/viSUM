@@ -97,7 +97,15 @@ process RUN_GENOMAD {
             }
             next
         }
-        fdr_column > 0 && tolower(\$fdr_column) !~ /^(|na|nan|none)$/ { count++ }
+        fdr_column > 0 {
+            fdr_value = tolower(\$fdr_column)
+            if (fdr_value != "" &&
+                fdr_value != "na" &&
+                fdr_value != "nan" &&
+                fdr_value != "none") {
+                count++
+            }
+        }
         END { print count + 0 }
     ' "${prefix}_virus_summary.tsv" "${prefix}_plasmid_summary.tsv")
 
