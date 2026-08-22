@@ -382,8 +382,8 @@ def main() -> None:
     if set(summary_records) != set(fasta_lengths):
         raise ValueError("CT3 summary and virus FASTA identifiers disagree")
 
-    gene_counts = load_gene_counts(gene_rows, fasta_lengths)
-    if set(gene_counts).difference(summary_records):
+    annotation_feature_counts = load_gene_counts(gene_rows, fasta_lengths)
+    if set(annotation_feature_counts).difference(summary_records):
         raise ValueError("CT3 gene annotations contain calls absent from the summary")
     pruned_regions = load_pruned_regions(prune_rows)
 
@@ -399,8 +399,12 @@ def main() -> None:
             raise ValueError(f"CT3 summary and FASTA lengths disagree for {call_id}")
 
         reported_gene_count = parse_integer(row["gene_count"], "gene count", call_id)
-        if gene_counts.get(call_id, 0) != reported_gene_count:
-            raise ValueError(f"CT3 summary and annotation gene counts disagree for {call_id}")
+        # CT3's summary gene_count and gene-annotation table are not the same
+        # feature contract. In particular, the annotation table can contain
+        # repeated functional RNA annotations (for example, tRNA-Met loci)
+        # that are not represented identically in summary gene_count. Keep
+        # validating the annotation identifiers and coordinates above, but use
+        # CT3's own summary value as the authoritative n_genes metric.
 
         virion_count = parse_integer(
             row["virion_hallmark_count"], "virion hallmark count", call_id

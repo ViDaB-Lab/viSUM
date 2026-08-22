@@ -306,6 +306,54 @@ class StandardizeCenoteTaker3Tests(unittest.TestCase):
             {"ct3_run_1": 2},
         )
 
+    def test_annotation_feature_count_may_differ_from_summary_gene_count(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_directory:
+            rows = self.run_standardizer(
+                Path(temp_directory),
+                [
+                    {
+                        "contig": "ct3_run_1",
+                        "input_name": "sample__c000001",
+                        "organism": "unclassified virus",
+                        "virus_seq_length": "10",
+                        "end_feature": "None",
+                        "gene_count": "1",
+                        "virion_hallmark_count": "1",
+                        "rep_hallmark_count": "0",
+                        "RDRP_hallmark_count": "0",
+                        "virion_hallmark_genes": "Capsid protein",
+                        "rep_hallmark_genes": "",
+                        "RDRP_hallmark_genes": "",
+                        "taxonomy_hierarchy": "unclassified virus",
+                        "ORF_caller": "prodigal-gv",
+                        "gcode": "11",
+                        "avg_read_depth": "NaN",
+                    }
+                ],
+                [],
+                [
+                    {
+                        "contig": "ct3_run_1",
+                        "gene_start": "1",
+                        "gene_stop": "3",
+                        "gene_name": "tRNA-Met",
+                        "chunk_name": "NaN",
+                    },
+                    {
+                        "contig": "ct3_run_1",
+                        "gene_start": "6",
+                        "gene_stop": "8",
+                        "gene_name": "tRNA-Met",
+                        "chunk_name": "NaN",
+                    },
+                ],
+                ">ct3_run_1\nAAAAAAAAAA\n",
+                "completed_with_virus_calls",
+            )
+
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["n_genes"], "1")
+
     def test_zero_hallmark_exploratory_call_is_not_formal_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_directory:
             rows = self.run_standardizer(
