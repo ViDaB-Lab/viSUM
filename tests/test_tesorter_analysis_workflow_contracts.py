@@ -37,9 +37,9 @@ class TEsorterAnalysisWorkflowContractTests(unittest.TestCase):
             "tesorter_time          = '12h'",
         ):
             self.assertIn(declaration, self.config)
-        self.assertIn("tesorter.rexdb.cls.tsv", self.module)
-        self.assertIn("tesorter.rexdb.dom.tsv", self.module)
-        self.assertIn("tesorter.rexdb.dom.gff3", self.module)
+        self.assertIn("tesorter.cls.tsv", self.module)
+        self.assertIn("tesorter.dom.tsv", self.module)
+        self.assertIn("tesorter.dom.gff3", self.module)
         self.assertIn("tesorter_run_metadata.tsv", self.module)
         self.assertIn("emit: completed", self.module)
 

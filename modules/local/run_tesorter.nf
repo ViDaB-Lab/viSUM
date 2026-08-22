@@ -19,9 +19,9 @@ process RUN_TESORTER {
     tuple val(prefix),
           val(type),
           path(region_map),
-          path("${prefix}.tesorter.rexdb.cls.tsv"),
-          path("${prefix}.tesorter.rexdb.dom.tsv"),
-          path("${prefix}.tesorter.rexdb.dom.gff3"),
+          path("${prefix}.tesorter.cls.tsv"),
+          path("${prefix}.tesorter.dom.tsv"),
+          path("${prefix}.tesorter.dom.gff3"),
           path("${prefix}.tesorter.log"),
           path("${prefix}.tesorter_run_metadata.tsv"),
           emit: results
@@ -34,9 +34,9 @@ process RUN_TESORTER {
     set -euo pipefail
 
     OUTPUT_PREFIX="${prefix}.tesorter"
-    CLASSIFICATIONS="${prefix}.tesorter.rexdb.cls.tsv"
-    DOMAINS="${prefix}.tesorter.rexdb.dom.tsv"
-    DOMAIN_GFF="${prefix}.tesorter.rexdb.dom.gff3"
+    CLASSIFICATIONS="${prefix}.tesorter.cls.tsv"
+    DOMAINS="${prefix}.tesorter.dom.tsv"
+    DOMAIN_GFF="${prefix}.tesorter.dom.gff3"
     LOG_FILE="${prefix}.tesorter.log"
     METADATA_FILE="${prefix}.tesorter_run_metadata.tsv"
 
