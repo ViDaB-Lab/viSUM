@@ -89,10 +89,46 @@ def format_number(value: float) -> str:
 
 
 def domain_sequence_id(domain_id: str) -> str:
-    sequence_id = domain_id.split("|", 1)[0].strip()
+    # TEsorter appends the domain model after the final pipe.  Refined viSUM
+    # identifiers may themselves contain a pipe before ``viral_region``.
+    sequence_id = domain_id.rsplit("|", 1)[0].strip()
     if not sequence_id:
         raise ValueError(f"Cannot extract sequence ID from TEsorter domain ID: {domain_id}")
     return sequence_id
+
+
+def build_region_aliases(
+    region_by_id: dict[str, dict[str, str]],
+) -> dict[str, str]:
+    """Map TEsorter-safe IDs back to canonical viSUM refined IDs."""
+    aliases: dict[str, str] = {}
+    for sequence_id in region_by_id:
+        # TEsorter replaces pipes embedded in FASTA identifiers with
+        # underscores in its reports.  Preserve both spellings, but fail if
+        # either spelling could refer to more than one refined sequence.
+        for alias in {sequence_id, sequence_id.replace("|", "_")}:
+            previous = aliases.get(alias)
+            if previous is not None and previous != sequence_id:
+                raise ValueError(
+                    "TEsorter identifier alias is ambiguous: "
+                    f"{alias} maps to both {previous} and {sequence_id}"
+                )
+            aliases[alias] = sequence_id
+    return aliases
+
+
+def resolve_region_id(
+    reported_id: str,
+    aliases: dict[str, str],
+    source: str,
+) -> str:
+    canonical_id = aliases.get(reported_id.strip())
+    if canonical_id is None:
+        raise ValueError(
+            f"TEsorter {source} references an unknown refined sequence: "
+            f"{reported_id.strip()}"
+        )
+    return canonical_id
 
 
 def category_and_strength(row: dict[str, str], domain_count: int) -> tuple[str, str, str, str]:
@@ -136,6 +172,7 @@ def main() -> None:
         if not sequence_id or sequence_id in region_by_id:
             raise ValueError(f"Missing or duplicate region-map sequence ID: {sequence_id}")
         region_by_id[sequence_id] = row
+    region_aliases = build_region_aliases(region_by_id)
 
     classifications = read_tsv(
         args.classifications, CLASSIFICATION_REQUIRED, allow_empty=True
@@ -143,20 +180,25 @@ def main() -> None:
     domain_rows = read_tsv(args.domains, DOMAIN_REQUIRED, allow_empty=True)
     domains_by_sequence: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in domain_rows:
-        sequence_id = domain_sequence_id(row["#id"])
-        if sequence_id not in region_by_id:
-            raise ValueError(f"TEsorter domain references an unknown refined sequence: {sequence_id}")
+        sequence_id = resolve_region_id(
+            domain_sequence_id(row["#id"]), region_aliases, "domain"
+        )
         domains_by_sequence[sequence_id].append(row)
 
     evidence_rows: list[dict[str, str]] = []
     seen: set[str] = set()
     for row_number, row in enumerate(classifications, start=2):
-        sequence_id = row["#TE"].strip()
-        if not sequence_id or sequence_id in seen:
-            raise ValueError(f"Missing or duplicate TEsorter classification ID: {sequence_id}")
+        reported_id = row["#TE"].strip()
+        if not reported_id:
+            raise ValueError("Missing TEsorter classification ID")
+        sequence_id = resolve_region_id(
+            reported_id, region_aliases, "classification"
+        )
+        if sequence_id in seen:
+            raise ValueError(
+                f"Duplicate TEsorter classification ID after canonical mapping: {reported_id}"
+            )
         seen.add(sequence_id)
-        if sequence_id not in region_by_id:
-            raise ValueError(f"TEsorter classification references an unknown refined sequence: {sequence_id}")
 
         region = region_by_id[sequence_id]
         sequence_domains = domains_by_sequence.get(sequence_id, [])
