@@ -45,8 +45,100 @@ METADATA_COLUMNS = [
     "plasmid_conflict_tools", "strict_taxonomy", "strict_taxonomy_rank",
     "analysis_taxonomy", "analysis_taxonomy_rank", "taxonomy_confidence",
     "taxonomy_supporting_tools", "taxonomy_conflict", "vcontact3_groups",
-    "vcontact3_group_status",
+    "vcontact3_group_status", "sequence_interpretation", "tesorter_status",
+    "tesorter_evidence_strength", "tesorter_categories", "tesorter_orders",
+    "tesorter_superfamilies", "tesorter_assignment_methods",
 ]
+
+STRENGTH_ORDER = {"": 0, "weak": 1, "qualified": 2, "strong": 3}
+
+
+def summarize_tesorter(
+    rows: list[dict[str, str]], has_qualified_viral_evidence: bool
+) -> dict[str, str]:
+    """Summarize TEsorter as auxiliary mobile-element evidence.
+
+    TEsorter never contributes an ICTV taxonomy vote. Its result changes only
+    the reported biological interpretation and review status.
+    """
+    tesorter_rows = [
+        row for row in rows if row.get("tool", "").strip().lower() == "tesorter"
+    ]
+    if not tesorter_rows:
+        return {
+            "sequence_interpretation": "viral_candidate",
+            "tesorter_status": "no_tesorter_evidence",
+            "tesorter_evidence_strength": "NA",
+            "tesorter_categories": "NA",
+            "tesorter_orders": "NA",
+            "tesorter_superfamilies": "NA",
+            "tesorter_assignment_methods": "NA",
+        }
+
+    categories = sorted({
+        row.get("tesorter_evidence_category", "").strip()
+        for row in tesorter_rows
+        if row.get("tesorter_evidence_category", "").strip()
+    })
+    strengths = [
+        row.get("evidence_strength", "").strip().lower() for row in tesorter_rows
+    ]
+    maximum_strength = max(strengths, key=lambda value: STRENGTH_ORDER.get(value, 0))
+    retroelement_strengths = [
+        row.get("evidence_strength", "").strip().lower()
+        for row in tesorter_rows
+        if row.get("tesorter_evidence_category", "").strip() == "retroelement"
+    ]
+    retroelement_strength = (
+        max(retroelement_strengths, key=lambda value: STRENGTH_ORDER.get(value, 0))
+        if retroelement_strengths else ""
+    )
+    has_supported_retroelement = STRENGTH_ORDER.get(retroelement_strength, 0) >= 2
+    has_weak_retroelement = retroelement_strength == "weak"
+    has_viral_like = "viral_like_mobile_element" in categories
+    has_ambiguous = "ambiguous_mobile_element" in categories
+
+    if has_supported_retroelement and has_qualified_viral_evidence:
+        interpretation = "viral_retroelement_conflict"
+        status = f"{retroelement_strength}_retroelement_conflict"
+    elif has_supported_retroelement:
+        interpretation = "likely_retroelement"
+        status = f"{retroelement_strength}_retroelement_evidence"
+    elif has_viral_like and has_qualified_viral_evidence:
+        interpretation = "retrovirus_compatible"
+        status = "viral_like_mobile_element_with_viral_support"
+    elif has_viral_like:
+        interpretation = "viral_like_mobile_element"
+        status = "viral_like_mobile_element"
+    elif has_ambiguous:
+        interpretation = "ambiguous_mobile_element"
+        status = "ambiguous_mobile_element_review"
+    elif has_weak_retroelement and has_qualified_viral_evidence:
+        interpretation = "viral_candidate_with_weak_retroelement_signal"
+        status = "weak_retroelement_annotation"
+    elif has_weak_retroelement:
+        interpretation = "weak_retroelement_signal"
+        status = "weak_retroelement_annotation"
+    else:
+        interpretation = "viral_candidate"
+        status = "tesorter_unresolved"
+
+    def joined(column: str) -> str:
+        values = sorted({
+            row.get(column, "").strip() for row in tesorter_rows
+            if row.get(column, "").strip() and row.get(column, "").strip().lower() != "unknown"
+        })
+        return ",".join(values) or "NA"
+
+    return {
+        "sequence_interpretation": interpretation,
+        "tesorter_status": status,
+        "tesorter_evidence_strength": maximum_strength or "NA",
+        "tesorter_categories": ",".join(categories) or "NA",
+        "tesorter_orders": joined("tesorter_order"),
+        "tesorter_superfamilies": joined("tesorter_superfamily"),
+        "tesorter_assignment_methods": joined("assignment_method"),
+    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -492,6 +584,9 @@ def run(args: argparse.Namespace) -> None:
             evidence_audit_rows.append(audit)
 
         qualified_tools.difference_update(strong_tools)
+        tesorter_summary = summarize_tesorter(
+            rows, bool(strong_tools or qualified_tools)
+        )
         if len(strong_tools) >= 2:
             viral_confidence = "high"
         elif strong_tools or len(qualified_tools) >= 2:
@@ -534,7 +629,11 @@ def run(args: argparse.Namespace) -> None:
             "provirus_coordinates": coords,
             "original_length": region["original_length"],
             "refined_length": len(sequence),
-            "viral_decision": "retained_viral_candidate",
+            "viral_decision": (
+                "retained_likely_retroelement"
+                if tesorter_summary["sequence_interpretation"] == "likely_retroelement"
+                else "retained_viral_candidate"
+            ),
             "viral_confidence": viral_confidence,
             "strong_tools": ",".join(sorted(strong_tools)) or "NA",
             "qualified_tools": ",".join(sorted(qualified_tools)) or "NA",
@@ -549,6 +648,7 @@ def run(args: argparse.Namespace) -> None:
             "taxonomy_conflict": "true" if any(vote["reason"] == "rank_tie" for vote in vote_rows) else "false",
             "vcontact3_groups": ",".join(sorted(set(group_labels))) or "NA",
             "vcontact3_group_status": ",".join(group_statuses),
+            **tesorter_summary,
         }
         metadata_rows.append(metadata)
         reasons = []
@@ -558,6 +658,12 @@ def run(args: argparse.Namespace) -> None:
         if metadata["taxonomy_conflict"] == "true": reasons.append("taxonomy_conflict")
         if "ambiguous_vcontact3_groups" in group_statuses: reasons.append("vcontact3_group_ambiguity")
         if "incompatible_or_unknown_parent_context" in group_statuses: reasons.append("vcontact3_group_context_conflict")
+        if tesorter_summary["sequence_interpretation"] == "viral_retroelement_conflict":
+            reasons.append("viral_retroelement_conflict")
+        elif tesorter_summary["sequence_interpretation"] == "likely_retroelement":
+            reasons.append("likely_retroelement")
+        elif tesorter_summary["sequence_interpretation"] == "ambiguous_mobile_element":
+            reasons.append("ambiguous_mobile_element")
         if strict_rank == "domain": reasons.append("taxonomy_unclassified")
         if reasons:
             review_rows.append({"final_sequence_id": final_id, "review_reasons": ",".join(reasons), **metadata})

@@ -29,6 +29,52 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
 
 
 class ViharmonyTests(unittest.TestCase):
+    def test_tesorter_changes_interpretation_without_voting_or_rejection(self) -> None:
+        viral = [{"tool": "genomad", "classification": "virus", "evidence_strength": "qualified"}]
+
+        strong_retroelement = viral + [{
+            "tool": "tesorter", "classification": "retroelement",
+            "evidence_strength": "strong", "tesorter_evidence_category": "retroelement",
+            "tesorter_order": "LTR", "tesorter_superfamily": "Gypsy",
+            "assignment_method": "direct_hmm",
+        }]
+        summary = run_viharmony.summarize_tesorter(strong_retroelement, True)
+        self.assertEqual(summary["sequence_interpretation"], "viral_retroelement_conflict")
+        self.assertEqual(summary["tesorter_status"], "strong_retroelement_conflict")
+        self.assertEqual(summary["tesorter_orders"], "LTR")
+
+        likely = run_viharmony.summarize_tesorter(strong_retroelement[1:], False)
+        self.assertEqual(likely["sequence_interpretation"], "likely_retroelement")
+
+        weak = run_viharmony.summarize_tesorter([{
+            "tool": "tesorter", "classification": "retroelement",
+            "evidence_strength": "weak", "tesorter_evidence_category": "retroelement",
+            "tesorter_order": "LTR", "tesorter_superfamily": "Gypsy",
+            "assignment_method": "second_pass",
+        }], True)
+        self.assertEqual(
+            weak["sequence_interpretation"],
+            "viral_candidate_with_weak_retroelement_signal",
+        )
+
+        viral_like = run_viharmony.summarize_tesorter([{
+            "tool": "tesorter", "classification": "viral_like_mobile_element",
+            "evidence_strength": "qualified",
+            "tesorter_evidence_category": "viral_like_mobile_element",
+            "tesorter_order": "LTR", "tesorter_superfamily": "Retrovirus",
+            "assignment_method": "direct_hmm",
+        }], True)
+        self.assertEqual(viral_like["sequence_interpretation"], "retrovirus_compatible")
+
+        ambiguous = run_viharmony.summarize_tesorter([{
+            "tool": "tesorter", "classification": "ambiguous_mobile_element",
+            "evidence_strength": "strong",
+            "tesorter_evidence_category": "ambiguous_mobile_element",
+            "tesorter_order": "Maverick", "tesorter_superfamily": "Polinton",
+            "assignment_method": "direct_hmm",
+        }], True)
+        self.assertEqual(ambiguous["sequence_interpretation"], "ambiguous_mobile_element")
+
     def test_combines_parent_evidence_region_taxonomy_and_original_ids(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)
@@ -61,7 +107,7 @@ class ViharmonyTests(unittest.TestCase):
                 "Adnaviria,Zilligvirae,Taleaviricota,Tokiviricetes,Ligamenvirales,Chiyouviridae,Wargodvirus,Wargodvirus xiongnu\n",
                 encoding="utf-8",
             )
-            evidence_columns = ["sample_id", "sequence_id", "parent_sequence_id", "tool", "classification", "evidence_strength", "score_type", *run_viharmony.RANK_COLUMNS.values(), "vitap_confidence_level", "vitap_assignment_method", "classification_rank"]
+            evidence_columns = ["sample_id", "sequence_id", "parent_sequence_id", "tool", "classification", "evidence_strength", "score_type", *run_viharmony.RANK_COLUMNS.values(), "vitap_confidence_level", "vitap_assignment_method", "classification_rank", "tesorter_evidence_category", "tesorter_order", "tesorter_superfamily", "assignment_method"]
             evidence = directory / "evidence.tsv"
             base_taxonomy = {
                 "d__Domain": "d__Viruses", "r__Realm": "r__Adnaviria", "k__Kingdom": "k__Zilligvirae",
@@ -85,6 +131,16 @@ class ViharmonyTests(unittest.TestCase):
                     row["vitap_confidence_level"] = "High-confidence"
                     row["vitap_assignment_method"] = "graph"
                 rows.append(row)
+            tesorter_row = {column: "" for column in evidence_columns}
+            tesorter_row.update({
+                "sample_id": "sample", "sequence_id": "sample__c000001",
+                "tool": "tesorter", "classification": "retroelement",
+                "evidence_strength": "strong",
+                "tesorter_evidence_category": "retroelement",
+                "tesorter_order": "LTR", "tesorter_superfamily": "Gypsy",
+                "assignment_method": "direct_hmm",
+            })
+            rows.append(tesorter_row)
             write_tsv(evidence, evidence_columns, rows)
 
             groups = directory / "groups.tsv"
@@ -107,7 +163,11 @@ class ViharmonyTests(unittest.TestCase):
             run_viharmony.run(args)
 
             metadata = read_tsv(directory / "sample.final_metadata.tsv")
+            self.assertEqual(len(metadata), 2)
             self.assertEqual(metadata[0]["viral_confidence"], "high")
+            self.assertEqual(metadata[0]["sequence_interpretation"], "viral_retroelement_conflict")
+            self.assertEqual(metadata[0]["tesorter_status"], "strong_retroelement_conflict")
+            self.assertEqual(metadata[0]["strict_taxonomy_rank"], "family")
             self.assertEqual(metadata[0]["provirus_coordinates"], "NA")
             self.assertEqual(metadata[1]["provirus_coordinates"], "11-80")
             self.assertEqual(metadata[1]["strict_taxonomy_rank"], "family")
