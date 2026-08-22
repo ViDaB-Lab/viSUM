@@ -12,6 +12,12 @@ class TEsorterAnalysisWorkflowContractTests(unittest.TestCase):
         cls.module = (ROOT / "modules/local/run_tesorter.nf").read_text(
             encoding="utf-8"
         )
+        cls.standardizer_module = (
+            ROOT / "modules/local/standardize_tesorter.nf"
+        ).read_text(encoding="utf-8")
+        cls.standardizer = (ROOT / "bin/standardize_tesorter.py").read_text(
+            encoding="utf-8"
+        )
         cls.config = (ROOT / "visum.config").read_text(encoding="utf-8")
 
     def test_analysis_consumes_refined_candidates_for_both_input_types(self) -> None:
@@ -57,6 +63,21 @@ class TEsorterAnalysisWorkflowContractTests(unittest.TestCase):
             "ch_harmony_inputs = ch_refined_for_taxonomy",
             self.workflow,
         )
+
+    def test_metadata_count_excludes_classification_header(self) -> None:
+        self.assertGreaterEqual(
+            self.module.count("NF && \\$1 !~ /^#/"),
+            2,
+        )
+
+    def test_standardizer_is_wired_as_auxiliary_harmony_evidence(self) -> None:
+        self.assertIn("include { STANDARDIZE_TESORTER }", self.workflow)
+        self.assertIn("STANDARDIZE_TESORTER(RUN_TESORTER.out.results)", self.workflow)
+        self.assertIn("STANDARDIZE_TESORTER.out.evidence", self.workflow)
+        self.assertIn("standardize_tesorter.py", self.standardizer_module)
+        self.assertIn('"tesorter_second_pass_similarity_transfer"', self.standardizer)
+        self.assertIn('"tesorter_complete_domain_architecture"', self.standardizer)
+        self.assertIn('"viral_like_mobile_element"', self.standardizer)
 
 
 if __name__ == "__main__":

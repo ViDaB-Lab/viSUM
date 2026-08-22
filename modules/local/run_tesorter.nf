@@ -66,7 +66,7 @@ process RUN_TESORTER {
         [[ -f "\$DOMAINS" ]] || : > "\$DOMAINS"
         [[ -f "\$DOMAIN_GFF" ]] || : > "\$DOMAIN_GFF"
 
-        CLASSIFICATION_COUNT=\$(awk 'NF { count++ } END { print count + 0 }' "\$CLASSIFICATIONS")
+        CLASSIFICATION_COUNT=\$(awk 'NF && \$1 !~ /^#/ { count++ } END { print count + 0 }' "\$CLASSIFICATIONS")
         if [[ "\$CLASSIFICATION_COUNT" -eq 0 ]]; then
             RUN_STATUS='completed_no_te_classifications'
         else
@@ -74,7 +74,7 @@ process RUN_TESORTER {
         fi
     fi
 
-    CLASSIFICATION_COUNT=\$(awk 'NF { count++ } END { print count + 0 }' "\$CLASSIFICATIONS")
+    CLASSIFICATION_COUNT=\$(awk 'NF && \$1 !~ /^#/ { count++ } END { print count + 0 }' "\$CLASSIFICATIONS")
     DOMAIN_COUNT=\$(awk 'NF && \$1 !~ /^#/ { count++ } END { print count + 0 }' "\$DOMAINS")
 
     printf 'sample_id\tinput_type\tinput_sequence_count\tte_classification_count\tdomain_row_count\ttesorter_version\tdatabase\tthreads\trun_status\tinput_fasta\n' > "\$METADATA_FILE"

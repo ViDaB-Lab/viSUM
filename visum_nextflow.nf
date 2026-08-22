@@ -34,6 +34,7 @@ include { RUN_CHECKV } from './modules/local/run_checkv'
 include { STANDARDIZE_CHECKV } from './modules/local/standardize_checkv'
 include { REFINE_PROVIRAL_REGIONS } from './modules/local/refine_proviral_regions'
 include { RUN_TESORTER } from './modules/local/run_tesorter'
+include { STANDARDIZE_TESORTER } from './modules/local/standardize_tesorter'
 include { PREPARE_VITAP_DATABASE } from './modules/local/vitap_database'
 include { RUN_VITAP } from './modules/local/run_vitap'
 include { STANDARDIZE_VITAP } from './modules/local/standardize_vitap'
@@ -1446,6 +1447,16 @@ workflow {
             prefix, type, regionMap, classifications, domains, domainGff, log, metadata ->
                 "TESORTER sample=${prefix} type=${type} classifications=${classifications.name}"
         }
+
+        STANDARDIZE_TESORTER(RUN_TESORTER.out.results)
+
+        STANDARDIZE_TESORTER.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
+        }
+
+        ch_harmony_evidence = ch_harmony_evidence.mix(
+            STANDARDIZE_TESORTER.out.evidence
+        )
 
         // Keep the refined candidate tuple unchanged, but release it only
         // after TEsorter completes for the same sample.
