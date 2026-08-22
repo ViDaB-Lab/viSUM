@@ -221,7 +221,9 @@ class ZeroCallStandardizerTests(unittest.TestCase):
                     {
                         "sample_id": "sample",
                         "input_type": "dna",
-                        "input_sequence_count": "1000",
+                        # Applied status is observed from geNomad output, not
+                        # inferred from a fixed input-size threshold.
+                        "input_sequence_count": "390",
                         "genomad_version": "1.12.0",
                         "score_calibration_requested": "true",
                         "score_calibration_applied": "true",

@@ -82,8 +82,32 @@ process RUN_GENOMAD {
         "${prefix}.fasta")
     SCORE_CALIBRATION_REQUESTED='${calibrationEnabled}'
     SCORE_CALIBRATION_APPLIED='false'
-    if [[ "\$SCORE_CALIBRATION_REQUESTED" == 'true' && \
-          "\$INPUT_SEQUENCE_COUNT" -ge 1000 ]]; then
+
+    # geNomad may decide whether calibration is usable for a particular input.
+    # Record what it actually produced instead of inferring this from input size.
+    TOTAL_CALL_COUNT=\$((VIRUS_CALL_COUNT + PLASMID_CALL_COUNT))
+    FDR_CALL_COUNT=\$(awk -F '\t' '
+        FNR == 1 {
+            fdr_column = 0
+            for (column = 1; column <= NF; column++) {
+                if (\$column == "fdr") {
+                    fdr_column = column
+                    break
+                }
+            }
+            next
+        }
+        fdr_column > 0 && tolower(\$fdr_column) !~ /^(|na|nan|none)$/ { count++ }
+        END { print count + 0 }
+    ' "${prefix}_virus_summary.tsv" "${prefix}_plasmid_summary.tsv")
+
+    if [[ "\$FDR_CALL_COUNT" -gt 0 && \
+          "\$FDR_CALL_COUNT" -ne "\$TOTAL_CALL_COUNT" ]]; then
+        echo "ERROR: geNomad produced FDR values for only \$FDR_CALL_COUNT of \$TOTAL_CALL_COUNT calls." >&2
+        exit 1
+    fi
+    if [[ "\$FDR_CALL_COUNT" -gt 0 || \
+          -d "${prefix}.genomad/${prefix}_score_calibration" ]]; then
         SCORE_CALIBRATION_APPLIED='true'
     fi
     if [[ "\$VIRUS_CALL_COUNT" -eq 0 ]]; then

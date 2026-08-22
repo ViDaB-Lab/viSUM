@@ -19,7 +19,9 @@ class GenomadWorkflowContractTests(unittest.TestCase):
         self.assertIn("--enable-score-calibration", module)
         self.assertIn("score_calibration_requested", module)
         self.assertIn("score_calibration_applied", module)
-        self.assertIn('"\\$INPUT_SEQUENCE_COUNT" -ge 1000', module)
+        self.assertIn("FDR_CALL_COUNT", module)
+        self.assertIn("_score_calibration", module)
+        self.assertNotIn('"\\$INPUT_SEQUENCE_COUNT" -ge 1000', module)
 
     def test_virus_gene_table_is_wired_into_standardization(self) -> None:
         workflow = (REPOSITORY_ROOT / "visum_nextflow.nf").read_text(

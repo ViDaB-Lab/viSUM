@@ -125,19 +125,7 @@ def load_run_metadata(
     parse_nonnegative_int(row["plasmid_call_count"], "plasmid call count", sample_id)
     parse_nonnegative_int(row["input_sequence_count"], "input sequence count", sample_id)
     parse_bool(row["score_calibration_requested"], "score_calibration_requested")
-    calibration_applied = parse_bool(
-        row["score_calibration_applied"], "score_calibration_applied"
-    )
-    expected_applied = (
-        parse_bool(
-            row["score_calibration_requested"], "score_calibration_requested"
-        )
-        and int(row["input_sequence_count"]) >= 1000
-    )
-    if calibration_applied != expected_applied:
-        raise ValueError(
-            "geNomad calibration metadata disagrees with its >=1,000-sequence rule"
-        )
+    parse_bool(row["score_calibration_applied"], "score_calibration_applied")
     return row
 
 
