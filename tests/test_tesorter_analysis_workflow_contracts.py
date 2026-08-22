@@ -29,7 +29,8 @@ class TEsorterAnalysisWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("if( type == 'rna'", self.module)
 
     def test_official_element_mode_command_uses_bundled_rexdb(self) -> None:
-        self.assertIn('TEsorter "${refined_fasta}"', self.module)
+        self.assertIn('prepare_tesorter_input.py', self.module)
+        self.assertIn(r'TEsorter "\$TESORTER_INPUT"', self.module)
         self.assertIn("-db rexdb", self.module)
         self.assertIn('-pre "\\$OUTPUT_PREFIX"', self.module)
         self.assertIn('-p "${task.cpus}"', self.module)
@@ -46,6 +47,7 @@ class TEsorterAnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn("tesorter.cls.tsv", self.module)
         self.assertIn("tesorter.dom.tsv", self.module)
         self.assertIn("tesorter.dom.gff3", self.module)
+        self.assertIn("tesorter_sequence_map.tsv", self.module)
         self.assertIn("tesorter_run_metadata.tsv", self.module)
         self.assertIn("emit: completed", self.module)
 

@@ -206,6 +206,77 @@ class StandardizeTEsorterTests(unittest.TestCase):
             )
             self.assertEqual(len(evidence.read_text(encoding="utf-8").splitlines()), 1)
 
+    def test_windowed_report_maps_back_to_refined_sequence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            region_map = root / "regions.tsv"
+            sequence_map = root / "sequence_map.tsv"
+            classifications = root / "classifications.tsv"
+            domains = root / "domains.tsv"
+            metadata = root / "metadata.tsv"
+            evidence = root / "evidence.tsv"
+            audit = root / "audit.tsv"
+            canonical_id = "sample__c000001|viral_region_1_400000"
+            window_id = canonical_id + "__tesorter_window_0001_1_270000"
+            reported_window_id = window_id.replace("|", "_")
+
+            write_tsv(
+                region_map,
+                [
+                    "sample_id", "input_type", "sequence_id",
+                    "parent_sequence_id", "record_type", "coordinates",
+                    "refined_length",
+                ],
+                [["sample", "dna", canonical_id, "sample__c000001", "provirus", "1-400000", "400000"]],
+            )
+            write_tsv(
+                sequence_map,
+                [
+                    "tesorter_sequence_id", "sequence_id", "window_start",
+                    "window_end", "window_length", "original_length", "was_split",
+                ],
+                [[window_id, canonical_id, "1", "270000", "270000", "400000", "true"]],
+            )
+            write_tsv(
+                classifications,
+                ["#TE", "Order", "Superfamily", "Clade", "Complete", "Strand", "Domains"],
+                [[reported_window_id, "LTR", "Gypsy", "unknown", "no", "+", "RT|Ty3_gypsy"]],
+            )
+            write_tsv(
+                domains,
+                ["#id", "length", "evalue", "coverge", "probability", "score"],
+                [[f"{reported_window_id}|domain", "100", "1e-20", "80", "0.9", "0.7"]],
+            )
+            write_tsv(
+                metadata,
+                ["sample_id", "input_type", "te_classification_count", "domain_row_count", "run_status"],
+                [["sample", "dna", "1", "1", "completed_with_te_classifications"]],
+            )
+
+            subprocess.run(
+                [
+                    sys.executable, str(SCRIPT),
+                    "--sample-id", "sample", "--input-type", "dna",
+                    "--region-map", str(region_map),
+                    "--sequence-map", str(sequence_map),
+                    "--classifications", str(classifications),
+                    "--domains", str(domains),
+                    "--run-metadata", str(metadata),
+                    "--output-evidence", str(evidence),
+                    "--output-audit", str(audit),
+                ],
+                check=True,
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
+            with evidence.open("r", encoding="utf-8", newline="") as handle:
+                row = next(csv.DictReader(handle, delimiter="\t"))
+            self.assertEqual(row["sequence_id"], canonical_id)
+            self.assertEqual(row["tesorter_window_id"], window_id)
+            self.assertEqual(row["tesorter_window_coordinates"], "1-270000")
+            self.assertEqual(row["tesorter_window_was_split"], "true")
+
 
 if __name__ == "__main__":
     unittest.main()

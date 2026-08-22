@@ -22,6 +22,10 @@ METADATA_REQUIRED = {
     "sample_id", "input_type", "te_classification_count", "domain_row_count",
     "run_status",
 }
+SEQUENCE_MAP_REQUIRED = {
+    "tesorter_sequence_id", "sequence_id", "window_start", "window_end",
+    "window_length", "original_length", "was_split",
+}
 
 VIRAL_LIKE_LABELS = {"retrovirus", "pararetrovirus"}
 AMBIGUOUS_LABELS = {"mixture", "maverick", "polinton"}
@@ -42,6 +46,9 @@ OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + [
     "maximum_domain_score",
     "maximum_domain_coverage",
     "minimum_domain_evalue",
+    "tesorter_window_id",
+    "tesorter_window_coordinates",
+    "tesorter_window_was_split",
 ]
 
 AUDIT_COLUMNS = OUTPUT_COLUMNS + ["classification_row_number"]
@@ -54,6 +61,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-id", required=True)
     parser.add_argument("--input-type", required=True, choices=("dna", "rna"))
     parser.add_argument("--region-map", required=True, type=Path)
+    parser.add_argument("--sequence-map", type=Path)
     parser.add_argument("--classifications", required=True, type=Path)
     parser.add_argument("--domains", required=True, type=Path)
     parser.add_argument("--run-metadata", required=True, type=Path)
@@ -172,7 +180,34 @@ def main() -> None:
         if not sequence_id or sequence_id in region_by_id:
             raise ValueError(f"Missing or duplicate region-map sequence ID: {sequence_id}")
         region_by_id[sequence_id] = row
-    region_aliases = build_region_aliases(region_by_id)
+    sequence_map_by_id: dict[str, dict[str, str]] = {}
+    sequence_aliases: dict[str, str] = {}
+    if args.sequence_map is not None:
+        for row in read_tsv(args.sequence_map, SEQUENCE_MAP_REQUIRED):
+            tesorter_id = row["tesorter_sequence_id"].strip()
+            sequence_id = row["sequence_id"].strip()
+            if not tesorter_id or tesorter_id in sequence_map_by_id:
+                raise ValueError(f"Missing or duplicate TEsorter window ID: {tesorter_id}")
+            if sequence_id not in region_by_id:
+                raise ValueError(f"TEsorter window maps to unknown refined sequence: {sequence_id}")
+            sequence_map_by_id[tesorter_id] = row
+            for alias in {tesorter_id, tesorter_id.replace("|", "_")}:
+                previous = sequence_aliases.get(alias)
+                if previous is not None and previous != tesorter_id:
+                    raise ValueError(f"Ambiguous TEsorter window alias: {alias}")
+                sequence_aliases[alias] = tesorter_id
+    else:
+        for sequence_id, region in region_by_id.items():
+            sequence_map_by_id[sequence_id] = {
+                "tesorter_sequence_id": sequence_id,
+                "sequence_id": sequence_id,
+                "window_start": "1",
+                "window_end": region["refined_length"].strip(),
+                "window_length": region["refined_length"].strip(),
+                "original_length": region["refined_length"].strip(),
+                "was_split": "false",
+            }
+        sequence_aliases = build_region_aliases(sequence_map_by_id)
 
     classifications = read_tsv(
         args.classifications, CLASSIFICATION_REQUIRED, allow_empty=True
@@ -181,7 +216,7 @@ def main() -> None:
     domains_by_sequence: dict[str, list[dict[str, str]]] = defaultdict(list)
     for row in domain_rows:
         sequence_id = resolve_region_id(
-            domain_sequence_id(row["#id"]), region_aliases, "domain"
+            domain_sequence_id(row["#id"]), sequence_aliases, "domain"
         )
         domains_by_sequence[sequence_id].append(row)
 
@@ -191,17 +226,19 @@ def main() -> None:
         reported_id = row["#TE"].strip()
         if not reported_id:
             raise ValueError("Missing TEsorter classification ID")
-        sequence_id = resolve_region_id(
-            reported_id, region_aliases, "classification"
+        tesorter_id = resolve_region_id(
+            reported_id, sequence_aliases, "classification"
         )
-        if sequence_id in seen:
+        if tesorter_id in seen:
             raise ValueError(
                 f"Duplicate TEsorter classification ID after canonical mapping: {reported_id}"
             )
-        seen.add(sequence_id)
+        seen.add(tesorter_id)
 
+        window = sequence_map_by_id[tesorter_id]
+        sequence_id = window["sequence_id"].strip()
         region = region_by_id[sequence_id]
-        sequence_domains = domains_by_sequence.get(sequence_id, [])
+        sequence_domains = domains_by_sequence.get(tesorter_id, [])
         reported_domains = row["Domains"].strip().lower()
         if reported_domains == "none" and sequence_domains:
             raise ValueError(
@@ -260,6 +297,11 @@ def main() -> None:
             "maximum_domain_score": format_number(max(scores)) if scores else "",
             "maximum_domain_coverage": format_number(max(coverages)) if coverages else "",
             "minimum_domain_evalue": format_number(min(evalues)) if evalues else "",
+            "tesorter_window_id": tesorter_id,
+            "tesorter_window_coordinates": (
+                f"{window['window_start'].strip()}-{window['window_end'].strip()}"
+            ),
+            "tesorter_window_was_split": window["was_split"].strip(),
             "classification_row_number": str(row_number),
         }
         output.update(unclassified_taxonomy(category))

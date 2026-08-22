@@ -12,6 +12,7 @@ process STANDARDIZE_TESORTER {
     tuple val(prefix),
           val(type),
           path(region_map),
+          path(sequence_map),
           path(classifications),
           path(domains),
           path(domain_gff),
@@ -33,6 +34,7 @@ process STANDARDIZE_TESORTER {
         --sample-id "${prefix}" \
         --input-type "${type}" \
         --region-map "${region_map}" \
+        --sequence-map "${sequence_map}" \
         --classifications "${classifications}" \
         --domains "${domains}" \
         --run-metadata "${run_metadata}" \
