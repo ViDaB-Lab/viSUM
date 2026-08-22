@@ -1446,11 +1446,28 @@ workflow {
             prefix, type, regionMap, classifications, domains, domainGff, log, metadata ->
                 "TESORTER sample=${prefix} type=${type} classifications=${classifications.name}"
         }
+
+        // Keep the refined candidate tuple unchanged, but release it only
+        // after TEsorter completes for the same sample.
+        ch_refined_for_taxonomy = REFINE_PROVIRAL_REGIONS.out.refined
+            .join(RUN_TESORTER.out.completed)
+            .map { prefix, type, refinedFasta, regionMap, boundaryAudit,
+                   refinementSummary, completedType ->
+                if( type != completedType ) {
+                    error "TEsorter completion type mismatch for sample '${prefix}'"
+                }
+                tuple(
+                    prefix, type, refinedFasta, regionMap,
+                    boundaryAudit, refinementSummary
+                )
+            }
+    } else {
+        ch_refined_for_taxonomy = REFINE_PROVIRAL_REGIONS.out.refined
     }
 
     if( runVitap ) {
         RUN_VITAP(
-            REFINE_PROVIRAL_REGIONS.out.refined,
+            ch_refined_for_taxonomy,
             ch_vitap_database,
             vitapIncludeLowConfidence
         )
@@ -1473,7 +1490,7 @@ workflow {
 
     if( runVcontact3 ) {
         RUN_VCONTACT3(
-            REFINE_PROVIRAL_REGIONS.out.refined,
+            ch_refined_for_taxonomy,
             ch_vcontact3_database,
             vcontact3DbDomain
         )
@@ -1518,7 +1535,7 @@ workflow {
         }
     }
 
-    ch_harmony_inputs = REFINE_PROVIRAL_REGIONS.out.refined
+    ch_harmony_inputs = ch_refined_for_taxonomy
         .map { prefix, type, refined, regionMap, boundaryAudit, summary ->
             tuple(prefix, type, refined, regionMap)
         }

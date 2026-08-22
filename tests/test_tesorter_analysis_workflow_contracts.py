@@ -41,6 +41,22 @@ class TEsorterAnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn("tesorter.rexdb.dom.tsv", self.module)
         self.assertIn("tesorter.rexdb.dom.gff3", self.module)
         self.assertIn("tesorter_run_metadata.tsv", self.module)
+        self.assertIn("emit: completed", self.module)
+
+    def test_taxonomy_and_harmonizer_wait_for_tesorter_when_enabled(self) -> None:
+        self.assertIn(".join(RUN_TESORTER.out.completed)", self.workflow)
+        self.assertIn(
+            "RUN_VITAP(\n            ch_refined_for_taxonomy,",
+            self.workflow,
+        )
+        self.assertIn(
+            "RUN_VCONTACT3(\n            ch_refined_for_taxonomy,",
+            self.workflow,
+        )
+        self.assertIn(
+            "ch_harmony_inputs = ch_refined_for_taxonomy",
+            self.workflow,
+        )
 
 
 if __name__ == "__main__":

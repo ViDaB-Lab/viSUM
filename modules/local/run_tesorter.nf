@@ -25,6 +25,9 @@ process RUN_TESORTER {
           path("${prefix}.tesorter.log"),
           path("${prefix}.tesorter_run_metadata.tsv"),
           emit: results
+    tuple val(prefix),
+          val(type),
+          emit: completed
 
     script:
     """
@@ -83,4 +86,3 @@ process RUN_TESORTER {
     echo "TESORTER sample=${prefix} type=${type} classifications=\$CLASSIFICATION_COUNT domains=\$DOMAIN_COUNT"
     """
 }
-

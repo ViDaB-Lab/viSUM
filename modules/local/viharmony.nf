@@ -38,7 +38,8 @@ process VIHARMONY {
           path("${prefix}.database_candidates.tsv"),
           emit: results
     tuple val(prefix),
-          path("${prefix}.*_audit.tsv.gz", optional: true),
+          path("${prefix}.*_audit.tsv.gz"),
+          optional: true,
           emit: audits
 
     script:
