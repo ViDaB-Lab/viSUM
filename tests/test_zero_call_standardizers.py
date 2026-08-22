@@ -69,6 +69,62 @@ class ZeroCallStandardizerTests(unittest.TestCase):
 
         self.assertEqual(fields["coordinates"], "4-990")
 
+    def test_virsorter2_allows_wrapped_boundary_for_circular_full_call(self) -> None:
+        boundary = {
+            "seqname": "sample__c000001",
+            "trim_bp_start": "373",
+            "trim_bp_end": "26639",
+            "trim_orf_index_start": "1",
+            "trim_orf_index_end": "40",
+            "final_max_score": "0.95",
+            "final_max_score_group": "dsDNAphage",
+            "hallmark_cnt": "2",
+            "partial": "0",
+            "shape": "circular",
+        }
+
+        fields = standardize_virsorter2.boundary_fields(
+            "sample__c000001||full",
+            "sample__c000001",
+            "full",
+            26266,
+            0.95,
+            "dsDNAphage",
+            2,
+            boundary,
+            26266,
+        )
+
+        self.assertEqual(fields["coordinates"], "373-26639")
+        self.assertEqual(fields["topology"], "circular")
+
+    def test_virsorter2_rejects_wrapped_boundary_for_linear_full_call(self) -> None:
+        boundary = {
+            "seqname": "sample__c000001",
+            "trim_bp_start": "373",
+            "trim_bp_end": "26639",
+            "trim_orf_index_start": "1",
+            "trim_orf_index_end": "40",
+            "final_max_score": "0.95",
+            "final_max_score_group": "dsDNAphage",
+            "hallmark_cnt": "2",
+            "partial": "0",
+            "shape": "linear",
+        }
+
+        with self.assertRaisesRegex(ValueError, "Invalid boundary coordinates"):
+            standardize_virsorter2.boundary_fields(
+                "sample__c000001||full",
+                "sample__c000001",
+                "full",
+                26266,
+                0.95,
+                "dsDNAphage",
+                2,
+                boundary,
+                26266,
+            )
+
     def test_virsorter2_rejects_length_mismatch_for_partial_call(self) -> None:
         boundary = {
             "seqname": "sample__c000001",

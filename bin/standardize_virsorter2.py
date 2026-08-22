@@ -230,7 +230,14 @@ def boundary_fields(
 
     start = parse_positive_int(boundary["trim_bp_start"], "boundary start", sequence_id)
     end = parse_positive_int(boundary["trim_bp_end"], "boundary end", sequence_id)
-    if end < start or end > parent_length:
+    topology = clean_missing(boundary["shape"])
+    circular_full_wrap = (
+        call_type == "full"
+        and topology.lower() == "circular"
+        and end > parent_length
+        and end - parent_length <= start
+    )
+    if end < start or (end > parent_length and not circular_full_wrap):
         raise ValueError(f"Invalid boundary coordinates for {sequence_id}: {start}-{end}")
     # VirSorter2 may trim ``||full`` calls at terminal gene overhangs, during
     # circular-sequence correction, or while optimizing the end boundary.
@@ -268,7 +275,7 @@ def boundary_fields(
 
     return {
         "coordinates": f"{start}-{end}",
-        "topology": clean_missing(boundary["shape"]),
+        "topology": topology,
         "n_genes": str(orf_end - orf_start + 1),
     }
 
