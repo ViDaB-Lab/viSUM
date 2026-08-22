@@ -41,6 +41,61 @@ class ZeroCallStandardizerTests(unittest.TestCase):
             ("strong", "virsorter2_high_confidence_cutoff"),
         )
 
+    def test_virsorter2_allows_trimmed_boundary_for_full_call(self) -> None:
+        boundary = {
+            "seqname": "sample__c000001",
+            "trim_bp_start": "4",
+            "trim_bp_end": "990",
+            "trim_orf_index_start": "1",
+            "trim_orf_index_end": "10",
+            "final_max_score": "0.95",
+            "final_max_score_group": "dsDNAphage",
+            "hallmark_cnt": "2",
+            "partial": "0",
+            "shape": "linear",
+        }
+
+        fields = standardize_virsorter2.boundary_fields(
+            "sample__c000001||full",
+            "sample__c000001",
+            "full",
+            1000,
+            0.95,
+            "dsDNAphage",
+            2,
+            boundary,
+            1000,
+        )
+
+        self.assertEqual(fields["coordinates"], "4-990")
+
+    def test_virsorter2_rejects_length_mismatch_for_partial_call(self) -> None:
+        boundary = {
+            "seqname": "sample__c000001",
+            "trim_bp_start": "101",
+            "trim_bp_end": "500",
+            "trim_orf_index_start": "2",
+            "trim_orf_index_end": "5",
+            "final_max_score": "0.80",
+            "final_max_score_group": "dsDNAphage",
+            "hallmark_cnt": "1",
+            "partial": "1",
+            "shape": "linear",
+        }
+
+        with self.assertRaisesRegex(ValueError, "lengths disagree"):
+            standardize_virsorter2.boundary_fields(
+                "sample__c000001||0_partial",
+                "sample__c000001",
+                "partial",
+                399,
+                0.80,
+                "dsDNAphage",
+                1,
+                boundary,
+                1000,
+            )
+
     def test_genomad_zero_viruses_preserves_plasmid_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_directory:
             directory = Path(temp_directory)

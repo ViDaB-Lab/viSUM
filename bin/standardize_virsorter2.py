@@ -232,7 +232,12 @@ def boundary_fields(
     end = parse_positive_int(boundary["trim_bp_end"], "boundary end", sequence_id)
     if end < start or end > parent_length:
         raise ValueError(f"Invalid boundary coordinates for {sequence_id}: {start}-{end}")
-    if end - start + 1 != region_length:
+    # VirSorter2 may trim ``||full`` calls at terminal gene overhangs, during
+    # circular-sequence correction, or while optimizing the end boundary.
+    # Its score-table length therefore need not equal the boundary span for a
+    # full call. Partial calls represent extracted proviral regions, so their
+    # reported length and coordinates must still agree exactly.
+    if call_type == "partial" and end - start + 1 != region_length:
         raise ValueError(f"Score and boundary lengths disagree for {sequence_id}")
 
     orf_start = parse_positive_int(
