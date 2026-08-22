@@ -275,6 +275,37 @@ class StandardizeCenoteTaker3Tests(unittest.TestCase):
             )
             self.assertEqual(rows, [])
 
+    def test_repeated_functional_gene_names_at_distinct_loci_are_counted(self) -> None:
+        gene_rows = [
+            {
+                "contig": "ct3_run_1",
+                "gene_start": "1",
+                "gene_stop": "3",
+                "gene_name": "tRNA-Met",
+                "chunk_name": "NaN",
+            },
+            {
+                "contig": "ct3_run_1",
+                "gene_start": "6",
+                "gene_stop": "8",
+                "gene_name": "tRNA-Met",
+                "chunk_name": "NaN",
+            },
+            # Exact duplicate annotation rows must not inflate gene_count.
+            {
+                "contig": "ct3_run_1",
+                "gene_start": "6",
+                "gene_stop": "8",
+                "gene_name": "tRNA-Met",
+                "chunk_name": "NaN",
+            },
+        ]
+
+        self.assertEqual(
+            standardizer.load_gene_counts(gene_rows, {"ct3_run_1": 10}),
+            {"ct3_run_1": 2},
+        )
+
     def test_zero_hallmark_exploratory_call_is_not_formal_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temp_directory:
             rows = self.run_standardizer(

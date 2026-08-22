@@ -269,7 +269,11 @@ def load_gene_counts(
     rows: list[dict[str, str]],
     fasta_lengths: dict[str, int],
 ) -> dict[str, int]:
-    genes_by_call: dict[str, dict[str, tuple[int, int]]] = defaultdict(dict)
+    # CT3's gene_name column contains a functional label, not a unique gene
+    # identifier. A contig can therefore contain multiple legitimate calls such
+    # as tRNA-Met at different loci. Treat the complete labelled locus as the
+    # gene identity while still collapsing exact duplicate annotation rows.
+    genes_by_call: dict[str, set[tuple[str, int, int]]] = defaultdict(set)
     for row in rows:
         call_key = gene_call_key(row)
         if call_key not in fasta_lengths:
@@ -281,13 +285,7 @@ def load_gene_counts(
         stop = parse_integer(row["gene_stop"], "gene stop", call_key, minimum=1)
         if stop < start or stop > fasta_lengths[call_key]:
             raise ValueError(f"Invalid gene coordinates for {call_key}: {start}-{stop}")
-        coordinates = (start, stop)
-        previous_coordinates = genes_by_call[call_key].get(gene_name)
-        if previous_coordinates is not None and previous_coordinates != coordinates:
-            raise ValueError(
-                f"CT3 gene {gene_name} has conflicting coordinates for {call_key}"
-            )
-        genes_by_call[call_key][gene_name] = coordinates
+        genes_by_call[call_key].add((gene_name, start, stop))
     return {call_key: len(genes) for call_key, genes in genes_by_call.items()}
 
 

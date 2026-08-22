@@ -12,16 +12,22 @@ class ResourceWorkflowContractTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.config = (ROOT / "visum.config").read_text(encoding="utf-8")
         cls.workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+        cls.launcher = (ROOT / "visum").read_text(encoding="utf-8")
 
     def read_module(self, name: str) -> str:
         return (MODULES / name).read_text(encoding="utf-8")
 
-    def test_local_executor_has_total_cpu_and_memory_budgets(self) -> None:
+    def test_local_executor_cap_is_applied_before_jvm_startup(self) -> None:
         self.assertIn("max_cpus      = 8", self.config)
         self.assertIn("max_memory    = '48 GB'", self.config)
-        self.assertIn("executor.cpus = params.max_cpus", self.config)
-        self.assertIn("executor.memory = params.max_memory", self.config)
+        self.assertNotIn("executor.cpus = params.max_cpus", self.config)
+        self.assertNotIn("executor.memory = params.max_memory", self.config)
         self.assertNotIn("executor.$local", self.config)
+        self.assertIn("-XX:ActiveProcessorCount=${MAX_CPUS}", self.launcher)
+        self.assertIn('VISUM_LOCAL_CPU_CAP="$MAX_CPUS"', self.launcher)
+        self.assertIn('taskset --cpu-list "$selected_spec"', self.launcher)
+        self.assertIn('VISUM_CPU_CAP_MODE="scheduler+affinity"', self.launcher)
+        self.assertIn("System.getenv('VISUM_LOCAL_CPU_CAP')", self.workflow)
 
     def test_utility_processes_inherit_one_cpu(self) -> None:
         process_block = re.search(

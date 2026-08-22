@@ -47,11 +47,15 @@ error. Use `--run_checkv false` to skip CheckV and its database setup.
 Resource management
 ===================
 
-viSUM separates the total local workflow budget from each program's task
-request. `--max_cpus` and `--max_memory` limit the resources that Nextflow may
-schedule concurrently across the complete local run. The safe defaults are 8
-logical CPUs and 48 GB RAM. Lightweight preparation, standardization, and gate
-processes use one CPU.
+viSUM separates local scheduler capacity from each program's task request.
+Launch local runs through `./visum`: it applies `--max_cpus` before the Nextflow
+JVM starts, making it an aggregate CPU scheduling cap. On Linux it also applies
+CPU affinity to the complete viSUM process tree, preventing third-party tools
+from using CPUs outside that cap. A direct `nextflow run` cannot do either and
+treats `--max_cpus` only as a per-task ceiling.
+`--max_memory` is also a per-task ceiling; a hard aggregate memory cap requires
+an OS or cluster scheduler. Defaults are 8 logical CPUs and 48 GB per task.
+Lightweight preparation, standardization, and gate processes use one CPU.
 
 Each compute-heavy discovery program has an independent preferred CPU option.
 Its effective task allocation is automatically capped at `--max_cpus`, so a
@@ -71,7 +75,7 @@ The corresponding `*_memory` and `*_time` parameters in `visum.config` provide
 per-task memory and runtime requests. Ordinary runs should normally change only
 the total budget. For example, a shared-server run capped at eight CPUs uses:
 
-    nextflow run visum_nextflow.nf -profile local_safe \
+    ./visum -profile local_safe \
       --max_cpus 8 --max_memory '48 GB' ...
 
 The `local_full` profile starts with a 32-CPU/128-GB budget for a dedicated

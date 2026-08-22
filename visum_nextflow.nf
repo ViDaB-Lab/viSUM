@@ -149,16 +149,16 @@ def visumHelp() {
 viSUM 0.1.0 — viral sequence discovery, refinement, and taxonomy harmonization
 
 USAGE
-  Single FASTA:
-    nextflow run visum_nextflow.nf -c visum.config \\
+  Single FASTA (recommended local launcher):
+    ./visum -c visum.config \\
       --input INPUT.fasta --prefix SAMPLE --type dna|rna [options]
 
   Multiple FASTAs:
-    nextflow run visum_nextflow.nf -c visum.config \\
+    ./visum -c visum.config \\
       --prefix_many samples.csv --indir INPUT_DIRECTORY [options]
 
   Help only:
-    nextflow run visum_nextflow.nf -c visum.config --help
+    ./visum -c visum.config --help
 
 INPUT
   --input PATH                 Input FASTA for a single sample.
@@ -173,8 +173,9 @@ OUTPUT AND RESOURCES
   --outdir PATH                Results directory [results].
   --dbdir PATH                 Persistent managed databases [databases].
   --tooldir PATH               Persistent managed tool bundles [tools].
-  --max_cpus INT               Total local CPU budget [8].
-  --max_memory MEMORY          Total local memory budget [48 GB].
+  --max_cpus INT               Aggregate local CPU scheduler cap through
+                               ./visum; per-task ceiling otherwise [8].
+  --max_memory MEMORY          Per-task memory ceiling [48 GB].
   --harmonizer_audit MODE      none, compact, or full [compact].
   --ictv_csv PATH              Canonical ICTV rank table
                                [assets/ICTV_VMR_MSL41.csv].
@@ -295,6 +296,17 @@ workflow {
     }
 
     def maxCpus = parsePositiveIntegerParameter(params.max_cpus, '--max_cpus')
+    def launcherCpuCap = System.getenv('VISUM_LOCAL_CPU_CAP')
+    def cpuCapMode = System.getenv('VISUM_CPU_CAP_MODE')
+    if( launcherCpuCap != null ) {
+        def enforcedCpus = parsePositiveIntegerParameter(launcherCpuCap, 'VISUM_LOCAL_CPU_CAP')
+        if( enforcedCpus != maxCpus ) {
+            error "Launcher CPU cap (${enforcedCpus}) does not match --max_cpus (${maxCpus})."
+        }
+    }
+    else {
+        log.warn("Direct Nextflow invocation detected: --max_cpus=${maxCpus} caps each task but not aggregate local concurrency. Use ./visum to enforce the aggregate CPU scheduler cap.")
+    }
     def analysisCpuParameters = [
         '--genomad_cpus': params.genomad_cpus,
         '--virsorter2_cpus': params.virsorter2_cpus,
@@ -323,7 +335,9 @@ workflow {
     )
 
     println(
-        "viSUM resource budget: max_cpus=${maxCpus}, max_memory=${params.max_memory}; " +
+        "viSUM resource controls: max_cpus=${maxCpus} " +
+        "(${launcherCpuCap != null ? (cpuCapMode ?: 'aggregate scheduler cap enforced') : 'per-task ceiling only'}), " +
+        "max_memory=${params.max_memory} (per-task ceiling); " +
         "preferred tool CPUs (each capped at max_cpus)=" + analysisCpuParameters.collect { name, value ->
             "${name.substring(2)}=${value}"
         }.join(', ')

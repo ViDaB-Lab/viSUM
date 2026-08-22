@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MAX_CPUS=8
+
+arguments=("$@")
+for ((index = 0; index < ${#arguments[@]}; index++)); do
+    argument="${arguments[$index]}"
+    case "$argument" in
+        --max_cpus)
+            if (( index + 1 >= ${#arguments[@]} )); then
+                echo "ERROR: --max_cpus requires a positive integer." >&2
+                exit 2
+            fi
+            MAX_CPUS="${arguments[$((index + 1))]}"
+            ((index += 1))
+            ;;
+        --max_cpus=*)
+            MAX_CPUS="${argument#*=}"
+            ;;
+    esac
+done
+
+if [[ ! "$MAX_CPUS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: --max_cpus must be a positive integer; received '$MAX_CPUS'." >&2
+    exit 2
+fi
+
+if [[ -n "${NEXTFLOW_BIN:-}" ]]; then
+    nextflow_bin="$NEXTFLOW_BIN"
+elif command -v nextflow >/dev/null 2>&1; then
+    nextflow_bin="$(command -v nextflow)"
+elif [[ -x "$ROOT_DIR/../nextflow" ]]; then
+    nextflow_bin="$ROOT_DIR/../nextflow"
+else
+    echo "ERROR: Nextflow was not found." >&2
+    echo "Install it on PATH or set NEXTFLOW_BIN=/path/to/nextflow." >&2
+    exit 127
+fi
+
+# The local executor schedules against the processors visible to the JVM.
+# Pipeline parameters are parsed too late to change that capacity, so set it
+# before Nextflow starts. Existing JVM options are preserved.
+export NXF_OPTS="${NXF_OPTS:-} -XX:ActiveProcessorCount=${MAX_CPUS}"
+export VISUM_LOCAL_CPU_CAP="$MAX_CPUS"
+
+# Re-append the resolved value so config profiles and the scheduler cannot
+# silently disagree about the active CPU ceiling.
+nextflow_command=(
+    "$nextflow_bin" run "$ROOT_DIR/visum_nextflow.nf"
+    "$@" --max_cpus "$MAX_CPUS"
+)
+
+# On Linux, affinity is inherited by every child process. This is the hard
+# process-tree ceiling that also contains third-party tools which create more
+# threads than requested. Select from the launcher's existing allowed cpuset so
+# the wrapper remains compatible with restricted server sessions.
+if command -v taskset >/dev/null 2>&1 && [[ "$(uname -s)" == "Linux" ]]; then
+    affinity_output="$(taskset -pc "$$")"
+    affinity_spec="${affinity_output##*: }"
+    selected_cpus=()
+    IFS=',' read -r -a affinity_chunks <<< "$affinity_spec"
+    for chunk in "${affinity_chunks[@]}"; do
+        if [[ "$chunk" == *-* ]]; then
+            start_cpu="${chunk%-*}"
+            end_cpu="${chunk#*-}"
+        else
+            start_cpu="$chunk"
+            end_cpu="$chunk"
+        fi
+        for ((cpu = start_cpu; cpu <= end_cpu; cpu++)); do
+            selected_cpus+=("$cpu")
+            if (( ${#selected_cpus[@]} == MAX_CPUS )); then
+                break 2
+            fi
+        done
+    done
+    if (( ${#selected_cpus[@]} < MAX_CPUS )); then
+        echo "ERROR: --max_cpus=$MAX_CPUS exceeds the ${#selected_cpus[@]} CPUs allowed to this session." >&2
+        exit 2
+    fi
+    selected_spec="$(IFS=,; echo "${selected_cpus[*]}")"
+    export VISUM_CPU_CAP_MODE="scheduler+affinity"
+    exec taskset --cpu-list "$selected_spec" "${nextflow_command[@]}"
+fi
+
+export VISUM_CPU_CAP_MODE="scheduler"
+echo "WARN: taskset is unavailable; aggregate scheduling is capped, but OS CPU affinity is not enforced." >&2
+exec "${nextflow_command[@]}"
