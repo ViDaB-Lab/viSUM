@@ -75,6 +75,10 @@ class TEsorterAnalysisWorkflowContractTests(unittest.TestCase):
     def test_standardizer_is_wired_as_auxiliary_harmony_evidence(self) -> None:
         self.assertIn("include { STANDARDIZE_TESORTER }", self.workflow)
         self.assertIn("STANDARDIZE_TESORTER(RUN_TESORTER.out.results)", self.workflow)
+        self.assertIn(
+            "prefix, type, regionMap, sequenceMap, classifications, domains, domainGff, log, metadata ->",
+            self.workflow,
+        )
         self.assertIn("STANDARDIZE_TESORTER.out.evidence", self.workflow)
         self.assertIn("standardize_tesorter.py", self.standardizer_module)
         self.assertIn('"tesorter_second_pass_similarity_transfer"', self.standardizer)

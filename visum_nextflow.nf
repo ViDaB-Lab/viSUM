@@ -1458,7 +1458,7 @@ workflow {
         RUN_TESORTER(REFINE_PROVIRAL_REGIONS.out.refined)
 
         RUN_TESORTER.out.results.view {
-            prefix, type, regionMap, classifications, domains, domainGff, log, metadata ->
+            prefix, type, regionMap, sequenceMap, classifications, domains, domainGff, log, metadata ->
                 "TESORTER sample=${prefix} type=${type} classifications=${classifications.name}"
         }
 
