@@ -246,6 +246,9 @@ DATABASE AND INSTALLATION OVERRIDES
   --vicat_db PATH              Existing viCAT database.
   --vicat_metavr_proteins PATH MetaVR proteins for a local viCAT build.
   --vicat_metavr_metadata PATH MetaVR metadata for a local viCAT build.
+  --vicat_viral_representatives PATH  Representative viral protein FASTA.
+  --vicat_cellular_proteins PATH      Cellular-decoy protein FASTA.
+  --vicat_cellular_metadata PATH      Cellular-decoy protein metadata TSV.
   --vitap_db PATH              Existing VITAP database.
   --vitap_vmr PATH             VMR workbook/CSV for a VITAP build.
   --vitap_update_database BOOL Check for a newer VMR [false].
@@ -1131,14 +1134,6 @@ workflow {
             error '--vicat_index_chunks must be at least 1.'
         }
 
-        def userSuppliedDatabase = params.vicat_db != null
-        def vicatDatabasePath = userSuppliedDatabase
-            ? file(params.vicat_db).toString()
-            : file(params.vicat_managed_db).toString()
-        def vicatDatabaseSource = userSuppliedDatabase
-            ? 'user-supplied'
-            : 'viSUM-managed'
-
         def vicatSourceProteins = params.vicat_metavr_proteins == null
             ? ''
             : file(params.vicat_metavr_proteins).toString()
@@ -1151,19 +1146,73 @@ workflow {
             error 'A local viCAT build requires both --vicat_metavr_proteins and --vicat_metavr_metadata.'
         }
 
+        def vicatCellularProteins = params.vicat_cellular_proteins == null
+            ? ''
+            : file(params.vicat_cellular_proteins).toString()
+        def vicatCellularMetadata = params.vicat_cellular_metadata == null
+            ? ''
+            : file(params.vicat_cellular_metadata).toString()
+        if( (vicatCellularProteins && !vicatCellularMetadata) ||
+            (!vicatCellularProteins && vicatCellularMetadata) ) {
+            error 'A competitive viCAT build requires both --vicat_cellular_proteins and --vicat_cellular_metadata.'
+        }
+
+        def competitiveBuild = !vicatCellularProteins.isEmpty()
+        def cellularMinSeqId = params.vicat_cellular_min_seq_id as Double
+        if( !Double.isFinite(cellularMinSeqId) ||
+            cellularMinSeqId <= 0.0 || cellularMinSeqId > 1.0 ) {
+            error '--vicat_cellular_min_seq_id must be greater than 0 and at most 1.'
+        }
+        def cellularCoverage = params.vicat_cellular_coverage as Double
+        if( !Double.isFinite(cellularCoverage) ||
+            cellularCoverage <= 0.0 || cellularCoverage > 1.0 ) {
+            error '--vicat_cellular_coverage must be greater than 0 and at most 1.'
+        }
+        def cellularMinProteinLength = params.vicat_cellular_min_protein_length as Integer
+        if( cellularMinProteinLength < 1 ) {
+            error '--vicat_cellular_min_protein_length must be at least 1.'
+        }
+        def userSuppliedDatabase = params.vicat_db != null
+        def vicatBaseDatabase = userSuppliedDatabase
+            ? file(params.vicat_db).toString()
+            : file(params.vicat_managed_db).toString()
+        def vicatViralRepresentatives = params.vicat_viral_representatives == null
+            ? ''
+            : file(params.vicat_viral_representatives).toString()
+        def extendExistingDatabase = competitiveBuild && !vicatSourceProteins
+        if( extendExistingDatabase && !vicatViralRepresentatives ) {
+            error 'Extending an existing viCAT database requires --vicat_viral_representatives.'
+        }
+
+        def vicatDatabasePath = competitiveBuild
+            ? file(params.vicat_competitive_managed_db).toString()
+            : vicatBaseDatabase
+        def vicatDatabaseSource = extendExistingDatabase
+            ? 'viSUM-managed-competitive'
+            : (competitiveBuild
+                ? 'viSUM-managed'
+                : (userSuppliedDatabase ? 'user-supplied' : 'viSUM-managed'))
+
         ch_vicat_database_request = NORMALIZE_FASTA.out.normalized_records
             .take(1)
             .map { prefix, type, fasta, headerMap ->
                 tuple(
                     vicatDatabasePath,
                     vicatDatabaseSource,
+                    vicatBaseDatabase,
+                    vicatViralRepresentatives,
                     vicatSourceProteins,
                     vicatSourceMetadata,
                     params.vicat_metavr_proteins_sha256,
                     params.vicat_metavr_metadata_sha256,
                     params.vicat_expected_uvigs,
                     params.vicat_expected_proteins,
-                    params.vicat_expected_representatives
+                    params.vicat_expected_representatives,
+                    vicatCellularProteins,
+                    vicatCellularMetadata,
+                    cellularMinSeqId,
+                    cellularCoverage,
+                    cellularMinProteinLength
                 )
             }
 

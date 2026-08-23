@@ -8,7 +8,16 @@ Usage: build_vicat_database.sh \
   --destination DATABASE_DIR --work-dir BUILD_DIR \
   --threads N --memory-limit 300GB \
   --protein-sha256 HASH --metadata-sha256 HASH \
-  --expected-uvigs N --expected-proteins N --expected-representatives N
+  --expected-uvigs N --expected-proteins N --expected-representatives N \
+  [--cellular-proteins cellular_proteins.faa.gz \
+   --cellular-metadata cellular_proteins.tsv \
+   --cellular-min-seq-id 0.90 --cellular-coverage 0.80 \
+   --cellular-min-protein-length 50]
+
+Cellular metadata must be tab-delimited and contain protein_id,
+cellular_group, and source_accession columns. When cellular inputs are
+provided, the runtime contains both the established viral-only database and
+a separately labeled viral-plus-cellular database for competitive scoring.
 EOF
     exit 2
 }
@@ -24,6 +33,11 @@ METADATA_SHA256=''
 EXPECTED_UVIGS=''
 EXPECTED_PROTEINS=''
 EXPECTED_REPRESENTATIVES=''
+CELLULAR_PROTEINS=''
+CELLULAR_METADATA=''
+CELLULAR_MIN_SEQ_ID='0.90'
+CELLULAR_COVERAGE='0.80'
+CELLULAR_MIN_PROTEIN_LENGTH='50'
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -38,9 +52,21 @@ while [[ $# -gt 0 ]]; do
         --expected-uvigs) EXPECTED_UVIGS="$2"; shift 2 ;;
         --expected-proteins) EXPECTED_PROTEINS="$2"; shift 2 ;;
         --expected-representatives) EXPECTED_REPRESENTATIVES="$2"; shift 2 ;;
+        --cellular-proteins) CELLULAR_PROTEINS="$2"; shift 2 ;;
+        --cellular-metadata) CELLULAR_METADATA="$2"; shift 2 ;;
+        --cellular-min-seq-id) CELLULAR_MIN_SEQ_ID="$2"; shift 2 ;;
+        --cellular-coverage) CELLULAR_COVERAGE="$2"; shift 2 ;;
+        --cellular-min-protein-length) CELLULAR_MIN_PROTEIN_LENGTH="$2"; shift 2 ;;
         *) usage ;;
     esac
 done
+
+if [[ -n "$CELLULAR_PROTEINS" || -n "$CELLULAR_METADATA" ]]; then
+    [[ -n "$CELLULAR_PROTEINS" && -n "$CELLULAR_METADATA" ]] || {
+        echo "ERROR: --cellular-proteins and --cellular-metadata must be supplied together." >&2
+        exit 2
+    }
+fi
 
 for value in PROTEINS METADATA DESTINATION WORK_DIR THREADS MEMORY_LIMIT \
     PROTEIN_SHA256 METADATA_SHA256 EXPECTED_UVIGS EXPECTED_PROTEINS \
@@ -48,7 +74,7 @@ for value in PROTEINS METADATA DESTINATION WORK_DIR THREADS MEMORY_LIMIT \
     [[ -n "${!value}" ]] || usage
 done
 
-for command_name in python mmseqs diamond pigz sha256sum gzip; do
+for command_name in python mmseqs diamond pigz sha256sum gzip seqkit; do
     command -v "$command_name" >/dev/null 2>&1 || {
         echo "ERROR: Required viCAT build command is unavailable: $command_name" >&2
         exit 1
@@ -57,6 +83,16 @@ done
 
 [[ -f "$PROTEINS" ]] || { echo "ERROR: Protein source not found: $PROTEINS" >&2; exit 1; }
 [[ -f "$METADATA" ]] || { echo "ERROR: Metadata source not found: $METADATA" >&2; exit 1; }
+if [[ -n "$CELLULAR_PROTEINS" ]]; then
+    [[ -f "$CELLULAR_PROTEINS" ]] || {
+        echo "ERROR: Cellular protein source not found: $CELLULAR_PROTEINS" >&2
+        exit 1
+    }
+    [[ -f "$CELLULAR_METADATA" ]] || {
+        echo "ERROR: Cellular metadata source not found: $CELLULAR_METADATA" >&2
+        exit 1
+    }
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p "$WORK_DIR" "$WORK_DIR/checkpoints" "$WORK_DIR/mmseqs" \
@@ -160,6 +196,93 @@ if ! checkpoint_done diamond_database; then
     mark_complete diamond_database
 fi
 
+COMPETITIVE_DB=''
+COMPETITIVE_MANIFEST=''
+COMPETITIVE_SUMMARY=''
+CELLULAR_REPRESENTATIVE_COUNT='0'
+if [[ -n "$CELLULAR_PROTEINS" ]]; then
+    CELLULAR_FILTERED="$WORK_DIR/dedup/cellular.filtered.faa"
+    CELLULAR_DB="$WORK_DIR/mmseqs/cellular_filtered"
+    CELLULAR_CLUSTER_DB="$WORK_DIR/mmseqs/cellular_clusters"
+    CELLULAR_REP_DB="$WORK_DIR/mmseqs/cellular_representatives"
+    CELLULAR_REP_FASTA="$WORK_DIR/dedup/cellular_representatives.faa.gz"
+
+    if ! checkpoint_done cellular_filter; then
+        rm -f "$CELLULAR_FILTERED"
+        seqkit seq --remove-gaps --min-len "$CELLULAR_MIN_PROTEIN_LENGTH" \
+            "$CELLULAR_PROTEINS" > "$CELLULAR_FILTERED"
+        [[ "$(grep -c '^>' "$CELLULAR_FILTERED")" -gt 0 ]] || {
+            echo "ERROR: No cellular proteins remain after length filtering." >&2
+            exit 1
+        }
+        mark_complete cellular_filter
+    fi
+
+    if ! checkpoint_done cellular_cluster; then
+        rm -f "${CELLULAR_DB}"* "${CELLULAR_CLUSTER_DB}"* "${CELLULAR_REP_DB}"*
+        mmseqs createdb "$CELLULAR_FILTERED" "$CELLULAR_DB" \
+            --dbtype 1 --shuffle 0 --createdb-mode 0
+        mmseqs linclust "$CELLULAR_DB" "$CELLULAR_CLUSTER_DB" \
+            "$WORK_DIR/mmseqs/cellular_tmp" \
+            --min-seq-id "$CELLULAR_MIN_SEQ_ID" \
+            --cov-mode 0 -c "$CELLULAR_COVERAGE" --threads "$THREADS"
+        mmseqs createsubdb "$CELLULAR_CLUSTER_DB" "$CELLULAR_DB" \
+            "$CELLULAR_REP_DB" --subdb-mode 1
+        mmseqs convert2fasta "$CELLULAR_REP_DB" "${CELLULAR_REP_FASTA%.gz}"
+        pigz -p "$THREADS" "${CELLULAR_REP_FASTA%.gz}"
+        gzip -t "$CELLULAR_REP_FASTA"
+        mark_complete cellular_cluster
+    fi
+
+    COMBINED_FASTA="$WORK_DIR/dedup/vicat_viral_cellular.faa"
+    COMPETITIVE_MANIFEST="$WORK_DIR/runtime/vicat_competitive_reference_manifest.parquet"
+    COMPETITIVE_SUMMARY="$WORK_DIR/runtime/vicat_competitive_database_summary.tsv"
+    if ! checkpoint_done competitive_references; then
+        rm -f "$COMBINED_FASTA" "$COMPETITIVE_MANIFEST" "$COMPETITIVE_SUMMARY"
+        python "$SCRIPT_DIR/prepare_vicat_competitive_references.py" \
+            --viral-representatives "$REP_FASTA" \
+            --viral-taxonomy-lookup "$TAXONOMY_LOOKUP" \
+            --cellular-representatives "$CELLULAR_REP_FASTA" \
+            --cellular-metadata "$CELLULAR_METADATA" \
+            --output-fasta "$COMBINED_FASTA" \
+            --output-manifest "$COMPETITIVE_MANIFEST" \
+            --output-summary "$COMPETITIVE_SUMMARY" \
+            --work-dir "$WORK_DIR/competitive_manifest_work"
+        mark_complete competitive_references
+    fi
+
+    COMPETITIVE_DB="$WORK_DIR/runtime/vicat_viral_cellular.dmnd"
+    if ! checkpoint_done competitive_diamond_database; then
+        rm -f "$COMPETITIVE_DB"
+        diamond makedb --in "$COMBINED_FASTA" \
+            --db "${COMPETITIVE_DB%.dmnd}" --threads "$THREADS"
+        diamond dbinfo --db "$COMPETITIVE_DB" >/dev/null
+        mark_complete competitive_diamond_database
+    fi
+
+    CELLULAR_REPRESENTATIVE_COUNT="$(awk -F '\t' \
+        '$1 == "cellular_representatives" {print $2}' "$COMPETITIVE_SUMMARY")"
+    combined_expected=$((EXPECTED_REPRESENTATIVES + CELLULAR_REPRESENTATIVE_COUNT))
+    combined_diamond_count="$(diamond dbinfo --db "$COMPETITIVE_DB" \
+        | awk '$1 == "Sequences" {print $2}')"
+    manifest_count="$(python - "$COMPETITIVE_MANIFEST" <<'PY'
+import duckdb
+import sys
+print(duckdb.connect().execute(
+    "SELECT count(*) FROM read_parquet(?)", [sys.argv[1]]
+).fetchone()[0])
+PY
+)"
+    [[ "$combined_diamond_count" == "$combined_expected" ]] || {
+        echo "ERROR: Competitive DIAMOND count is $combined_diamond_count; expected $combined_expected" >&2
+        exit 1
+    }
+    [[ "$manifest_count" == "$combined_expected" ]] || {
+        echo "ERROR: Competitive manifest count is $manifest_count; expected $combined_expected" >&2
+        exit 1
+    }
+fi
+
 cp "$TAXONOMY_LOOKUP" "$WORK_DIR/runtime/IMGVR5_UViG.vicat_taxonomy_lookup.parquet"
 cp "$TAXONOMY_SUMMARY" "$WORK_DIR/runtime/vicat_taxonomy_build_summary.tsv"
 
@@ -193,6 +316,11 @@ PY
     printf 'representative_protein_count\t%s\n' "$EXPECTED_REPRESENTATIVES"
     printf 'deduplication\tMMseqs2 exact identity; connected components\n'
     printf 'taxonomy_aggregation\tvOTU-balanced conservative LCA\n'
+    printf 'competitive_database_built\t%s\n' "$([[ -n "$COMPETITIVE_DB" ]] && echo true || echo false)"
+    printf 'cellular_representative_count\t%s\n' "$CELLULAR_REPRESENTATIVE_COUNT"
+    printf 'cellular_clustering_min_seq_id\t%s\n' "$CELLULAR_MIN_SEQ_ID"
+    printf 'cellular_clustering_bidirectional_coverage\t%s\n' "$CELLULAR_COVERAGE"
+    printf 'cellular_minimum_protein_length\t%s\n' "$CELLULAR_MIN_PROTEIN_LENGTH"
     printf 'mmseqs_version\t%s\n' "$(mmseqs version)"
     printf 'diamond_version\t%s\n' "$(diamond version | awk '{print $3}')"
     printf 'build_completed\t%s\n' "$(date -Iseconds)"
@@ -200,10 +328,16 @@ PY
 
 (
     cd "$WORK_DIR/runtime"
-    sha256sum IMGVR5_UViG_representatives.dmnd \
+    checksum_files=(IMGVR5_UViG_representatives.dmnd \
         IMGVR5_UViG.vicat_taxonomy_lookup.parquet \
         vicat_taxonomy_build_summary.tsv \
-        vicat_database_metadata.tsv > SHA256SUMS
+        vicat_database_metadata.tsv)
+    if [[ -s vicat_viral_cellular.dmnd ]]; then
+        checksum_files+=(vicat_viral_cellular.dmnd \
+            vicat_competitive_reference_manifest.parquet \
+            vicat_competitive_database_summary.tsv)
+    fi
+    sha256sum "${checksum_files[@]}" > SHA256SUMS
     sha256sum --check SHA256SUMS
     date -Iseconds > .visum_db_complete
 )

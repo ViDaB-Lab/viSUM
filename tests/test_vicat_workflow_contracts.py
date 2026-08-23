@@ -59,3 +59,29 @@ def test_vicat_uses_separate_orf_and_contig_taxonomy_thresholds() -> None:
     assert "vicat_taxonomy_support" not in module
     assert "vicat_taxonomy_support" not in config
     assert "vicat_taxonomy_support" not in workflow
+
+
+def test_vicat_competitive_database_extension_is_explicit_and_labeled() -> None:
+    config = (ROOT / "visum.config").read_text(encoding="utf-8")
+    workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+    module = (ROOT / "modules" / "local" / "vicat_database.nf").read_text(encoding="utf-8")
+    builder = (ROOT / "bin" / "build_vicat_competitive_database.sh").read_text(encoding="utf-8")
+    helper = (ROOT / "bin" / "prepare_vicat_competitive_references.py").read_text(encoding="utf-8")
+
+    for parameter in (
+        "vicat_viral_representatives",
+        "vicat_cellular_proteins",
+        "vicat_cellular_metadata",
+        "vicat_competitive_managed_db",
+        "vicat_cellular_min_seq_id",
+        "vicat_cellular_coverage",
+        "vicat_cellular_min_protein_length",
+    ):
+        assert parameter in config
+        assert parameter in workflow
+
+    assert "viSUM-managed-competitive" in workflow
+    assert "build_vicat_competitive_database.sh" in module
+    assert "mmseqs linclust" in builder
+    assert "vicat_viral_cellular.dmnd" in builder
+    assert 'f">{label}|{source_id}\\n"' in helper
