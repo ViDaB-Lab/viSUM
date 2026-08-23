@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import gzip
+import io
 from pathlib import Path
 from typing import TextIO
 
@@ -27,12 +28,19 @@ def parse_args() -> argparse.Namespace:
 
 def open_text(path: Path) -> TextIO:
     # Nextflow may stage a gzip-compressed input under a name without the
-    # original .gz suffix. Detect the format from its magic bytes instead.
-    with path.open("rb") as handle:
-        is_gzip = handle.read(2) == b"\x1f\x8b"
-    if is_gzip:
-        return gzip.open(path, "rt", encoding="utf-8")
-    return path.open(encoding="utf-8")
+    # original .gz suffix. Inspect and decode the same binary stream so the
+    # staged filename and a second file open cannot affect format detection.
+    raw_handle = path.open("rb")
+    try:
+        magic = raw_handle.read(2)
+        raw_handle.seek(0)
+        if magic == b"\x1f\x8b":
+            gzip_handle = gzip.GzipFile(fileobj=raw_handle, mode="rb")
+            return io.TextIOWrapper(gzip_handle, encoding="utf-8")
+        return io.TextIOWrapper(raw_handle, encoding="utf-8")
+    except Exception:
+        raw_handle.close()
+        raise
 
 
 def sql_path(path: Path) -> str:
