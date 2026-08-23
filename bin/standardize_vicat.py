@@ -39,7 +39,9 @@ LOCUS_COLUMNS = [
 AUDIT_COLUMNS = [
     "sample_id", "sequence_id", "locus_id", "orf_id", "orf_callers",
     "coordinates", "strand", "protein_length", "selected_orf_for_locus",
-    "selected_best_reference", "reference_id", "identity", "alignment_length",
+    "selected_best_reference", "reference_id", "reference_class",
+    "source_protein_id", "cellular_group", "source_accession", "organism_name",
+    "taxid", "identity", "alignment_length",
     "query_length", "subject_length", "query_start", "query_end", "subject_start",
     "subject_end", "evalue", "bitscore", "relative_bitscore", "query_coverage",
     "subject_coverage", "lineage_vote_representative", "lineage_vote_weight",
@@ -67,6 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--orf-map", required=True, type=Path)
     parser.add_argument("--diamond", required=True, type=Path)
     parser.add_argument("--taxonomy-lookup", required=True, type=Path)
+    parser.add_argument("--reference-manifest", type=Path)
     parser.add_argument("--header-map", required=True, type=Path)
     parser.add_argument("--orf-taxonomy-support", required=True, type=float)
     parser.add_argument("--contig-taxonomy-support", required=True, type=float)
@@ -112,42 +115,111 @@ def diamond_has_rows(path: Path) -> bool:
         return next(handle, None) is not None
 
 
-def load_hits(diamond: Path, lookup: Path) -> dict[str, list[dict]]:
+def load_hits(
+    diamond: Path, lookup: Path, reference_manifest: Path | None = None
+) -> dict[str, list[dict]]:
     if not diamond_has_rows(diamond):
         return {}
     rank_sql = ", ".join(f't."{column}" AS "{column}"' for column in TAXONOMY_COLUMNS)
     connection = duckdb.connect()
-    missing = connection.execute(
-        f"""
-        SELECT count(*)
-        FROM read_csv({sql_path(diamond)}, delim='\t', header=true, auto_detect=true) d
-        LEFT JOIN read_parquet({sql_path(lookup)}) t
-          ON d.sseqid = t.representative_protein_id
-        WHERE t.representative_protein_id IS NULL
+    if reference_manifest is not None:
+        missing = connection.execute(
+            f"""
+            SELECT count(*)
+            FROM read_csv({sql_path(diamond)}, delim='\t', header=true, auto_detect=true) d
+            LEFT JOIN read_parquet({sql_path(reference_manifest)}) m
+              ON d.sseqid = m.reference_id
+            WHERE m.reference_id IS NULL
+            """
+        ).fetchone()[0]
+        if missing:
+            connection.close()
+            raise ValueError(
+                f"{missing} DIAMOND alignment(s) absent from the competitive reference manifest"
+            )
+        query = f"""
+            SELECT
+                d.qseqid, d.sseqid, d.pident, d.length, d.qlen, d.slen,
+                d.qstart, d.qend, d.sstart, d.send, d.evalue, d.bitscore,
+                d.qcovhsp, d.scovhsp,
+                m.reference_class, m.source_protein_id, m.cellular_group,
+                m.source_accession, m.organism_name, m.taxid,
+                coalesce(t.member_votu_count, 0) AS member_votu_count,
+                coalesce(t.classified_votu_count, 0) AS classified_votu_count,
+                coalesce(t.taxonomy_coverage, 0) AS taxonomy_coverage,
+                coalesce(t.taxonomy_conflict, false) AS reference_taxonomy_conflict,
+                coalesce(t.taxonomy_conflict_rank, '') AS reference_taxonomy_conflict_rank,
+                coalesce(t.taxonomy_methods, '') AS taxonomy_methods,
+                {rank_sql}
+            FROM read_csv(
+                {sql_path(diamond)}, delim='\t', header=true, auto_detect=true
+            ) d
+            INNER JOIN read_parquet({sql_path(reference_manifest)}) m
+              ON d.sseqid = m.reference_id
+            LEFT JOIN read_parquet({sql_path(lookup)}) t
+              ON m.reference_class = 'viral'
+             AND m.source_protein_id = t.representative_protein_id
+            ORDER BY d.qseqid, d.bitscore DESC, d.sseqid
         """
-    ).fetchone()[0]
-    if missing:
-        connection.close()
-        raise ValueError(
-            f"{missing} DIAMOND alignment(s) reference proteins absent from the viCAT taxonomy lookup"
-        )
-    query = f"""
-        SELECT
-            d.qseqid, d.sseqid, d.pident, d.length, d.qlen, d.slen,
-            d.qstart, d.qend, d.sstart, d.send, d.evalue, d.bitscore,
-            d.qcovhsp, d.scovhsp,
-            t.member_votu_count, t.classified_votu_count, t.taxonomy_coverage,
-            t.taxonomy_conflict AS reference_taxonomy_conflict,
-            t.taxonomy_conflict_rank AS reference_taxonomy_conflict_rank,
-            t.taxonomy_methods,
-            {rank_sql}
-        FROM read_csv(
-            {sql_path(diamond)}, delim='\t', header=true, auto_detect=true
-        ) d
-        INNER JOIN read_parquet({sql_path(lookup)}) t
-            ON d.sseqid = t.representative_protein_id
-        ORDER BY d.qseqid, d.bitscore DESC, d.sseqid
-    """
+    else:
+        query = f"""
+            SELECT
+                d.qseqid, d.sseqid, d.pident, d.length, d.qlen, d.slen,
+                d.qstart, d.qend, d.sstart, d.send, d.evalue, d.bitscore,
+                d.qcovhsp, d.scovhsp,
+                'viral' AS reference_class, d.sseqid AS source_protein_id,
+                '' AS cellular_group, '' AS source_accession,
+                '' AS organism_name, '' AS taxid,
+                t.member_votu_count, t.classified_votu_count, t.taxonomy_coverage,
+                t.taxonomy_conflict AS reference_taxonomy_conflict,
+                t.taxonomy_conflict_rank AS reference_taxonomy_conflict_rank,
+                t.taxonomy_methods,
+                {rank_sql}
+            FROM read_csv(
+                {sql_path(diamond)}, delim='\t', header=true, auto_detect=true
+            ) d
+            INNER JOIN read_parquet({sql_path(lookup)}) t
+              ON d.sseqid = t.representative_protein_id
+            ORDER BY d.qseqid, d.bitscore DESC, d.sseqid
+        """
+    if reference_manifest is not None:
+        missing_viral = connection.execute(
+            f"""
+            SELECT count(*)
+            FROM (
+                SELECT DISTINCT m.source_protein_id
+                FROM read_csv(
+                    {sql_path(diamond)}, delim='\t', header=true, auto_detect=true
+                ) d
+                INNER JOIN read_parquet({sql_path(reference_manifest)}) m
+                  ON d.sseqid = m.reference_id
+                WHERE m.reference_class = 'viral'
+            ) m
+            LEFT JOIN read_parquet({sql_path(lookup)}) t
+              ON m.source_protein_id = t.representative_protein_id
+            WHERE t.representative_protein_id IS NULL
+            """
+        ).fetchone()[0]
+        if missing_viral:
+            connection.close()
+            raise ValueError(
+                f"{missing_viral} viral manifest reference(s) absent from the viCAT taxonomy lookup"
+            )
+    else:
+        missing = connection.execute(
+            f"""
+            SELECT count(*)
+            FROM read_csv({sql_path(diamond)}, delim='\t', header=true, auto_detect=true) d
+            LEFT JOIN read_parquet({sql_path(lookup)}) t
+              ON d.sseqid = t.representative_protein_id
+            WHERE t.representative_protein_id IS NULL
+            """
+        ).fetchone()[0]
+        if missing:
+            connection.close()
+            raise ValueError(
+                f"{missing} DIAMOND alignment(s) reference proteins absent from the viCAT taxonomy lookup"
+            )
     relation = connection.execute(query)
     columns = [description[0] for description in relation.description]
     output: dict[str, list[dict]] = defaultdict(list)
@@ -329,7 +401,9 @@ def main() -> None:
         raise SystemExit("--locus-overlap must be greater than 0 and at most 1")
 
     orfs = load_orfs(args.orf_map)
-    hits = load_hits(args.diamond, args.taxonomy_lookup)
+    hits = load_hits(
+        args.diamond, args.taxonomy_lookup, args.reference_manifest
+    )
     unknown = sorted(set(hits) - set(orfs))
     if unknown:
         raise SystemExit(f"DIAMOND contains ORF IDs absent from the ORF map: {unknown[:5]}")
@@ -342,7 +416,16 @@ def main() -> None:
     contig_loci: dict[str, list[dict]] = defaultdict(list)
     for locus_index, alternatives in enumerate(loci, start=1):
         calls = [
-            (orf, taxonomy_call(hits.get(orf.orf_id, []), args.orf_taxonomy_support))
+            (
+                orf,
+                taxonomy_call(
+                    [
+                        hit for hit in hits.get(orf.orf_id, [])
+                        if hit["reference_class"] == "viral"
+                    ],
+                    args.orf_taxonomy_support,
+                ),
+            )
             for orf in alternatives
         ]
         hit_calls = [(orf, call) for orf, call in calls if call]
@@ -401,7 +484,12 @@ def main() -> None:
 
         for orf, call in calls:
             orf_hits = hits.get(orf.orf_id, [])
-            vote_representatives, best_lineage_score = lineage_vote_details(orf_hits)
+            viral_orf_hits = [
+                hit for hit in orf_hits if hit["reference_class"] == "viral"
+            ]
+            vote_representatives, best_lineage_score = lineage_vote_details(
+                viral_orf_hits
+            )
             for hit in orf_hits:
                 is_vote = id(hit) in vote_representatives
                 bitscore = float(hit["bitscore"])
@@ -422,6 +510,12 @@ def main() -> None:
                             and bitscore == selected.get("best_bitscore")
                         ) else "false",
                         "reference_id": hit["sseqid"],
+                        "reference_class": hit["reference_class"],
+                        "source_protein_id": hit["source_protein_id"] or "",
+                        "cellular_group": hit["cellular_group"] or "",
+                        "source_accession": hit["source_accession"] or "",
+                        "organism_name": hit["organism_name"] or "",
+                        "taxid": hit["taxid"] or "",
                         "identity": format_number(hit["pident"]),
                         "alignment_length": hit["length"],
                         "query_length": hit["qlen"],

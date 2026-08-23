@@ -87,6 +87,22 @@ def test_vicat_competitive_database_extension_is_explicit_and_labeled() -> None:
     assert 'f">{label}|{source_id}\\n"' in helper
 
 
+def test_vicat_analysis_prefers_competitive_database_and_wires_manifest() -> None:
+    analysis = (ROOT / "modules" / "local" / "run_vicat_diamond.nf").read_text(
+        encoding="utf-8"
+    )
+    standardizer = (ROOT / "modules" / "local" / "standardize_vicat.nf").read_text(
+        encoding="utf-8"
+    )
+    helper = (ROOT / "bin" / "standardize_vicat.py").read_text(encoding="utf-8")
+
+    assert "vicat_viral_cellular.dmnd" in analysis
+    assert "vicat_competitive_reference_manifest.parquet" in analysis
+    assert "--reference-manifest" in standardizer
+    assert "reference_class" in helper
+    assert 'hit["reference_class"] == "viral"' in helper
+
+
 def test_vicat_competitive_metadata_is_normalized_before_duckdb() -> None:
     helper = (ROOT / "bin" / "prepare_vicat_competitive_references.py").read_text(
         encoding="utf-8"

@@ -30,7 +30,9 @@ process RUN_VICAT_DIAMOND {
     export OPENBLAS_NUM_THREADS="${task.cpus}"
     export NUMEXPR_NUM_THREADS="${task.cpus}"
 
-    if [[ -s "${vicat_database}/IMGVR5_UViG_representatives.dmnd" ]]; then
+    if [[ -s "${vicat_database}/vicat_viral_cellular.dmnd" && -s "${vicat_database}/vicat_competitive_reference_manifest.parquet" ]]; then
+        DB="${vicat_database}/vicat_viral_cellular.dmnd"
+    elif [[ -s "${vicat_database}/IMGVR5_UViG_representatives.dmnd" ]]; then
         DB="${vicat_database}/IMGVR5_UViG_representatives.dmnd"
     elif [[ -s "${vicat_database}/diamond/IMGVR5_UViG_representatives.dmnd" ]]; then
         DB="${vicat_database}/diamond/IMGVR5_UViG_representatives.dmnd"

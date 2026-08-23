@@ -32,12 +32,18 @@ process STANDARDIZE_VICAT {
         exit 1
     fi
 
+    MANIFEST_ARGS=()
+    if [[ -s "${vicat_database}/vicat_competitive_reference_manifest.parquet" ]]; then
+        MANIFEST_ARGS=(--reference-manifest "${vicat_database}/vicat_competitive_reference_manifest.parquet")
+    fi
+
     python "${projectDir}/bin/standardize_vicat.py" \
         --sample-id "${prefix}" \
         --input-type "${type}" \
         --orf-map "${orf_map}" \
         --diamond "${diamond}" \
         --taxonomy-lookup "\$LOOKUP" \
+        "\${MANIFEST_ARGS[@]}" \
         --header-map "${header_map}" \
         --orf-taxonomy-support "${params.vicat_orf_taxonomy_support}" \
         --contig-taxonomy-support "${params.vicat_contig_taxonomy_support}" \
