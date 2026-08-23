@@ -85,3 +85,13 @@ def test_vicat_competitive_database_extension_is_explicit_and_labeled() -> None:
     assert "mmseqs linclust" in builder
     assert "vicat_viral_cellular.dmnd" in builder
     assert 'f">{label}|{source_id}\\n"' in helper
+
+
+def test_vicat_competitive_metadata_is_normalized_before_duckdb() -> None:
+    helper = (ROOT / "bin" / "prepare_vicat_competitive_references.py").read_text(
+        encoding="utf-8"
+    )
+    assert "def normalize_cellular_metadata" in helper
+    assert 'elif "\\\\t" in first_line:' in helper
+    assert "Observed columns:" in helper
+    assert "cellular_metadata.normalized.tsv" in helper

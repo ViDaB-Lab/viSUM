@@ -35,6 +35,77 @@ def sql_path(path: Path) -> str:
     return "'" + str(path.resolve()).replace("'", "''") + "'"
 
 
+def normalize_cellular_metadata(source: Path, destination: Path) -> set[str]:
+    """Write a canonical TSV, accepting real tabs or shell-safe literal ``\\t``."""
+    required = {"protein_id", "cellular_group", "source_accession"}
+    row_count = 0
+
+    with source.open(encoding="utf-8-sig", newline="") as source_handle:
+        first_line = source_handle.readline()
+        if not first_line:
+            raise ValueError(f"Cellular metadata is empty: {source}")
+
+        if "\t" in first_line:
+            replace_literal_tabs = False
+        elif "\\t" in first_line:
+            replace_literal_tabs = True
+            print(
+                "WARNING: Cellular metadata uses literal \\t separators; "
+                "normalizing them to tab characters."
+            )
+        else:
+            raise ValueError(
+                "Cellular metadata is not tab-delimited. "
+                f"Observed header: {first_line.rstrip()}"
+            )
+
+        def normalized_lines():
+            line = first_line
+            while line:
+                yield line.replace("\\t", "\t") if replace_literal_tabs else line
+                line = source_handle.readline()
+
+        reader = csv.DictReader(normalized_lines(), delimiter="\t")
+        if reader.fieldnames is None:
+            raise ValueError(f"Cellular metadata has no header: {source}")
+        fieldnames = [name.strip() for name in reader.fieldnames]
+        if len(fieldnames) != len(set(fieldnames)):
+            raise ValueError(
+                f"Cellular metadata has duplicate columns: {fieldnames}"
+            )
+        missing = required - set(fieldnames)
+        if missing:
+            raise ValueError(
+                f"Cellular metadata is missing columns: {sorted(missing)}. "
+                f"Observed columns: {fieldnames}"
+            )
+
+        with destination.open("w", encoding="utf-8", newline="") as output_handle:
+            writer = csv.DictWriter(
+                output_handle,
+                fieldnames=fieldnames,
+                delimiter="\t",
+                lineterminator="\n",
+            )
+            writer.writeheader()
+            for row_number, row in enumerate(reader, start=2):
+                if None in row:
+                    raise ValueError(
+                        "Cellular metadata row has more values than its header "
+                        f"at line {row_number}"
+                    )
+                normalized_row = {
+                    key.strip(): (value if value is not None else "")
+                    for key, value in row.items()
+                }
+                writer.writerow(normalized_row)
+                row_count += 1
+
+    if row_count == 0:
+        raise ValueError(f"Cellular metadata has a header but no data rows: {source}")
+    return set(fieldnames)
+
+
 def label_fasta(source: Path, output: TextIO, label: str, ids: TextIO | None) -> int:
     count = 0
     sequence_seen = False
@@ -81,6 +152,10 @@ def main() -> None:
     args.work_dir.mkdir(parents=True, exist_ok=True)
     args.output_fasta.parent.mkdir(parents=True, exist_ok=True)
     cellular_ids = args.work_dir / "cellular_representative_ids.tsv"
+    normalized_cellular_metadata = args.work_dir / "cellular_metadata.normalized.tsv"
+    normalized_cellular_columns = normalize_cellular_metadata(
+        args.cellular_metadata, normalized_cellular_metadata
+    )
 
     with args.output_fasta.open("w", encoding="utf-8", newline="\n") as output:
         viral_count = label_fasta(args.viral_representatives, output, "VIRAL", None)
@@ -93,7 +168,7 @@ def main() -> None:
     connection = duckdb.connect(str(args.work_dir / "reference_manifest.duckdb"))
     viral_expression = f"read_parquet({sql_path(args.viral_taxonomy_lookup)})"
     cellular_expression = (
-        f"read_csv({sql_path(args.cellular_metadata)}, delim='\\t', header=true, "
+        f"read_csv({sql_path(normalized_cellular_metadata)}, delim='\\t', header=true, "
         "auto_detect=true, all_varchar=true)"
     )
     viral_columns = table_columns(connection, viral_expression)
@@ -108,11 +183,11 @@ def main() -> None:
         raise ValueError(
             f"Viral taxonomy lookup is missing columns: {sorted(missing_viral)}"
         )
-    required_cellular = {"protein_id", "cellular_group", "source_accession"}
-    missing_cellular = required_cellular - cellular_columns
-    if missing_cellular:
+    if cellular_columns != normalized_cellular_columns:
         raise ValueError(
-            f"Cellular metadata is missing columns: {sorted(missing_cellular)}"
+            "Cellular metadata columns changed while loading the normalized TSV: "
+            f"expected {sorted(normalized_cellular_columns)}, "
+            f"observed {sorted(cellular_columns)}"
         )
 
     duplicate_metadata = connection.execute(
