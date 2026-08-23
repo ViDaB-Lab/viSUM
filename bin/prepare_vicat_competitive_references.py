@@ -26,7 +26,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def open_text(path: Path) -> TextIO:
-    if path.suffix == ".gz":
+    # Nextflow may stage a gzip-compressed input under a name without the
+    # original .gz suffix. Detect the format from its magic bytes instead.
+    with path.open("rb") as handle:
+        is_gzip = handle.read(2) == b"\x1f\x8b"
+    if is_gzip:
         return gzip.open(path, "rt", encoding="utf-8")
     return path.open(encoding="utf-8")
 
