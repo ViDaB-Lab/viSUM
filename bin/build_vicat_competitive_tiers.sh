@@ -56,7 +56,7 @@ python "$SCRIPT_DIR/prepare_vicat_cellular_tiers.py" \
 IFS=',' read -ra TIER_ITEMS <<< "$TIERS"
 for item in "${TIER_ITEMS[@]}"; do
     name="${item%%:*}"
-    "$SCRIPT_DIR/build_vicat_competitive_database.sh" \
+    bash "$SCRIPT_DIR/build_vicat_competitive_database.sh" \
         --base-database "$BASE_DATABASE" \
         --viral-representatives "$VIRAL_REPRESENTATIVES" \
         --cellular-proteins "$TIER_INPUTS/cellular_${name}.faa.gz" \

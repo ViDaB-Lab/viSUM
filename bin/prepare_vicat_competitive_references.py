@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def open_text(path: Path) -> TextIO:
+def open_text(path: Path, encoding: str = "utf-8") -> TextIO:
     # Nextflow may stage a gzip-compressed input under a name without the
     # original .gz suffix. Inspect and decode the same binary stream so the
     # staged filename and a second file open cannot affect format detection.
@@ -36,8 +36,8 @@ def open_text(path: Path) -> TextIO:
         raw_handle.seek(0)
         if magic == b"\x1f\x8b":
             gzip_handle = gzip.GzipFile(fileobj=raw_handle, mode="rb")
-            return io.TextIOWrapper(gzip_handle, encoding="utf-8")
-        return io.TextIOWrapper(raw_handle, encoding="utf-8")
+            return io.TextIOWrapper(gzip_handle, encoding=encoding, newline="")
+        return io.TextIOWrapper(raw_handle, encoding=encoding, newline="")
     except Exception:
         raw_handle.close()
         raise
@@ -52,7 +52,7 @@ def normalize_cellular_metadata(source: Path, destination: Path) -> set[str]:
     required = {"protein_id", "cellular_group", "source_accession"}
     row_count = 0
 
-    with source.open(encoding="utf-8-sig", newline="") as source_handle:
+    with open_text(source, encoding="utf-8-sig") as source_handle:
         first_line = source_handle.readline()
         if not first_line:
             raise ValueError(f"Cellular metadata is empty: {source}")

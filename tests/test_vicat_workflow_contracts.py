@@ -1,4 +1,7 @@
+import gzip
 from pathlib import Path
+
+from bin.prepare_vicat_competitive_references import normalize_cellular_metadata
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +69,9 @@ def test_vicat_competitive_database_extension_is_explicit_and_labeled() -> None:
     workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
     module = (ROOT / "modules" / "local" / "vicat_database.nf").read_text(encoding="utf-8")
     builder = (ROOT / "bin" / "build_vicat_competitive_database.sh").read_text(encoding="utf-8")
+    tier_builder = (ROOT / "bin" / "build_vicat_competitive_tiers.sh").read_text(
+        encoding="utf-8"
+    )
     helper = (ROOT / "bin" / "prepare_vicat_competitive_references.py").read_text(encoding="utf-8")
 
     for parameter in (
@@ -84,6 +90,7 @@ def test_vicat_competitive_database_extension_is_explicit_and_labeled() -> None:
     assert "build_vicat_competitive_database.sh" in module
     assert "mmseqs linclust" in builder
     assert "vicat_viral_cellular.dmnd" in builder
+    assert 'bash "$SCRIPT_DIR/build_vicat_competitive_database.sh"' in tier_builder
     assert 'f">{label}|{source_id}\\n"' in helper
 
 
@@ -111,3 +118,27 @@ def test_vicat_competitive_metadata_is_normalized_before_duckdb() -> None:
     assert 'elif "\\\\t" in first_line:' in helper
     assert "Observed columns:" in helper
     assert "cellular_metadata.normalized.tsv" in helper
+
+
+def test_vicat_competitive_metadata_detects_gzip_without_suffix(tmp_path: Path) -> None:
+    source = tmp_path / "staged_cellular_metadata"
+    destination = tmp_path / "normalized.tsv"
+    with gzip.open(source, "wt", encoding="utf-8", newline="") as handle:
+        handle.write(
+            "protein_id\tcellular_group\tsource_accession\torganism_name\ttaxid\n"
+            "protein_1\tbacteria\tGCF_000001\tExample bacterium\t1234\n"
+        )
+
+    columns = normalize_cellular_metadata(source, destination)
+
+    assert columns == {
+        "protein_id",
+        "cellular_group",
+        "source_accession",
+        "organism_name",
+        "taxid",
+    }
+    assert destination.read_text(encoding="utf-8") == (
+        "protein_id\tcellular_group\tsource_accession\torganism_name\ttaxid\n"
+        "protein_1\tbacteria\tGCF_000001\tExample bacterium\t1234\n"
+    )
