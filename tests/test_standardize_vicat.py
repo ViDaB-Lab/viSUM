@@ -46,6 +46,20 @@ def make_lookup(path: Path) -> None:
     connection.close()
 
 
+def make_manifest(path: Path) -> None:
+    connection = duckdb.connect()
+    connection.execute(
+        f"""COPY (SELECT * FROM (VALUES
+        ('VIRAL|repA', 'viral', 'repA', '', '', '', '', true),
+        ('CELLULAR|cellA', 'cellular', 'cellA', 'bacteria', 'GCF_1',
+         'Example bacterium', '1234', false)
+        ) t(reference_id, reference_class, source_protein_id, cellular_group,
+            source_accession, organism_name, taxid, viral_taxonomy_eligible))
+        TO '{str(path).replace("'", "''")}' (FORMAT PARQUET)"""
+    )
+    connection.close()
+
+
 def test_locus_voting_and_zero_hit_contig(tmp_path: Path) -> None:
     orf_map = tmp_path / "orfs.tsv"
     write_tsv(
@@ -201,3 +215,89 @@ def test_conflicted_references_remain_viral_hits_and_abstain_below_safe_rank(tmp
     assert evidence_row["f__Family"] == "f__A"
     assert evidence_row["taxonomy_eligible_loci"] == "1"
     assert evidence_row["taxonomy_supporting_loci"] == "1"
+
+
+def test_competitive_loci_detect_localized_provirus_and_suppress_isolated_hit(tmp_path: Path) -> None:
+    orf_map = tmp_path / "orfs.tsv"
+    orf_rows = []
+    for contig, starts in {
+        "sample_c000001": [1, 301, 601, 901],
+        "sample_c000002": [1, 301, 601, 901],
+        "sample_c000003": [1],
+    }.items():
+        for index, start in enumerate(starts, start=1):
+            orf_rows.append([
+                "sample", f"{contig}_orf{index}", contig, start, start + 299,
+                "+", 100, 11, "pyrodigal-gv",
+            ])
+    write_tsv(
+        orf_map,
+        ["sample_id", "orf_id", "sequence_id", "start", "end", "strand", "protein_length", "translation_table", "callers"],
+        orf_rows,
+    )
+    header_map = tmp_path / "headers.tsv"
+    write_tsv(
+        header_map, ["sequence_id", "length"],
+        [["sample_c000001", 1200], ["sample_c000002", 1200], ["sample_c000003", 300]],
+    )
+    diamond = tmp_path / "diamond.tsv"
+    columns = ["qseqid", "sseqid", "pident", "length", "qlen", "slen", "qstart", "qend", "sstart", "send", "evalue", "bitscore", "qcovhsp", "scovhsp"]
+    hits = []
+    def add(orf: str, reference: str, score: int) -> None:
+        hits.append([orf, reference, 80, 100, 100, 100, 1, 100, 1, 100, "1e-20", score, 100, 100])
+    for index in (1, 4):
+        add(f"sample_c000001_orf{index}", "CELLULAR|cellA", 120)
+        add(f"sample_c000001_orf{index}", "VIRAL|repA", 80)
+    for index in (2, 3):
+        add(f"sample_c000001_orf{index}", "VIRAL|repA", 120)
+        add(f"sample_c000001_orf{index}", "CELLULAR|cellA", 80)
+    for index in (1, 2, 4):
+        add(f"sample_c000002_orf{index}", "CELLULAR|cellA", 120)
+        add(f"sample_c000002_orf{index}", "VIRAL|repA", 80)
+    add("sample_c000002_orf3", "VIRAL|repA", 120)
+    add("sample_c000002_orf3", "CELLULAR|cellA", 80)
+    add("sample_c000003_orf1", "VIRAL|repA", 120)
+    write_tsv(diamond, columns, hits)
+    lookup, manifest = tmp_path / "lookup.parquet", tmp_path / "manifest.parquet"
+    make_lookup(lookup)
+    make_manifest(manifest)
+    loci, audit, evidence = tmp_path / "loci.tsv", tmp_path / "audit.tsv", tmp_path / "evidence.tsv"
+    clusters = tmp_path / "clusters.tsv"
+    context = tmp_path / "context.tsv"
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(ROOT / "bin") + os.pathsep + environment.get("PYTHONPATH", "")
+    subprocess.run([
+        sys.executable, str(ROOT / "bin" / "standardize_vicat.py"),
+        "--sample-id", "sample", "--input-type", "dna", "--orf-map", str(orf_map),
+        "--diamond", str(diamond), "--taxonomy-lookup", str(lookup),
+        "--reference-manifest", str(manifest), "--header-map", str(header_map),
+        "--orf-taxonomy-support", "0.60", "--contig-taxonomy-support", "0.60",
+        "--locus-overlap", "0.80", "--competitive-min-margin", "0.05",
+        "--cluster-min-viral-loci", "2", "--cluster-max-neutral-gap", "1",
+        "--output-loci", str(loci), "--output-clusters", str(clusters),
+        "--output-context", str(context),
+        "--output-audit", str(audit),
+        "--output-evidence", str(evidence),
+    ], check=True, env=environment)
+
+    with evidence.open(encoding="utf-8", newline="") as handle:
+        rows = {row["sequence_id"]: row for row in csv.DictReader(handle, delimiter="\t")}
+    assert rows["sample_c000001"]["classification"] == "virus"
+    assert rows["sample_c000001"]["origin_pattern"] == "localized_viral_cluster"
+    assert rows["sample_c000001"]["potential_provirus"] == "true"
+    assert rows["sample_c000001"]["cellular_supported_loci"] == "2"
+    assert rows["sample_c000001"]["viral_cluster_flank_status"] == "both_sides"
+    assert rows["sample_c000001"]["classification_rank"] == "domain"
+    assert rows["sample_c000002"]["classification"] == "cellular"
+    assert rows["sample_c000002"]["origin_pattern"] == "isolated_viral_locus"
+    with clusters.open(encoding="utf-8", newline="") as handle:
+        cluster_rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert len(cluster_rows) == 1
+    assert cluster_rows[0]["flank_status"] == "both_sides"
+    assert cluster_rows[0]["classification_rank"] == "species"
+    with context.open(encoding="utf-8", newline="") as handle:
+        context_rows = list(csv.DictReader(handle, delimiter="\t"))
+    assert len(context_rows) == 1
+    assert context_rows[0]["sequence_id"] == "sample_c000003"
+    assert context_rows[0]["tool"] == "vicat_context"
+    assert context_rows[0]["evidence_strength"] == "weak"

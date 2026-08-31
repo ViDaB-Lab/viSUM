@@ -193,6 +193,23 @@ class DiscoveryGateTests(unittest.TestCase):
         self.assertTrue(advance)
         self.assertIn("one tool", reason)
 
+    def test_competitive_vicat_internal_cellular_support_is_one_tool_conflict(self) -> None:
+        evidence = self.directory / "vicat.tsv"
+        columns = sorted(discovery_gate.REQUIRED_EVIDENCE_COLUMNS | {"cellular_supported_loci"})
+        write_tsv(evidence, columns, [{
+            "sample_id": "sample", "sequence_id": "sample__c000001",
+            "parent_sequence_id": "", "tool": "vicat", "classification": "virus",
+            "cellular_supported_loci": "3",
+        }])
+        discovery_gate.run(self.arguments([evidence]))
+        row = read_tsv(self.audit)[0]
+        self.assertEqual(row["discovery_status"], "ambiguous")
+        self.assertEqual(row["viral_tool_count"], "1")
+        self.assertEqual(row["cellular_tool_count"], "1")
+        self.assertEqual(row["viral_tools"], "vicat")
+        self.assertEqual(row["cellular_tools"], "vicat")
+        self.assertEqual(row["advance_to_refinement"], "true")
+
 
 if __name__ == "__main__":
     unittest.main()

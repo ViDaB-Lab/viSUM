@@ -48,6 +48,8 @@ METADATA_COLUMNS = [
     "vcontact3_group_status", "sequence_interpretation", "tesorter_status",
     "tesorter_evidence_strength", "tesorter_categories", "tesorter_orders",
     "tesorter_superfamilies", "tesorter_assignment_methods",
+    "vicat_origin_pattern", "vicat_provirus_status", "vicat_evidence_scope",
+    "vicat_viral_supported_loci", "vicat_cellular_supported_loci",
 ]
 
 STRENGTH_ORDER = {"": 0, "weak": 1, "qualified": 2, "strong": 3}
@@ -291,6 +293,29 @@ def root_for_evidence(row: dict[str, str], final_to_parent: dict[str, str]) -> s
     target_parent = parent or sequence_id
     matches = [final_id for final_id, final_parent in final_to_parent.items() if final_parent == target_parent]
     return matches[0] if len(matches) == 1 else target_parent
+
+
+def select_vicat_scope(
+    rows: list[dict[str, str]], final_id: str, parent_id: str
+) -> tuple[list[dict[str, str]], list[dict[str, str]], bool]:
+    """Prefer region-scoped viCAT evidence without erasing parent provenance."""
+    region_rows = [
+        row for row in rows
+        if row.get("tool", "").strip().lower() == "vicat"
+        and row.get("evidence_scope", "").strip() == "refined_region"
+        and row.get("sequence_id", "").strip() == final_id
+    ]
+    suppress_parent = final_id != parent_id or bool(region_rows)
+    selected = [
+        row for row in rows
+        if not (
+            suppress_parent
+            and row.get("tool", "").strip().lower() == "vicat"
+            and row.get("evidence_scope", "parent_discovery").strip()
+                == "parent_discovery"
+        )
+    ]
+    return selected, region_rows, suppress_parent
 
 
 def taxonomy_string(lineage: dict[str, str]) -> str:
@@ -558,7 +583,34 @@ def run(args: argparse.Namespace) -> None:
         region = regions[final_id]
         parent_id = final_to_parent[final_id]
         header = headers[parent_id]
-        rows = rows_by_final.get(final_id, [])
+        all_rows = rows_by_final.get(final_id, [])
+        rows, region_vicat_rows, suppress_parent_vicat = select_vicat_scope(
+            all_rows, final_id, parent_id
+        )
+        for source_row in all_rows:
+            audit = dict(source_row)
+            is_suppressed_parent_vicat = (
+                source_row.get("tool", "").strip().lower() == "vicat"
+                and source_row.get("evidence_scope", "parent_discovery").strip()
+                    == "parent_discovery"
+                and suppress_parent_vicat
+            )
+            if (
+                source_row.get("tool", "").strip().lower() == "deep6"
+                and source_row.get("classification", "").strip().lower() == "virus"
+                and not source_row.get("evidence_strength", "").strip()
+            ):
+                audit["evidence_strength"] = "qualified"
+                audit["strength_basis"] = "legacy_deep6_confident_prediction"
+            audit["final_sequence_id"] = final_id
+            audit["applied_scope"] = (
+                "region" if source_row.get("sequence_id") == final_id else "parent"
+            )
+            audit["evidence_application"] = (
+                "superseded_parent_vicat"
+                if is_suppressed_parent_vicat else "used_for_final_decision"
+            )
+            evidence_audit_rows.append(audit)
         tools_by_class: dict[str, set[str]] = defaultdict(set)
         strong_tools: set[str] = set()
         qualified_tools: set[str] = set()
@@ -575,13 +627,6 @@ def run(args: argparse.Namespace) -> None:
                         strong_tools.add(tool)
                     else:
                         qualified_tools.add(tool)
-            audit = dict(row)
-            if tool == "deep6" and classification == "virus" and not row.get("evidence_strength", "").strip():
-                audit["evidence_strength"] = "qualified"
-                audit["strength_basis"] = "legacy_deep6_confident_prediction"
-            audit["final_sequence_id"] = final_id
-            audit["applied_scope"] = "region" if row.get("sequence_id") == final_id else "parent"
-            evidence_audit_rows.append(audit)
 
         qualified_tools.difference_update(strong_tools)
         tesorter_summary = summarize_tesorter(
@@ -621,6 +666,23 @@ def run(args: argparse.Namespace) -> None:
         original_name = header["original_id"]
         cellular = sorted(tools_by_class.get("cellular", set()))
         plasmid = sorted(tools_by_class.get("plasmid", set()))
+        selected_vicat_rows = [
+            row for row in rows if row.get("tool", "").strip().lower() == "vicat"
+        ]
+        vicat_patterns = sorted({
+            row.get("origin_pattern", "").strip() for row in selected_vicat_rows
+            if row.get("origin_pattern", "").strip()
+        })
+        vicat_scopes = sorted({
+            row.get("evidence_scope", "parent_discovery").strip()
+            for row in selected_vicat_rows
+        })
+        if "resolved_provirus_with_vicat_support" in vicat_patterns:
+            vicat_provirus_status = "resolved_with_vicat_support"
+        elif "localized_viral_cluster" in vicat_patterns:
+            vicat_provirus_status = "potential_provirus"
+        else:
+            vicat_provirus_status = "none"
         metadata = {
             "original_contig_name": original_name,
             "normalized_name": parent_id,
@@ -648,10 +710,34 @@ def run(args: argparse.Namespace) -> None:
             "taxonomy_conflict": "true" if any(vote["reason"] == "rank_tie" for vote in vote_rows) else "false",
             "vcontact3_groups": ",".join(sorted(set(group_labels))) or "NA",
             "vcontact3_group_status": ",".join(group_statuses),
+            "vicat_origin_pattern": ",".join(vicat_patterns) or "NA",
+            "vicat_provirus_status": vicat_provirus_status,
+            "vicat_evidence_scope": ",".join(vicat_scopes) or "NA",
+            "vicat_viral_supported_loci": str(sum(
+                int(float(row.get("viral_supported_loci", "0") or 0))
+                for row in selected_vicat_rows
+            )),
+            "vicat_cellular_supported_loci": str(sum(
+                int(float(row.get("cellular_supported_loci", "0") or 0))
+                for row in selected_vicat_rows
+            )),
             **tesorter_summary,
         }
         metadata_rows.append(metadata)
         reasons = []
+        parent_vicat_viral = any(
+            row.get("tool", "").strip().lower() == "vicat"
+            and row.get("classification", "").strip().lower() == "virus"
+            and row.get("evidence_scope", "parent_discovery").strip() == "parent_discovery"
+            for row in all_rows
+        )
+        region_vicat_viral = any(
+            row.get("classification", "").strip().lower() == "virus"
+            for row in region_vicat_rows
+        )
+        if final_id != parent_id and parent_vicat_viral and not region_vicat_viral:
+            reasons.append("provirus_boundary_vicat_discordance")
+            metadata["vicat_provirus_status"] = "boundary_vicat_discordance"
         if viral_confidence == "provisional": reasons.append("single_qualified_viral_tool")
         if cellular: reasons.append("cellular_conflict")
         if plasmid: reasons.append("plasmid_conflict")
@@ -720,7 +806,10 @@ def run(args: argparse.Namespace) -> None:
 
     if args.audit_mode == "full":
         evidence_path = Path(f"{prefix}.evidence_audit.tsv.gz")
-        audit_columns = ["final_sequence_id", "applied_scope", "_source_file", *evidence_columns]
+        audit_columns = [
+            "final_sequence_id", "applied_scope", "evidence_application",
+            "_source_file", *evidence_columns,
+        ]
         with gzip.open(evidence_path, "wt", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=audit_columns, delimiter="\t", lineterminator="\n", extrasaction="ignore")
             writer.writeheader(); writer.writerows(evidence_audit_rows)
@@ -734,7 +823,7 @@ def run(args: argparse.Namespace) -> None:
 
     manifest_path = Path(f"{prefix}.harmonizer_manifest.json")
     manifest = {
-        "schema_version": "viharmony-0.2",
+        "schema_version": "viharmony-0.3",
         "sample_id": args.sample_id,
         "input_type": args.input_type,
         "ictv_msl": args.ictv_msl.name,
@@ -746,6 +835,7 @@ def run(args: argparse.Namespace) -> None:
             "taxonomy": "configured-ICTV-MSL-validated method-aware rank voting",
             "vcontact3_min_taxonomy_length": minimum_vcontact3_length,
             "vcontact3_project_groups": "ancestry-compatible, unambiguous groups only",
+            "vicat_scope": "refined-region evidence supersedes parent-discovery evidence",
         },
         "outputs": {},
     }

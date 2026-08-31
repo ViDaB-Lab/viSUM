@@ -17,6 +17,8 @@ process STANDARDIZE_VICAT {
     output:
     tuple val(prefix), val('vicat'), path("${prefix}.vicat_evidence.tsv"), emit: evidence
     tuple val(prefix), path("${prefix}.vicat_orf_evidence.tsv"), emit: loci
+    tuple val(prefix), path("${prefix}.vicat_cluster_evidence.tsv"), emit: clusters
+    tuple val(prefix), val('vicat_context'), path("${prefix}.vicat_context.tsv"), emit: context
     tuple val(prefix), path("${prefix}.vicat_reference_audit.tsv"), emit: audit
 
     script:
@@ -48,7 +50,12 @@ process STANDARDIZE_VICAT {
         --orf-taxonomy-support "${params.vicat_orf_taxonomy_support}" \
         --contig-taxonomy-support "${params.vicat_contig_taxonomy_support}" \
         --locus-overlap "${params.vicat_locus_overlap}" \
+        --competitive-min-margin "${params.vicat_competitive_min_margin}" \
+        --cluster-min-viral-loci "${params.vicat_cluster_min_viral_loci}" \
+        --cluster-max-neutral-gap "${params.vicat_cluster_max_neutral_gap}" \
         --output-loci "${prefix}.vicat_orf_evidence.tsv" \
+        --output-clusters "${prefix}.vicat_cluster_evidence.tsv" \
+        --output-context "${prefix}.vicat_context.tsv" \
         --output-audit "${prefix}.vicat_reference_audit.tsv" \
         --output-evidence "${prefix}.vicat_evidence.tsv"
     """

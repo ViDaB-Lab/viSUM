@@ -110,6 +110,20 @@ def test_vicat_analysis_prefers_competitive_database_and_wires_manifest() -> Non
     assert 'hit["reference_class"] == "viral"' in helper
 
 
+def test_vicat_projects_precomputed_loci_after_provirus_refinement() -> None:
+    workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+    module = (ROOT / "modules" / "local" / "project_vicat_refined.nf").read_text(
+        encoding="utf-8"
+    )
+    helper = (ROOT / "bin" / "project_vicat_refined.py").read_text(encoding="utf-8")
+    assert "PROJECT_VICAT_REFINED(ch_vicat_refinement_projection)" in workflow
+    assert "REFINE_PROVIRAL_REGIONS.out.refined" in workflow
+    assert "STANDARDIZE_VICAT.out.loci" in workflow
+    assert "project_vicat_refined.py" in module
+    assert "crosses_boundary" in helper
+    assert '"evidence_scope": "refined_region"' in helper
+
+
 def test_vicat_competitive_metadata_is_normalized_before_duckdb() -> None:
     helper = (ROOT / "bin" / "prepare_vicat_competitive_references.py").read_text(
         encoding="utf-8"

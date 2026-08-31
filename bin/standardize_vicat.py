@@ -22,6 +22,11 @@ EXTRA_COLUMNS = [
     "best_query_coverage", "best_subject_coverage", "taxonomy_support",
     "taxonomy_eligible_loci", "taxonomy_supporting_loci",
     "classification_rank", "taxonomy_conflict", "reference_taxonomy_conflict_loci",
+    "competitive_mode", "evidence_scope", "origin_pattern", "potential_provirus",
+    "viral_supported_loci", "cellular_supported_loci", "ambiguous_loci",
+    "uninformative_loci", "viral_cluster_count", "largest_viral_cluster_loci",
+    "viral_cluster_coordinates", "viral_cluster_flank_status",
+    "competitive_decision_reason",
 ]
 OUTPUT_COLUMNS = (
     CORE_EVIDENCE_COLUMNS
@@ -34,7 +39,9 @@ LOCUS_COLUMNS = [
     "best_reference_id", "best_bitscore", "best_evalue", "best_identity",
     "best_query_coverage", "best_subject_coverage", "reference_votu_count",
     "reference_taxonomy_coverage", "reference_taxonomy_conflict", "taxonomy_support",
-    "classification_rank", "caller_taxonomy_conflict", *TAXONOMY_COLUMNS,
+    "classification_rank", "caller_taxonomy_conflict", "locus_classification",
+    "best_viral_bitscore", "best_cellular_bitscore", "competitive_score_margin",
+    "competitive_decision_reason", "competitive_mode", *TAXONOMY_COLUMNS,
 ]
 AUDIT_COLUMNS = [
     "sample_id", "sequence_id", "locus_id", "orf_id", "orf_callers",
@@ -47,7 +54,16 @@ AUDIT_COLUMNS = [
     "subject_coverage", "lineage_vote_representative", "lineage_vote_weight",
     "member_votu_count", "classified_votu_count", "reference_taxonomy_coverage",
     "reference_taxonomy_conflict", "reference_taxonomy_conflict_rank",
-    "taxonomy_methods", "orf_taxonomy_support_threshold", *TAXONOMY_COLUMNS,
+    "taxonomy_methods", "orf_taxonomy_support_threshold", "locus_classification",
+    "best_viral_bitscore", "best_cellular_bitscore", "competitive_score_margin",
+    "competitive_decision_reason", *TAXONOMY_COLUMNS,
+]
+CLUSTER_COLUMNS = [
+    "sample_id", "sequence_id", "cluster_id", "coordinates",
+    "viral_supported_loci", "intervening_neutral_loci", "flank_status",
+    "left_cellular_loci", "right_cellular_loci", "classification_rank",
+    "taxonomy_support", "taxonomy_eligible_loci", "taxonomy_supporting_loci",
+    "taxonomy_conflict", *TAXONOMY_COLUMNS,
 ]
 
 
@@ -74,7 +90,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--orf-taxonomy-support", required=True, type=float)
     parser.add_argument("--contig-taxonomy-support", required=True, type=float)
     parser.add_argument("--locus-overlap", required=True, type=float)
+    parser.add_argument("--competitive-min-margin", type=float, default=0.05)
+    parser.add_argument("--cluster-min-viral-loci", type=int, default=2)
+    parser.add_argument("--cluster-max-neutral-gap", type=int, default=1)
     parser.add_argument("--output-loci", required=True, type=Path)
+    parser.add_argument("--output-clusters", type=Path)
+    parser.add_argument("--output-context", type=Path)
     parser.add_argument("--output-audit", required=True, type=Path)
     parser.add_argument("--output-evidence", required=True, type=Path)
     return parser.parse_args()
@@ -391,6 +412,163 @@ def format_number(value, digits=6):
     return f"{float(value):.{digits}g}"
 
 
+def best_class_hit(alternatives: list[Orf], hits: dict[str, list[dict]], label: str):
+    candidates = [
+        (orf, hit)
+        for orf in alternatives
+        for hit in hits.get(orf.orf_id, [])
+        if hit["reference_class"] == label
+    ]
+    if not candidates:
+        return None, None
+    return max(
+        candidates,
+        key=lambda item: (float(item[1]["bitscore"]), float(item[1]["qcovhsp"])),
+    )
+
+
+def classify_locus(
+    alternatives: list[Orf],
+    hits: dict[str, list[dict]],
+    competitive_mode: bool,
+    minimum_margin: float,
+) -> dict[str, object]:
+    viral_orf, viral_hit = best_class_hit(alternatives, hits, "viral")
+    cellular_orf, cellular_hit = best_class_hit(alternatives, hits, "cellular")
+    viral_score = float(viral_hit["bitscore"]) if viral_hit else None
+    cellular_score = float(cellular_hit["bitscore"]) if cellular_hit else None
+
+    if not competitive_mode:
+        classification = "viral_supported" if viral_hit else "uninformative"
+        reason = "viral_only_database_hit" if viral_hit else "no_qualified_hit"
+        margin = None
+    elif viral_score is None and cellular_score is None:
+        classification, reason, margin = "uninformative", "no_qualified_hit", None
+    elif cellular_score is None:
+        classification, reason, margin = "viral_supported", "viral_hit_without_returned_cellular_competitor", 1.0
+    elif viral_score is None:
+        classification, reason, margin = "cellular_supported", "cellular_hit_without_returned_viral_competitor", -1.0
+    else:
+        signed_margin = (viral_score - cellular_score) / max(viral_score, cellular_score)
+        margin = signed_margin
+        if abs(signed_margin) + 1e-12 < minimum_margin:
+            classification, reason = "ambiguous", "viral_cellular_scores_within_margin"
+        elif signed_margin > 0:
+            classification, reason = "viral_supported", "viral_score_exceeds_cellular_margin"
+        else:
+            classification, reason = "cellular_supported", "cellular_score_exceeds_viral_margin"
+
+    return {
+        "classification": classification,
+        "reason": reason,
+        "margin": margin,
+        "viral_orf": viral_orf,
+        "viral_hit": viral_hit,
+        "viral_score": viral_score,
+        "cellular_orf": cellular_orf,
+        "cellular_hit": cellular_hit,
+        "cellular_score": cellular_score,
+    }
+
+
+def viral_clusters(entries: list[dict], minimum_loci: int, maximum_neutral_gap: int) -> list[list[dict]]:
+    """Return viral-locus clusters; cellular-supported loci always break a cluster."""
+    clusters: list[list[dict]] = []
+    current: list[dict] = []
+    neutral: list[dict] = []
+
+    def finish() -> None:
+        nonlocal current, neutral
+        viral_count = sum(
+            entry["row"]["locus_classification"] == "viral_supported"
+            for entry in current
+        )
+        if viral_count >= minimum_loci:
+            clusters.append(current)
+        current, neutral = [], []
+
+    for entry in sorted(entries, key=lambda item: item["start"]):
+        classification = entry["row"]["locus_classification"]
+        if classification == "cellular_supported":
+            finish()
+        elif classification == "viral_supported":
+            if current and neutral:
+                current.extend(neutral)
+            current.append(entry)
+            neutral = []
+        elif current:
+            neutral.append(entry)
+            if len(neutral) > maximum_neutral_gap:
+                finish()
+    finish()
+    return clusters
+
+
+def cluster_flanks(cluster: list[dict], entries: list[dict]) -> tuple[str, int, int]:
+    start, end = cluster[0]["start"], cluster[-1]["end"]
+    left = sum(
+        entry["row"]["locus_classification"] == "cellular_supported"
+        and entry["end"] < start
+        for entry in entries
+    )
+    right = sum(
+        entry["row"]["locus_classification"] == "cellular_supported"
+        and entry["start"] > end
+        for entry in entries
+    )
+    if left and right:
+        status = "both_sides"
+    elif left:
+        status = "left_only"
+    elif right:
+        status = "right_only"
+    else:
+        status = "none"
+    return status, left, right
+
+
+def aggregate_taxonomy(entries: list[dict], threshold: float) -> dict[str, object]:
+    taxonomy = unclassified_taxonomy("virus")
+    deepest, deepest_support = "domain", 1.0
+    deepest_eligible_loci = len(entries)
+    deepest_supporting_loci = len(entries)
+    conflict = any(
+        entry["call"].get("aggregation_conflict")
+        or entry["row"]["caller_taxonomy_conflict"] == "true"
+        for entry in entries
+    )
+    accepted_prefix: list[str] = []
+    for index, column in enumerate(TAXONOMY_COLUMNS[1:], start=1):
+        eligible = [
+            entry for entry in entries
+            if all(
+                entry["call"]["taxonomy"][TAXONOMY_COLUMNS[parent + 1]] == accepted
+                for parent, accepted in enumerate(accepted_prefix)
+            )
+            if not is_unclassified(entry["call"]["taxonomy"][column])
+        ]
+        counts = Counter(entry["call"]["taxonomy"][column] for entry in eligible)
+        if not counts:
+            break
+        winner, count = max(counts.items(), key=lambda item: (item[1], item[0]))
+        support = count / len(eligible)
+        if support + 1e-12 < threshold:
+            conflict = len(counts) > 1
+            break
+        taxonomy[column] = winner
+        accepted_prefix.append(winner)
+        deepest, deepest_support = RANK_NAMES[index], support
+        deepest_eligible_loci, deepest_supporting_loci = len(eligible), count
+    return {
+        "taxonomy": taxonomy,
+        "classification_rank": deepest,
+        "taxonomy_support": deepest_support,
+        "taxonomy_eligible_loci": deepest_eligible_loci,
+        "taxonomy_supporting_loci": deepest_supporting_loci,
+        "taxonomy_conflict": conflict,
+    }
+
+
 def main() -> None:
     args = parse_args()
     if not 0.5 <= args.orf_taxonomy_support <= 1.0:
@@ -399,11 +577,18 @@ def main() -> None:
         raise SystemExit("--contig-taxonomy-support must be between 0.5 and 1")
     if not 0.0 < args.locus_overlap <= 1.0:
         raise SystemExit("--locus-overlap must be greater than 0 and at most 1")
+    if not 0.0 <= args.competitive_min_margin < 1.0:
+        raise SystemExit("--competitive-min-margin must be between 0 and 1")
+    if args.cluster_min_viral_loci < 2:
+        raise SystemExit("--cluster-min-viral-loci must be at least 2")
+    if args.cluster_max_neutral_gap < 0:
+        raise SystemExit("--cluster-max-neutral-gap must be zero or greater")
 
     orfs = load_orfs(args.orf_map)
     hits = load_hits(
         args.diamond, args.taxonomy_lookup, args.reference_manifest
     )
+    competitive_mode = args.reference_manifest is not None
     unknown = sorted(set(hits) - set(orfs))
     if unknown:
         raise SystemExit(f"DIAMOND contains ORF IDs absent from the ORF map: {unknown[:5]}")
@@ -415,6 +600,9 @@ def main() -> None:
     audit_rows = []
     contig_loci: dict[str, list[dict]] = defaultdict(list)
     for locus_index, alternatives in enumerate(loci, start=1):
+        competition = classify_locus(
+            alternatives, hits, competitive_mode, args.competitive_min_margin
+        )
         calls = [
             (
                 orf,
@@ -430,10 +618,10 @@ def main() -> None:
         ]
         hit_calls = [(orf, call) for orf, call in calls if call]
         selected_orf, selected = (None, {})
-        if hit_calls:
-            selected_orf, selected = max(
-                hit_calls,
-                key=lambda item: (item[1]["best_bitscore"], item[1]["best_query_coverage"]),
+        if competition["classification"] == "viral_supported":
+            selected_orf = competition["viral_orf"]
+            selected = next(
+                (call for orf, call in hit_calls if orf is selected_orf), {}
             )
             selected = {**selected, "taxonomy": dict(selected["taxonomy"])}
         caller_conflict = False
@@ -477,10 +665,24 @@ def main() -> None:
             "taxonomy_support": format_number(selected.get("taxonomy_support")),
             "classification_rank": selected.get("classification_rank", ""),
             "caller_taxonomy_conflict": "true" if caller_conflict else "false",
+            "locus_classification": competition["classification"],
+            "best_viral_bitscore": format_number(competition["viral_score"]),
+            "best_cellular_bitscore": format_number(competition["cellular_score"]),
+            "competitive_score_margin": format_number(competition["margin"]),
+            "competitive_decision_reason": competition["reason"],
+            "competitive_mode": "true" if competitive_mode else "false",
             **(selected.get("taxonomy") or unclassified_taxonomy("")),
         }
         locus_rows.append(row)
-        contig_loci[sequence_id].append({"row": row, "call": selected, "callers": callers})
+        contig_loci[sequence_id].append(
+            {
+                "row": row,
+                "call": selected,
+                "callers": callers,
+                "start": start,
+                "end": end,
+            }
+        )
 
         for orf, call in calls:
             orf_hits = hits.get(orf.orf_id, [])
@@ -546,57 +748,164 @@ def main() -> None:
                         ),
                         "taxonomy_methods": hit["taxonomy_methods"] or "",
                         "orf_taxonomy_support_threshold": format_number(args.orf_taxonomy_support),
+                        "locus_classification": competition["classification"],
+                        "best_viral_bitscore": format_number(competition["viral_score"]),
+                        "best_cellular_bitscore": format_number(competition["cellular_score"]),
+                        "competitive_score_margin": format_number(competition["margin"]),
+                        "competitive_decision_reason": competition["reason"],
                         **{column: hit[column] or "" for column in TAXONOMY_COLUMNS},
                     }
                 )
 
     evidence_rows = []
+    context_rows = []
+    cluster_rows = []
     for sequence_id, entries in sorted(contig_loci.items()):
-        hit_entries = [entry for entry in entries if entry["call"]]
-        if not hit_entries:
-            continue
-        total_loci, hit_loci = len(entries), len(hit_entries)
-        taxonomy = unclassified_taxonomy("virus")
-        deepest, deepest_support = "domain", 1.0
-        deepest_eligible_loci = hit_loci
-        deepest_supporting_loci = hit_loci
-        contig_conflict = any(
-            entry["call"].get("aggregation_conflict") or
-            entry["row"]["caller_taxonomy_conflict"] == "true"
-            for entry in hit_entries
+        total_loci = len(entries)
+        counts = Counter(entry["row"]["locus_classification"] for entry in entries)
+        viral_entries = [
+            entry for entry in entries
+            if entry["row"]["locus_classification"] == "viral_supported"
+        ]
+        clusters = viral_clusters(
+            entries, args.cluster_min_viral_loci, args.cluster_max_neutral_gap
         )
-        accepted_prefix: list[str] = []
-        for index, column in enumerate(TAXONOMY_COLUMNS[1:], start=1):
-            eligible_entries = [
-                entry for entry in hit_entries
-                if all(
-                    entry["call"]["taxonomy"][TAXONOMY_COLUMNS[parent_index + 1]] == accepted
-                    for parent_index, accepted in enumerate(accepted_prefix)
-                )
-                if not is_unclassified(entry["call"]["taxonomy"][column])
-            ]
-            counts = Counter(entry["call"]["taxonomy"][column] for entry in eligible_entries)
-            if not counts:
-                break
-            winner, count = max(counts.items(), key=lambda item: (item[1], item[0]))
-            # Loci with taxonomy truncated above this rank abstain while still
-            # contributing to the viCAT viral hit-locus evidence.
-            support = count / len(eligible_entries)
-            if support + 1e-12 < args.contig_taxonomy_support:
-                contig_conflict = len(counts) > 1
-                break
-            taxonomy[column] = winner
-            accepted_prefix.append(winner)
-            deepest, deepest_support = RANK_NAMES[index], support
-            deepest_eligible_loci = len(eligible_entries)
-            deepest_supporting_loci = count
+        viral_count = counts["viral_supported"]
+        cellular_count = counts["cellular_supported"]
+        ambiguous_count = counts["ambiguous"]
+        uninformative_count = counts["uninformative"]
 
-        best_entry = max(hit_entries, key=lambda entry: entry["call"]["best_bitscore"])
+        if viral_count >= args.cluster_min_viral_loci and cellular_count == 0:
+            pattern = "predominantly_viral"
+            classification = "virus"
+            decision_reason = "multiple_viral_loci_without_cellular_supported_loci"
+        elif clusters and cellular_count:
+            pattern = (
+                "localized_viral_cluster"
+                if args.input_type == "dna"
+                else "mixed_host_viral_signal"
+            )
+            classification = "virus"
+            decision_reason = "spatial_viral_cluster_with_cellular_context"
+        elif viral_count == 1:
+            pattern = "isolated_viral_locus"
+            classification = "cellular" if cellular_count else ""
+            decision_reason = "isolated_viral_locus_is_not_qualified_discovery_evidence"
+        elif viral_count >= 2:
+            pattern = "mixed_distributed"
+            classification = "cellular" if cellular_count else ""
+            decision_reason = "viral_loci_do_not_form_a_qualified_cluster"
+        elif cellular_count:
+            pattern = "predominantly_cellular"
+            classification = "cellular"
+            decision_reason = "cellular_supported_loci_without_qualified_viral_pattern"
+        else:
+            pattern = "unresolved"
+            classification = ""
+            decision_reason = "no_qualified_competitive_origin_pattern"
+
+        cluster_coordinates = [
+            f"{cluster[0]['start']}-{cluster[-1]['end']}" for cluster in clusters
+        ]
+        flank_statuses = [cluster_flanks(cluster, entries)[0] for cluster in clusters]
+
+        # Weak viCAT patterns do not enter the Discovery Gate, but a separate
+        # audit-only context table allows viHARMONY to preserve their history.
+        if not classification:
+            context_rows.append({
+                "sample_id": args.sample_id,
+                "sequence_id": sequence_id,
+                "parent_sequence_id": "",
+                "record_type": "input_contig",
+                "coordinates": "",
+                "tool": "vicat_context",
+                "classification": "ambiguous",
+                "score": format_number(viral_count / total_loci),
+                "score_type": "viral_supported_locus_fraction",
+                "length": sequence_lengths.get(sequence_id, ""),
+                "topology": "",
+                "n_genes": total_loci,
+                "n_hallmarks": "",
+                "evidence_strength": "weak",
+                "strength_basis": f"vicat_audit_only_{pattern}",
+                **unclassified_taxonomy(""),
+                "orf_loci": total_loci,
+                "hit_loci": viral_count,
+                "hit_locus_fraction": format_number(viral_count / total_loci),
+                "competitive_mode": "true" if competitive_mode else "false",
+                "evidence_scope": "parent_discovery",
+                "origin_pattern": pattern,
+                "potential_provirus": "false",
+                "viral_supported_loci": viral_count,
+                "cellular_supported_loci": cellular_count,
+                "ambiguous_loci": ambiguous_count,
+                "uninformative_loci": uninformative_count,
+                "viral_cluster_count": len(clusters),
+                "largest_viral_cluster_loci": 0,
+                "viral_cluster_coordinates": ",".join(cluster_coordinates),
+                "viral_cluster_flank_status": ",".join(flank_statuses),
+                "competitive_decision_reason": decision_reason,
+            })
+            continue
+
+        taxonomy_entries = viral_entries if pattern == "predominantly_viral" else []
+        taxonomy_result = aggregate_taxonomy(
+            taxonomy_entries, args.contig_taxonomy_support
+        ) if taxonomy_entries else {
+            "taxonomy": unclassified_taxonomy("virus" if classification == "virus" else ""),
+            "classification_rank": "domain" if classification == "virus" else "",
+            "taxonomy_support": 1.0 if classification == "virus" else None,
+            "taxonomy_eligible_loci": 0,
+            "taxonomy_supporting_loci": 0,
+            "taxonomy_conflict": False,
+        }
+
+        best_entry = (
+            max(viral_entries, key=lambda entry: entry["call"]["best_bitscore"])
+            if viral_entries else None
+        )
         all_callers = sorted(set().union(*(set(entry["callers"]) for entry in entries)))
         reference_conflicts = sum(
-            bool(entry["call"].get("reference_taxonomy_conflict")) for entry in hit_entries
+            bool(entry["call"].get("reference_taxonomy_conflict")) for entry in viral_entries
         )
-        fraction = hit_loci / total_loci
+        fraction = viral_count / total_loci
+        flank_statuses = []
+        for cluster_index, cluster in enumerate(clusters, start=1):
+            cluster_viral_entries = [
+                entry for entry in cluster
+                if entry["row"]["locus_classification"] == "viral_supported"
+            ]
+            cluster_taxonomy = aggregate_taxonomy(
+                cluster_viral_entries, args.contig_taxonomy_support
+            )
+            flank_status, left_cellular, right_cellular = cluster_flanks(
+                cluster, entries
+            )
+            flank_statuses.append(flank_status)
+            cluster_rows.append({
+                "sample_id": args.sample_id,
+                "sequence_id": sequence_id,
+                "cluster_id": f"{sequence_id}|vicat_cluster_{cluster_index}",
+                "coordinates": f"{cluster[0]['start']}-{cluster[-1]['end']}",
+                "viral_supported_loci": len(cluster_viral_entries),
+                "intervening_neutral_loci": len(cluster) - len(cluster_viral_entries),
+                "flank_status": flank_status,
+                "left_cellular_loci": left_cellular,
+                "right_cellular_loci": right_cellular,
+                "classification_rank": cluster_taxonomy["classification_rank"],
+                "taxonomy_support": format_number(cluster_taxonomy["taxonomy_support"]),
+                "taxonomy_eligible_loci": cluster_taxonomy["taxonomy_eligible_loci"],
+                "taxonomy_supporting_loci": cluster_taxonomy["taxonomy_supporting_loci"],
+                "taxonomy_conflict": "true" if cluster_taxonomy["taxonomy_conflict"] else "false",
+                **cluster_taxonomy["taxonomy"],
+            })
+        largest_cluster = max(
+            (
+                sum(item["row"]["locus_classification"] == "viral_supported" for item in cluster)
+                for cluster in clusters
+            ),
+            default=0,
+        )
         evidence_rows.append(
             {
                 "sample_id": args.sample_id,
@@ -605,32 +914,49 @@ def main() -> None:
                 "record_type": "input_contig",
                 "coordinates": "",
                 "tool": "vicat",
-                "classification": "virus",
+                "classification": classification,
                 "score": format_number(fraction),
-                "score_type": "qualified_orf_locus_fraction",
+                "score_type": "viral_supported_locus_fraction",
                 "length": sequence_lengths.get(sequence_id, ""),
                 "topology": "",
                 "n_genes": total_loci,
                 "n_hallmarks": "",
                 "evidence_strength": "qualified",
-                "strength_basis": "vicat_viral_protein_homology",
-                **taxonomy,
+                "strength_basis": (
+                    "vicat_viral_protein_homology"
+                    if not competitive_mode
+                    else f"vicat_competitive_{pattern}"
+                ),
+                **taxonomy_result["taxonomy"],
                 "orf_loci": total_loci,
-                "hit_loci": hit_loci,
+                "hit_loci": viral_count,
                 "hit_locus_fraction": format_number(fraction),
                 "orf_callers": ",".join(all_callers),
-                "best_reference_id": best_entry["call"]["best_reference_id"],
-                "best_bitscore": format_number(best_entry["call"]["best_bitscore"]),
-                "best_evalue": format_number(best_entry["call"]["best_evalue"]),
-                "best_identity": format_number(best_entry["call"]["best_identity"]),
-                "best_query_coverage": format_number(best_entry["call"]["best_query_coverage"]),
-                "best_subject_coverage": format_number(best_entry["call"]["best_subject_coverage"]),
-                "taxonomy_support": format_number(deepest_support),
-                "taxonomy_eligible_loci": deepest_eligible_loci,
-                "taxonomy_supporting_loci": deepest_supporting_loci,
-                "classification_rank": deepest,
-                "taxonomy_conflict": "true" if contig_conflict else "false",
+                "best_reference_id": best_entry["call"]["best_reference_id"] if best_entry else "",
+                "best_bitscore": format_number(best_entry["call"]["best_bitscore"] if best_entry else None),
+                "best_evalue": format_number(best_entry["call"]["best_evalue"] if best_entry else None),
+                "best_identity": format_number(best_entry["call"]["best_identity"] if best_entry else None),
+                "best_query_coverage": format_number(best_entry["call"]["best_query_coverage"] if best_entry else None),
+                "best_subject_coverage": format_number(best_entry["call"]["best_subject_coverage"] if best_entry else None),
+                "taxonomy_support": format_number(taxonomy_result["taxonomy_support"]),
+                "taxonomy_eligible_loci": taxonomy_result["taxonomy_eligible_loci"],
+                "taxonomy_supporting_loci": taxonomy_result["taxonomy_supporting_loci"],
+                "classification_rank": taxonomy_result["classification_rank"],
+                "taxonomy_conflict": "true" if taxonomy_result["taxonomy_conflict"] else "false",
                 "reference_taxonomy_conflict_loci": reference_conflicts,
+                "competitive_mode": "true" if competitive_mode else "false",
+                "evidence_scope": "parent_discovery",
+                "origin_pattern": pattern,
+                "potential_provirus": "true" if pattern == "localized_viral_cluster" else "false",
+                "viral_supported_loci": viral_count,
+                "cellular_supported_loci": cellular_count,
+                "ambiguous_loci": ambiguous_count,
+                "uninformative_loci": uninformative_count,
+                "viral_cluster_count": len(clusters),
+                "largest_viral_cluster_loci": largest_cluster,
+                "viral_cluster_coordinates": ",".join(cluster_coordinates),
+                "viral_cluster_flank_status": ",".join(flank_statuses),
+                "competitive_decision_reason": decision_reason,
             }
         )
 
@@ -641,6 +967,22 @@ def main() -> None:
         writer = csv.DictWriter(handle, fieldnames=LOCUS_COLUMNS, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         writer.writerows(locus_rows)
+    if args.output_clusters is not None:
+        args.output_clusters.parent.mkdir(parents=True, exist_ok=True)
+        with args.output_clusters.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(
+                handle, fieldnames=CLUSTER_COLUMNS, delimiter="\t", lineterminator="\n"
+            )
+            writer.writeheader()
+            writer.writerows(cluster_rows)
+    if args.output_context is not None:
+        args.output_context.parent.mkdir(parents=True, exist_ok=True)
+        with args.output_context.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(
+                handle, fieldnames=OUTPUT_COLUMNS, delimiter="\t", lineterminator="\n"
+            )
+            writer.writeheader()
+            writer.writerows(context_rows)
     with args.output_audit.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=AUDIT_COLUMNS, delimiter="\t", lineterminator="\n")
         writer.writeheader()

@@ -28,6 +28,26 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle, delimiter="\t"))
 
 
+def test_refined_vicat_scope_supersedes_parent_without_counting_twice() -> None:
+    parent = {
+        "tool": "vicat", "sequence_id": "parent", "classification": "virus",
+        "evidence_scope": "parent_discovery",
+    }
+    region = {
+        "tool": "vicat", "sequence_id": "child", "parent_sequence_id": "parent",
+        "classification": "cellular", "evidence_scope": "refined_region",
+    }
+    genomad = {"tool": "genomad", "sequence_id": "parent", "classification": "virus"}
+    selected, region_rows, suppressed = run_viharmony.select_vicat_scope(
+        [parent, region, genomad], "child", "parent"
+    )
+    assert suppressed
+    assert region_rows == [region]
+    assert parent not in selected
+    assert region in selected
+    assert genomad in selected
+
+
 class ViharmonyTests(unittest.TestCase):
     def test_tesorter_changes_interpretation_without_voting_or_rejection(self) -> None:
         viral = [{"tool": "genomad", "classification": "virus", "evidence_strength": "qualified"}]
@@ -179,7 +199,7 @@ class ViharmonyTests(unittest.TestCase):
             deep6 = next(row for row in audit if row["tool"] == "deep6")
             self.assertEqual(deep6["evidence_strength"], "qualified")
             manifest = json.loads((directory / "sample.harmonizer_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], "viharmony-0.2")
+            self.assertEqual(manifest["schema_version"], "viharmony-0.3")
 
     def test_vcontact3_groups_require_length_context_and_unique_rank(self) -> None:
         strict = {rank: "" for rank in run_viharmony.RANKS}

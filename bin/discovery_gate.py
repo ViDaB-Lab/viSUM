@@ -233,6 +233,26 @@ def load_evidence(
                 )
             root_id = root_sequence_id(row, header_records, path)
             evidence[root_id][classification].append(tool)
+            # Competitive viCAT emits one coherent assessment row. A qualified
+            # localized viral cluster may still contain cellular-supported
+            # loci; expose that internal conflict to the gate without treating
+            # viCAT as two independent discovery tools.
+            if tool.lower() == "vicat" and classification == "virus":
+                raw_cellular_loci = row.get("cellular_supported_loci", "").strip()
+                if raw_cellular_loci:
+                    try:
+                        cellular_loci = int(raw_cellular_loci)
+                    except ValueError as error:
+                        raise ValueError(
+                            f"Invalid viCAT cellular_supported_loci in {path}: "
+                            f"{raw_cellular_loci}"
+                        ) from error
+                    if cellular_loci < 0:
+                        raise ValueError(
+                            f"Negative viCAT cellular_supported_loci in {path}"
+                        )
+                    if cellular_loci:
+                        evidence[root_id]["cellular"].append(tool)
     return evidence
 
 

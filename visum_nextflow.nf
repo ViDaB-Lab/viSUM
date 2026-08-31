@@ -28,6 +28,7 @@ include { PREPARE_VICAT_DATABASE } from './modules/local/vicat_database'
 include { PREDICT_VICAT_ORFS } from './modules/local/predict_vicat_orfs'
 include { RUN_VICAT_DIAMOND } from './modules/local/run_vicat_diamond'
 include { STANDARDIZE_VICAT } from './modules/local/standardize_vicat'
+include { PROJECT_VICAT_REFINED } from './modules/local/project_vicat_refined'
 include { DISCOVERY_GATE } from './modules/local/discovery_gate'
 include { PREPARE_CHECKV_DATABASE } from './modules/local/checkv_database'
 include { RUN_CHECKV } from './modules/local/run_checkv'
@@ -228,6 +229,12 @@ viCAT OPTIONS
   --vicat_block_size FLOAT          DIAMOND block size [2.0].
   --vicat_index_chunks INT          DIAMOND index chunks [4].
   --vicat_locus_overlap FLOAT       GV/RV ORF overlap threshold [0.80].
+  --vicat_competitive_min_margin FLOAT
+                                    Minimum viral/cellular bitscore margin [0.05].
+  --vicat_cluster_min_viral_loci INT
+                                    Minimum viral loci in a spatial cluster [2].
+  --vicat_cluster_max_neutral_gap INT
+                                    Ambiguous/uninformative loci bridged in a cluster [1].
   --vicat_orf_taxonomy_support FLOAT
                                     Within-ORF taxonomy support [0.60].
   --vicat_contig_taxonomy_support FLOAT
@@ -1113,6 +1120,19 @@ workflow {
             vicatLocusOverlap <= 0.0 || vicatLocusOverlap > 1.0 ) {
             error '--vicat_locus_overlap must be greater than 0 and at most 1.0.'
         }
+        def vicatCompetitiveMinMargin = params.vicat_competitive_min_margin as Double
+        if( !Double.isFinite(vicatCompetitiveMinMargin) ||
+            vicatCompetitiveMinMargin < 0.0 || vicatCompetitiveMinMargin >= 1.0 ) {
+            error '--vicat_competitive_min_margin must be at least 0 and less than 1.0.'
+        }
+        def vicatClusterMinViralLoci = params.vicat_cluster_min_viral_loci as Integer
+        if( vicatClusterMinViralLoci < 2 ) {
+            error '--vicat_cluster_min_viral_loci must be at least 2.'
+        }
+        def vicatClusterMaxNeutralGap = params.vicat_cluster_max_neutral_gap as Integer
+        if( vicatClusterMaxNeutralGap < 0 ) {
+            error '--vicat_cluster_max_neutral_gap must be zero or greater.'
+        }
         def vicatMinimumQueryCover = params.vicat_min_query_cover as Integer
         if( vicatMinimumQueryCover < 0 || vicatMinimumQueryCover > 100 ) {
             error '--vicat_min_query_cover must be between 0 and 100.'
@@ -1255,6 +1275,7 @@ workflow {
             STANDARDIZE_VICAT.out.evidence
         )
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VICAT.out.evidence)
+        ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VICAT.out.context)
     }
 
     // Prepare or validate the persistent VITAP database now. Taxonomic
@@ -1501,6 +1522,28 @@ workflow {
     REFINE_PROVIRAL_REGIONS.out.refined.view {
         prefix, type, refinedFasta, regionMap, boundaryAudit, summary ->
             "REFINED sample=${prefix} type=${type} fasta=${refinedFasta.name} map=${regionMap.name}"
+    }
+
+    if( runVicat ) {
+        ch_vicat_refinement_projection = REFINE_PROVIRAL_REGIONS.out.refined
+            .map { prefix, type, refinedFasta, regionMap, boundaryAudit, summary ->
+                tuple(prefix, type, regionMap)
+            }
+            .join(
+                STANDARDIZE_VICAT.out.loci.map { prefix, loci -> tuple(prefix, loci) }
+            )
+            .map { prefix, type, regionMap, loci ->
+                tuple(prefix, type, regionMap, loci)
+            }
+
+        PROJECT_VICAT_REFINED(ch_vicat_refinement_projection)
+
+        PROJECT_VICAT_REFINED.out.evidence.view { prefix, tool, evidence ->
+            "STANDARDIZED sample=${prefix} tool=${tool} scope=refined_region evidence=${evidence.name}"
+        }
+        ch_harmony_evidence = ch_harmony_evidence.mix(
+            PROJECT_VICAT_REFINED.out.evidence
+        )
     }
 
     if( runTesorter ) {
