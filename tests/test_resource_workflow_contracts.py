@@ -48,6 +48,7 @@ class ResourceWorkflowContractTests(unittest.TestCase):
             "run_gianthunter.nf": "params.gianthunter_cpus",
             "predict_vicat_orfs.nf": "params.vicat_orf_cpus",
             "run_vicat_diamond.nf": "params.vicat_cpus",
+            "standardize_vicat.nf": "params.vicat_standardizer_cpus",
             "run_vitap.nf": "params.vitap_cpus",
             "run_tesorter.nf": "params.tesorter_cpus",
         }
@@ -67,6 +68,7 @@ class ResourceWorkflowContractTests(unittest.TestCase):
             "run_gianthunter.nf": '--threads "${task.cpus}"',
             "predict_vicat_orfs.nf": '-j "${task.cpus}"',
             "run_vicat_diamond.nf": '--threads "${task.cpus}"',
+            "standardize_vicat.nf": '--threads "${task.cpus}"',
             "run_vitap.nf": '-p "${task.cpus}"',
             "run_tesorter.nf": '-p "${task.cpus}"',
             "vicat_database.nf": '--threads "${task.cpus}"',
@@ -108,6 +110,7 @@ class ResourceWorkflowContractTests(unittest.TestCase):
             "gianthunter_cpus",
             "vicat_orf_cpus",
             "vicat_cpus",
+            "vicat_standardizer_cpus",
             "vitap_cpus",
             "tesorter_cpus",
         ):

@@ -87,6 +87,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--taxonomy-lookup", required=True, type=Path)
     parser.add_argument("--reference-manifest", type=Path)
     parser.add_argument("--header-map", required=True, type=Path)
+    parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--orf-taxonomy-support", required=True, type=float)
     parser.add_argument("--contig-taxonomy-support", required=True, type=float)
     parser.add_argument("--locus-overlap", required=True, type=float)
@@ -137,12 +138,16 @@ def diamond_has_rows(path: Path) -> bool:
 
 
 def load_hits(
-    diamond: Path, lookup: Path, reference_manifest: Path | None = None
+    diamond: Path,
+    lookup: Path,
+    reference_manifest: Path | None = None,
+    threads: int = 1,
 ) -> dict[str, list[dict]]:
     if not diamond_has_rows(diamond):
         return {}
     rank_sql = ", ".join(f't."{column}" AS "{column}"' for column in TAXONOMY_COLUMNS)
     connection = duckdb.connect()
+    connection.execute(f"SET threads = {threads}")
     if reference_manifest is not None:
         missing = connection.execute(
             f"""
@@ -583,10 +588,12 @@ def main() -> None:
         raise SystemExit("--cluster-min-viral-loci must be at least 2")
     if args.cluster_max_neutral_gap < 0:
         raise SystemExit("--cluster-max-neutral-gap must be zero or greater")
+    if args.threads < 1:
+        raise SystemExit("--threads must be a positive integer")
 
     orfs = load_orfs(args.orf_map)
     hits = load_hits(
-        args.diamond, args.taxonomy_lookup, args.reference_manifest
+        args.diamond, args.taxonomy_lookup, args.reference_manifest, args.threads
     )
     competitive_mode = args.reference_manifest is not None
     unknown = sorted(set(hits) - set(orfs))

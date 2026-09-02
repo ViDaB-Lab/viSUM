@@ -2,7 +2,7 @@ process STANDARDIZE_VICAT {
 
     tag "${prefix}"
     conda "${projectDir}/envs/vicat.yml"
-    cpus 1
+    cpus { Math.min(params.vicat_standardizer_cpus as int, params.max_cpus as int) }
     memory params.vicat_standardizer_memory
     time params.vicat_standardizer_time
 
@@ -47,6 +47,7 @@ process STANDARDIZE_VICAT {
         --taxonomy-lookup "\$LOOKUP" \
         "\${MANIFEST_ARGS[@]}" \
         --header-map "${header_map}" \
+        --threads "${task.cpus}" \
         --orf-taxonomy-support "${params.vicat_orf_taxonomy_support}" \
         --contig-taxonomy-support "${params.vicat_contig_taxonomy_support}" \
         --locus-overlap "${params.vicat_locus_overlap}" \

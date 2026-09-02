@@ -51,6 +51,21 @@ def test_vicat_standardizer_emits_reference_audit() -> None:
     assert '--output-audit "${prefix}.vicat_reference_audit.tsv"' in module
 
 
+def test_vicat_standardizer_declares_and_enforces_duckdb_threads() -> None:
+    module = (ROOT / "modules" / "local" / "standardize_vicat.nf").read_text(
+        encoding="utf-8"
+    )
+    helper = (ROOT / "bin" / "standardize_vicat.py").read_text(encoding="utf-8")
+    config = (ROOT / "visum.config").read_text(encoding="utf-8")
+    assert "params.vicat_standardizer_cpus" in module
+    assert "params.max_cpus" in module
+    assert '--threads "${task.cpus}"' in module
+    assert "vicat_standardizer_cpus = 8" in config
+    assert 'parser.add_argument("--threads", type=int, default=1)' in helper
+    assert 'connection.execute(f"SET threads = {threads}")' in helper
+    assert 'args.reference_manifest, args.threads' in helper
+
+
 def test_vicat_uses_separate_orf_and_contig_taxonomy_thresholds() -> None:
     module = (ROOT / "modules" / "local" / "standardize_vicat.nf").read_text(encoding="utf-8")
     config = (ROOT / "visum.config").read_text(encoding="utf-8")

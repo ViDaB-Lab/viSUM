@@ -268,7 +268,8 @@ PER-TOOL RESOURCE OVERRIDES
   --ct3_cpus INT               --deep6_cpus INT
   --deepmicroclass2_cpus INT   --virbot_cpus INT
   --gianthunter_cpus INT       --vicat_orf_cpus INT
-  --vicat_cpus INT             --checkv_cpus INT
+  --vicat_cpus INT             --vicat_standardizer_cpus INT
+  --checkv_cpus INT
   --tesorter_cpus INT
   --vitap_cpus INT             --vcontact3_cpus INT
 
@@ -327,6 +328,7 @@ workflow {
         '--gianthunter_cpus': params.gianthunter_cpus,
         '--vicat_orf_cpus': params.vicat_orf_cpus,
         '--vicat_cpus': params.vicat_cpus,
+        '--vicat_standardizer_cpus': params.vicat_standardizer_cpus,
         '--checkv_cpus': params.checkv_cpus,
         '--tesorter_cpus': params.tesorter_cpus,
         '--vitap_cpus': params.vitap_cpus,
