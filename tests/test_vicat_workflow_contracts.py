@@ -68,23 +68,36 @@ def test_vicat_standardizer_declares_and_enforces_duckdb_threads() -> None:
 
 def test_vicat_hit_preparation_is_cached_before_margin_classification() -> None:
     workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+    subset_module = (
+        ROOT / "modules" / "local" / "prepare_vicat_reference_subset.nf"
+    ).read_text(encoding="utf-8")
     preparation = (ROOT / "modules" / "local" / "prepare_vicat_hits.nf").read_text(
         encoding="utf-8"
     )
     standardizer = (ROOT / "modules" / "local" / "standardize_vicat.nf").read_text(
         encoding="utf-8"
     )
+    subset_helper = (ROOT / "bin" / "prepare_vicat_reference_subset.py").read_text(
+        encoding="utf-8"
+    )
     helper = (ROOT / "bin" / "prepare_vicat_hits.py").read_text(encoding="utf-8")
+    assert "include { PREPARE_VICAT_REFERENCE_SUBSET }" in workflow
     assert "include { PREPARE_VICAT_HITS }" in workflow
-    assert "PREPARE_VICAT_HITS(RUN_VICAT_DIAMOND.out.results" not in workflow
+    assert ".collect()" in workflow
+    assert "PREPARE_VICAT_REFERENCE_SUBSET.out.subset.first()" in workflow
     assert "PREPARE_VICAT_HITS(" in workflow
     assert "STANDARDIZE_VICAT(PREPARE_VICAT_HITS.out.results)" in workflow
+    assert "vicat_competitive_min_margin" not in subset_module
     assert "vicat_competitive_min_margin" not in preparation
     assert "--prepared-hits" in standardizer
+    assert "ORDER BY" not in subset_helper
     assert "ORDER BY" not in helper
+    assert "relevant_reference_ids" in subset_helper
     assert "FORMAT PARQUET, COMPRESSION ZSTD" in helper
-    assert "SET memory_limit" in helper
-    assert "SET temp_directory" in helper
+    assert "--reference-subset" in preparation
+    assert "--reference-subset-metadata" in preparation
+    assert "SET memory_limit" in subset_helper
+    assert "SET temp_directory" in subset_helper
 
 
 def test_vicat_uses_separate_orf_and_contig_taxonomy_thresholds() -> None:
@@ -134,10 +147,14 @@ def test_vicat_analysis_prefers_competitive_database_and_wires_manifest() -> Non
     analysis = (ROOT / "modules" / "local" / "run_vicat_diamond.nf").read_text(
         encoding="utf-8"
     )
-    preparation = (ROOT / "modules" / "local" / "prepare_vicat_hits.nf").read_text(
+    preparation = (
+        ROOT / "modules" / "local" / "prepare_vicat_reference_subset.nf"
+    ).read_text(
         encoding="utf-8"
     )
-    helper = (ROOT / "bin" / "prepare_vicat_hits.py").read_text(encoding="utf-8")
+    helper = (ROOT / "bin" / "prepare_vicat_reference_subset.py").read_text(
+        encoding="utf-8"
+    )
     standardizer_helper = (ROOT / "bin" / "standardize_vicat.py").read_text(
         encoding="utf-8"
     )

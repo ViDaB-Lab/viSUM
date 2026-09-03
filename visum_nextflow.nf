@@ -27,6 +27,7 @@ include { STANDARDIZE_GIANTHUNTER } from './modules/local/standardize_gianthunte
 include { PREPARE_VICAT_DATABASE } from './modules/local/vicat_database'
 include { PREDICT_VICAT_ORFS } from './modules/local/predict_vicat_orfs'
 include { RUN_VICAT_DIAMOND } from './modules/local/run_vicat_diamond'
+include { PREPARE_VICAT_REFERENCE_SUBSET } from './modules/local/prepare_vicat_reference_subset'
 include { PREPARE_VICAT_HITS } from './modules/local/prepare_vicat_hits'
 include { STANDARDIZE_VICAT } from './modules/local/standardize_vicat'
 include { PROJECT_VICAT_REFINED } from './modules/local/project_vicat_refined'
@@ -1266,9 +1267,25 @@ workflow {
                 "VICAT_DIAMOND sample=${prefix} type=${type} alignments=${diamond.name}"
         }
 
+        ch_vicat_diamonds = RUN_VICAT_DIAMOND.out.results
+            .map { prefix, type, orfMap, headerMap, diamond -> diamond }
+            .collect()
+
+        PREPARE_VICAT_REFERENCE_SUBSET(
+            ch_vicat_diamonds,
+            ch_vicat_database
+        )
+
+        PREPARE_VICAT_REFERENCE_SUBSET.out.subset.view {
+            referenceSubset, referenceSubsetMetadata ->
+                "VICAT_REFERENCE_SUBSET references=${referenceSubset.name}"
+        }
+
+        ch_vicat_reference_subset = PREPARE_VICAT_REFERENCE_SUBSET.out.subset.first()
+
         PREPARE_VICAT_HITS(
             RUN_VICAT_DIAMOND.out.results,
-            ch_vicat_database
+            ch_vicat_reference_subset
         )
 
         PREPARE_VICAT_HITS.out.results.view {

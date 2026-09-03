@@ -60,6 +60,27 @@ def make_manifest(path: Path) -> None:
     connection.close()
 
 
+def prepare_reference_subset(
+    diamonds: list[Path],
+    lookup: Path,
+    manifest: Path,
+    directory: Path,
+    environment: dict[str, str],
+) -> tuple[Path, Path]:
+    subset = directory / "reference_subset.parquet"
+    metadata = directory / "reference_subset_metadata.tsv"
+    subprocess.run([
+        sys.executable, str(ROOT / "bin" / "prepare_vicat_reference_subset.py"),
+        "--diamond", *(str(path) for path in diamonds),
+        "--taxonomy-lookup", str(lookup),
+        "--reference-manifest", str(manifest), "--threads", "2",
+        "--memory-limit", "1 GB",
+        "--temp-directory", str(directory / "subset_duckdb_tmp"),
+        "--output", str(subset), "--output-metadata", str(metadata),
+    ], check=True, env=environment)
+    return subset, metadata
+
+
 def test_prepare_vicat_hits_handles_empty_alignment_table(tmp_path: Path) -> None:
     diamond = tmp_path / "empty_diamond.tsv"
     write_tsv(
@@ -80,10 +101,14 @@ def test_prepare_vicat_hits_handles_empty_alignment_table(tmp_path: Path) -> Non
     environment["PYTHONPATH"] = (
         str(ROOT / "bin") + os.pathsep + environment.get("PYTHONPATH", "")
     )
+    reference_subset, reference_subset_metadata = prepare_reference_subset(
+        [diamond], lookup, manifest, tmp_path, environment
+    )
     subprocess.run([
         sys.executable, str(ROOT / "bin" / "prepare_vicat_hits.py"),
-        "--diamond", str(diamond), "--taxonomy-lookup", str(lookup),
-        "--reference-manifest", str(manifest), "--threads", "1",
+        "--diamond", str(diamond), "--reference-subset", str(reference_subset),
+        "--reference-subset-metadata", str(reference_subset_metadata),
+        "--threads", "1",
         "--memory-limit", "1 GB", "--temp-directory", str(tmp_path / "duckdb_tmp"),
         "--output", str(prepared), "--output-metadata", str(metadata),
     ], check=True, env=environment)
@@ -344,10 +369,14 @@ def test_competitive_loci_detect_localized_provirus_and_suppress_isolated_hit(tm
 
     prepared_hits = tmp_path / "prepared_hits.parquet"
     prepared_metadata = tmp_path / "prepared_metadata.tsv"
+    reference_subset, reference_subset_metadata = prepare_reference_subset(
+        [diamond], lookup, manifest, tmp_path, environment
+    )
     subprocess.run([
         sys.executable, str(ROOT / "bin" / "prepare_vicat_hits.py"),
-        "--diamond", str(diamond), "--taxonomy-lookup", str(lookup),
-        "--reference-manifest", str(manifest), "--threads", "2",
+        "--diamond", str(diamond), "--reference-subset", str(reference_subset),
+        "--reference-subset-metadata", str(reference_subset_metadata),
+        "--threads", "2",
         "--memory-limit", "1 GB", "--temp-directory", str(tmp_path / "duckdb_tmp"),
         "--output", str(prepared_hits),
         "--output-metadata", str(prepared_metadata),
