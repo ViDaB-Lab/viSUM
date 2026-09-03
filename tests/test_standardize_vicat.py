@@ -60,6 +60,46 @@ def make_manifest(path: Path) -> None:
     connection.close()
 
 
+def test_prepare_vicat_hits_handles_empty_alignment_table(tmp_path: Path) -> None:
+    diamond = tmp_path / "empty_diamond.tsv"
+    write_tsv(
+        diamond,
+        [
+            "qseqid", "sseqid", "pident", "length", "qlen", "slen",
+            "qstart", "qend", "sstart", "send", "evalue", "bitscore",
+            "qcovhsp", "scovhsp",
+        ],
+        [],
+    )
+    lookup, manifest = tmp_path / "lookup.parquet", tmp_path / "manifest.parquet"
+    make_lookup(lookup)
+    make_manifest(manifest)
+    prepared = tmp_path / "prepared.parquet"
+    metadata = tmp_path / "metadata.tsv"
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = (
+        str(ROOT / "bin") + os.pathsep + environment.get("PYTHONPATH", "")
+    )
+    subprocess.run([
+        sys.executable, str(ROOT / "bin" / "prepare_vicat_hits.py"),
+        "--diamond", str(diamond), "--taxonomy-lookup", str(lookup),
+        "--reference-manifest", str(manifest), "--threads", "1",
+        "--memory-limit", "1 GB", "--temp-directory", str(tmp_path / "duckdb_tmp"),
+        "--output", str(prepared), "--output-metadata", str(metadata),
+    ], check=True, env=environment)
+    connection = duckdb.connect()
+    prepared_sql = str(prepared).replace("'", "''")
+    assert connection.execute(
+        f"SELECT count(*) FROM read_parquet('{prepared_sql}')"
+    ).fetchone()[0] == 0
+    connection.close()
+    with metadata.open(encoding="utf-8", newline="") as handle:
+        row = next(csv.DictReader(handle, delimiter="\t"))
+    assert row["alignment_count"] == "0"
+    assert row["hit_orf_count"] == "0"
+    assert row["competitive_mode"] == "true"
+
+
 def test_locus_voting_and_zero_hit_contig(tmp_path: Path) -> None:
     orf_map = tmp_path / "orfs.tsv"
     write_tsv(
@@ -301,3 +341,47 @@ def test_competitive_loci_detect_localized_provirus_and_suppress_isolated_hit(tm
     assert context_rows[0]["sequence_id"] == "sample_c000003"
     assert context_rows[0]["tool"] == "vicat_context"
     assert context_rows[0]["evidence_strength"] == "weak"
+
+    prepared_hits = tmp_path / "prepared_hits.parquet"
+    prepared_metadata = tmp_path / "prepared_metadata.tsv"
+    subprocess.run([
+        sys.executable, str(ROOT / "bin" / "prepare_vicat_hits.py"),
+        "--diamond", str(diamond), "--taxonomy-lookup", str(lookup),
+        "--reference-manifest", str(manifest), "--threads", "2",
+        "--memory-limit", "1 GB", "--temp-directory", str(tmp_path / "duckdb_tmp"),
+        "--output", str(prepared_hits),
+        "--output-metadata", str(prepared_metadata),
+    ], check=True, env=environment)
+
+    prepared_outputs = {
+        "loci": tmp_path / "prepared_loci.tsv",
+        "clusters": tmp_path / "prepared_clusters.tsv",
+        "context": tmp_path / "prepared_context.tsv",
+        "audit": tmp_path / "prepared_audit.tsv",
+        "evidence": tmp_path / "prepared_evidence.tsv",
+    }
+    subprocess.run([
+        sys.executable, str(ROOT / "bin" / "standardize_vicat.py"),
+        "--sample-id", "sample", "--input-type", "dna", "--orf-map", str(orf_map),
+        "--prepared-hits", str(prepared_hits),
+        "--prepared-metadata", str(prepared_metadata),
+        "--header-map", str(header_map), "--threads", "2",
+        "--orf-taxonomy-support", "0.60", "--contig-taxonomy-support", "0.60",
+        "--locus-overlap", "0.80", "--competitive-min-margin", "0.05",
+        "--cluster-min-viral-loci", "2", "--cluster-max-neutral-gap", "1",
+        "--output-loci", str(prepared_outputs["loci"]),
+        "--output-clusters", str(prepared_outputs["clusters"]),
+        "--output-context", str(prepared_outputs["context"]),
+        "--output-audit", str(prepared_outputs["audit"]),
+        "--output-evidence", str(prepared_outputs["evidence"]),
+    ], check=True, env=environment)
+
+    raw_outputs = {
+        "loci": loci,
+        "clusters": clusters,
+        "context": context,
+        "audit": audit,
+        "evidence": evidence,
+    }
+    for name, raw_output in raw_outputs.items():
+        assert prepared_outputs[name].read_bytes() == raw_output.read_bytes()

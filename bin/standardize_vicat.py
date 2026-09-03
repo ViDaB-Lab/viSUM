@@ -83,9 +83,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-id", required=True)
     parser.add_argument("--input-type", required=True, choices=("dna", "rna"))
     parser.add_argument("--orf-map", required=True, type=Path)
-    parser.add_argument("--diamond", required=True, type=Path)
-    parser.add_argument("--taxonomy-lookup", required=True, type=Path)
+    parser.add_argument("--diamond", type=Path)
+    parser.add_argument("--taxonomy-lookup", type=Path)
     parser.add_argument("--reference-manifest", type=Path)
+    parser.add_argument("--prepared-hits", type=Path)
+    parser.add_argument("--prepared-metadata", type=Path)
     parser.add_argument("--header-map", required=True, type=Path)
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--orf-taxonomy-support", required=True, type=float)
@@ -258,6 +260,44 @@ def load_hits(
             output[row["qseqid"]].append(row)
     connection.close()
     return output
+
+
+def load_prepared_hits(
+    prepared_hits: Path, threads: int
+) -> dict[str, list[dict]]:
+    connection = duckdb.connect()
+    connection.execute(f"SET threads = {threads}")
+    relation = connection.execute(
+        f"""
+        SELECT * EXCLUDE (manifest_matched, taxonomy_matched, competitive_mode)
+        FROM read_parquet({sql_path(prepared_hits)})
+        """
+    )
+    columns = [description[0] for description in relation.description]
+    output: dict[str, list[dict]] = defaultdict(list)
+    while True:
+        batch = relation.fetchmany(10000)
+        if not batch:
+            break
+        for values in batch:
+            row = dict(zip(columns, values))
+            output[row["qseqid"]].append(row)
+    connection.close()
+    for rows in output.values():
+        rows.sort(
+            key=lambda row: (
+                -float(row["bitscore"]),
+                str(row["sseqid"]),
+            )
+        )
+    return output
+
+
+def prepared_competitive_mode(path: Path) -> bool:
+    rows = read_tsv(path, {"competitive_mode"})
+    if len(rows) != 1 or rows[0]["competitive_mode"] not in {"true", "false"}:
+        raise ValueError(f"Invalid viCAT hit-preparation metadata: {path}")
+    return rows[0]["competitive_mode"] == "true"
 
 
 def is_unclassified(value: object) -> bool:
@@ -591,11 +631,31 @@ def main() -> None:
     if args.threads < 1:
         raise SystemExit("--threads must be a positive integer")
 
+    prepared_mode = args.prepared_hits is not None or args.prepared_metadata is not None
+    if prepared_mode:
+        if args.prepared_hits is None or args.prepared_metadata is None:
+            raise SystemExit(
+                "--prepared-hits and --prepared-metadata must be provided together"
+            )
+        if any((args.diamond, args.taxonomy_lookup, args.reference_manifest)):
+            raise SystemExit(
+                "Prepared viCAT hits cannot be combined with raw DIAMOND/database inputs"
+            )
+    elif args.diamond is None or args.taxonomy_lookup is None:
+        raise SystemExit(
+            "Provide --prepared-hits/--prepared-metadata or "
+            "--diamond/--taxonomy-lookup"
+        )
+
     orfs = load_orfs(args.orf_map)
-    hits = load_hits(
-        args.diamond, args.taxonomy_lookup, args.reference_manifest, args.threads
-    )
-    competitive_mode = args.reference_manifest is not None
+    if prepared_mode:
+        hits = load_prepared_hits(args.prepared_hits, args.threads)
+        competitive_mode = prepared_competitive_mode(args.prepared_metadata)
+    else:
+        hits = load_hits(
+            args.diamond, args.taxonomy_lookup, args.reference_manifest, args.threads
+        )
+        competitive_mode = args.reference_manifest is not None
     unknown = sorted(set(hits) - set(orfs))
     if unknown:
         raise SystemExit(f"DIAMOND contains ORF IDs absent from the ORF map: {unknown[:5]}")
@@ -604,7 +664,13 @@ def main() -> None:
     sequence_lengths = {row["sequence_id"]: int(row["length"]) for row in header_rows}
     loci = build_loci(orfs, args.locus_overlap)
     locus_rows = []
-    audit_rows = []
+    args.output_audit.parent.mkdir(parents=True, exist_ok=True)
+    audit_handle = args.output_audit.open("w", encoding="utf-8", newline="")
+    audit_writer = csv.DictWriter(
+        audit_handle, fieldnames=AUDIT_COLUMNS, delimiter="\t", lineterminator="\n"
+    )
+    audit_writer.writeheader()
+    audit_count = 0
     contig_loci: dict[str, list[dict]] = defaultdict(list)
     for locus_index, alternatives in enumerate(loci, start=1):
         competition = classify_locus(
@@ -702,7 +768,7 @@ def main() -> None:
             for hit in orf_hits:
                 is_vote = id(hit) in vote_representatives
                 bitscore = float(hit["bitscore"])
-                audit_rows.append(
+                audit_writer.writerow(
                     {
                         "sample_id": args.sample_id,
                         "sequence_id": sequence_id,
@@ -763,6 +829,9 @@ def main() -> None:
                         **{column: hit[column] or "" for column in TAXONOMY_COLUMNS},
                     }
                 )
+                audit_count += 1
+
+    audit_handle.close()
 
     evidence_rows = []
     context_rows = []
@@ -968,7 +1037,6 @@ def main() -> None:
         )
 
     args.output_loci.parent.mkdir(parents=True, exist_ok=True)
-    args.output_audit.parent.mkdir(parents=True, exist_ok=True)
     args.output_evidence.parent.mkdir(parents=True, exist_ok=True)
     with args.output_loci.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=LOCUS_COLUMNS, delimiter="\t", lineterminator="\n")
@@ -990,16 +1058,12 @@ def main() -> None:
             )
             writer.writeheader()
             writer.writerows(context_rows)
-    with args.output_audit.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=AUDIT_COLUMNS, delimiter="\t", lineterminator="\n")
-        writer.writeheader()
-        writer.writerows(audit_rows)
     with args.output_evidence.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=OUTPUT_COLUMNS, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         writer.writerows(evidence_rows)
     print(
-        f"viCAT standardized: loci={len(locus_rows)} reference_hits={len(audit_rows)} "
+        f"viCAT standardized: loci={len(locus_rows)} reference_hits={audit_count} "
         f"contigs_with_hits={len(evidence_rows)}"
     )
 

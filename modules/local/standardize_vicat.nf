@@ -11,8 +11,8 @@ process STANDARDIZE_VICAT {
         pattern: '*.vicat_*'
 
     input:
-    tuple val(prefix), val(type), path(orf_map), path(header_map), path(diamond)
-    tuple path(vicat_database), path(vicat_database_metadata)
+    tuple val(prefix), val(type), path(orf_map), path(header_map),
+          path(prepared_hits), path(prepared_metadata)
 
     output:
     tuple val(prefix), val('vicat'), path("${prefix}.vicat_evidence.tsv"), emit: evidence
@@ -25,27 +25,12 @@ process STANDARDIZE_VICAT {
     """
     set -euo pipefail
 
-    if [[ -s "${vicat_database}/IMGVR5_UViG.vicat_taxonomy_lookup.parquet" ]]; then
-        LOOKUP="${vicat_database}/IMGVR5_UViG.vicat_taxonomy_lookup.parquet"
-    elif [[ -s "${vicat_database}/taxonomy/IMGVR5_UViG.vicat_taxonomy_lookup.parquet" ]]; then
-        LOOKUP="${vicat_database}/taxonomy/IMGVR5_UViG.vicat_taxonomy_lookup.parquet"
-    else
-        echo "ERROR: viCAT taxonomy lookup was not found in ${vicat_database}." >&2
-        exit 1
-    fi
-
-    MANIFEST_ARGS=()
-    if [[ -s "${vicat_database}/vicat_competitive_reference_manifest.parquet" ]]; then
-        MANIFEST_ARGS=(--reference-manifest "${vicat_database}/vicat_competitive_reference_manifest.parquet")
-    fi
-
     python "${projectDir}/bin/standardize_vicat.py" \
         --sample-id "${prefix}" \
         --input-type "${type}" \
         --orf-map "${orf_map}" \
-        --diamond "${diamond}" \
-        --taxonomy-lookup "\$LOOKUP" \
-        "\${MANIFEST_ARGS[@]}" \
+        --prepared-hits "${prepared_hits}" \
+        --prepared-metadata "${prepared_metadata}" \
         --header-map "${header_map}" \
         --threads "${task.cpus}" \
         --orf-taxonomy-support "${params.vicat_orf_taxonomy_support}" \

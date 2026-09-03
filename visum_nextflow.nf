@@ -27,6 +27,7 @@ include { STANDARDIZE_GIANTHUNTER } from './modules/local/standardize_gianthunte
 include { PREPARE_VICAT_DATABASE } from './modules/local/vicat_database'
 include { PREDICT_VICAT_ORFS } from './modules/local/predict_vicat_orfs'
 include { RUN_VICAT_DIAMOND } from './modules/local/run_vicat_diamond'
+include { PREPARE_VICAT_HITS } from './modules/local/prepare_vicat_hits'
 include { STANDARDIZE_VICAT } from './modules/local/standardize_vicat'
 include { PROJECT_VICAT_REFINED } from './modules/local/project_vicat_refined'
 include { DISCOVERY_GATE } from './modules/local/discovery_gate'
@@ -1265,10 +1266,17 @@ workflow {
                 "VICAT_DIAMOND sample=${prefix} type=${type} alignments=${diamond.name}"
         }
 
-        STANDARDIZE_VICAT(
+        PREPARE_VICAT_HITS(
             RUN_VICAT_DIAMOND.out.results,
             ch_vicat_database
         )
+
+        PREPARE_VICAT_HITS.out.results.view {
+            prefix, type, orfMap, headerMap, preparedHits, preparedMetadata ->
+                "VICAT_HITS_PREPARED sample=${prefix} hits=${preparedHits.name}"
+        }
+
+        STANDARDIZE_VICAT(PREPARE_VICAT_HITS.out.results)
 
         STANDARDIZE_VICAT.out.evidence.view { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
