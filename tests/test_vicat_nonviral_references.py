@@ -163,6 +163,96 @@ class NonviralReferenceTests(unittest.TestCase):
                     reference_class,
                 )
 
+    def test_cluster_metadata_preserves_classes_and_cluster_sizes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            metadata = root / "metadata.tsv.gz"
+            membership = root / "membership.tsv.gz"
+            output_tsv = root / "representatives.tsv.gz"
+            output_parquet = root / "representatives.parquet"
+            output_summary = root / "summary.tsv"
+
+            metadata_columns = [
+                "reference_id", "source_protein_id", "reference_class",
+                "source_classes", "cellular_group", "source_accession",
+                "replicon_accessions", "replicon_types",
+                "provirus_flank_eligible", "classification_note",
+                "organism_name", "taxid",
+            ]
+            metadata_rows = [
+                [
+                    "NONVIRAL|CELLULAR_CHROMOSOME|GCF_1|P1", "P1",
+                    "CELLULAR_CHROMOSOME", "CELLULAR_CHROMOSOME", "bacteria",
+                    "GCF_1", "NC_1", "chromosome", "true", "", "Organism 1", "1",
+                ],
+                [
+                    "NONVIRAL|CELLULAR_CHROMOSOME|GCF_2|P2", "P2",
+                    "CELLULAR_CHROMOSOME", "CELLULAR_CHROMOSOME", "bacteria",
+                    "GCF_2", "NC_2", "chromosome", "true", "", "Organism 2", "2",
+                ],
+                [
+                    "NONVIRAL|PLASMID|GCF_1|P3", "P3", "PLASMID", "PLASMID",
+                    "bacteria", "GCF_1", "NZ_1", "plasmid", "false", "",
+                    "Organism 1", "1",
+                ],
+            ]
+            with gzip.open(metadata, "wt", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+                writer.writerow(metadata_columns)
+                writer.writerows(metadata_rows)
+
+            chromosome_representative = metadata_rows[0][0]
+            plasmid_representative = metadata_rows[2][0]
+            with gzip.open(membership, "wt", encoding="utf-8", newline="") as handle:
+                writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+                writer.writerow(["reference_class", "representative_id", "member_id"])
+                writer.writerow(
+                    ["CELLULAR_CHROMOSOME", chromosome_representative, metadata_rows[0][0]]
+                )
+                writer.writerow(
+                    ["CELLULAR_CHROMOSOME", chromosome_representative, metadata_rows[1][0]]
+                )
+                writer.writerow(["PLASMID", plasmid_representative, metadata_rows[2][0]])
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "bin" / "prepare_vicat_nonviral_cluster_metadata.py"),
+                    "--metadata", str(metadata),
+                    "--membership", str(membership),
+                    "--output-tsv", str(output_tsv),
+                    "--output-parquet", str(output_parquet),
+                    "--output-summary", str(output_summary),
+                    "--work-database", str(root / "work.duckdb"),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            with gzip.open(output_tsv, "rt", encoding="utf-8", newline="") as handle:
+                rows = {
+                    row["reference_id"]: row
+                    for row in csv.DictReader(handle, delimiter="\t")
+                }
+            self.assertEqual(set(rows), {chromosome_representative, plasmid_representative})
+            self.assertEqual(rows[chromosome_representative]["cluster_member_count"], "2")
+            self.assertEqual(
+                rows[chromosome_representative]["reference_class"],
+                "CELLULAR_CHROMOSOME",
+            )
+            self.assertEqual(rows[chromosome_representative]["provirus_flank_eligible"], "true")
+            self.assertEqual(rows[plasmid_representative]["provirus_flank_eligible"], "false")
+
+            with output_summary.open(encoding="utf-8", newline="") as handle:
+                summary = {
+                    row["reference_class"]: row
+                    for row in csv.DictReader(handle, delimiter="\t")
+                }
+            self.assertEqual(summary["CELLULAR_CHROMOSOME"]["input_proteins"], "2")
+            self.assertEqual(summary["CELLULAR_CHROMOSOME"]["representatives"], "1")
+            self.assertEqual(summary["PLASMID"]["representatives"], "1")
+
     def test_downloader_derives_refseq_urls_and_reuses_valid_files(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

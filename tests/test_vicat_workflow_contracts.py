@@ -143,6 +143,35 @@ def test_vicat_competitive_database_extension_is_explicit_and_labeled() -> None:
     assert 'f">{label}|{source_id}\\n"' in helper
 
 
+def test_vicat_nonviral_builder_clusters_each_reference_class_independently() -> None:
+    builder = (ROOT / "bin" / "build_vicat_nonviral_database.sh").read_text(
+        encoding="utf-8"
+    )
+    helper = (
+        ROOT / "bin" / "prepare_vicat_nonviral_cluster_metadata.py"
+    ).read_text(encoding="utf-8")
+
+    for reference_class in (
+        "cellular_chromosome",
+        "cellular_unplaced",
+        "plasmid",
+        "plastid",
+        "mitochondrial",
+        "shared_nonviral",
+    ):
+        assert reference_class in builder
+
+    assert 'for reference_class in "${CLASSES[@]}"' in builder
+    assert "mmseqs linclust" in builder
+    assert '--min-seq-id "$MIN_SEQ_ID" --cov-mode 0 -c "$COVERAGE"' in builder
+    assert "--min-len" not in builder
+    assert "vicat_nonviral_cluster_membership.tsv.gz" in builder
+    assert "vicat_nonviral_representative_metadata.parquet" in builder
+    assert "vicat_nonviral.dmnd" in builder
+    assert "provirus_flank_eligible" in helper
+    assert "cluster_member_count" in helper
+
+
 def test_vicat_analysis_prefers_competitive_database_and_wires_manifest() -> None:
     analysis = (ROOT / "modules" / "local" / "run_vicat_diamond.nf").read_text(
         encoding="utf-8"
