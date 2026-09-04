@@ -291,6 +291,63 @@ class RefineProviralRegionsTests(unittest.TestCase):
             self.assertEqual(summary["ct3_only_boundary_call_count"], "1")
             self.assertEqual(summary["allow_ct3_only_refinement"], "true")
 
+    def test_vicat_boundary_is_advisory_and_supports_genomad(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            original = "A" * 120
+            (directory / "candidates.fasta").write_text(
+                f">sample__c000001\n{original}\n", encoding="utf-8"
+            )
+            vicat = directory / "vicat.tsv"
+            write_evidence(
+                vicat,
+                [{
+                    "sample_id": "sample",
+                    "sequence_id": "sample__c000001|vicat_provirus_21_80",
+                    "parent_sequence_id": "sample__c000001",
+                    "record_type": "provirus",
+                    "coordinates": "21-80",
+                    "tool": "vicat",
+                    "classification": "virus",
+                }],
+            )
+            advisory_only = self.run_refiner(directory, [vicat])
+            self.assertEqual(
+                read_fasta(advisory_only["output"]),
+                {"sample__c000001": original},
+            )
+            self.assertEqual(
+                read_tsv(advisory_only["map"])[0]["boundary_status"],
+                "unchanged_vicat_advisory_only",
+            )
+            summary = read_tsv(advisory_only["summary"])[0]
+            self.assertEqual(summary["vicat_advisory_boundary_call_count"], "1")
+            self.assertEqual(summary["vicat_only_locus_skipped_count"], "1")
+
+            genomad = directory / "genomad.tsv"
+            write_evidence(
+                genomad,
+                [{
+                    "sample_id": "sample",
+                    "sequence_id": "sample__c000001|provirus_25_75",
+                    "parent_sequence_id": "sample__c000001",
+                    "record_type": "provirus",
+                    "coordinates": "25-75",
+                    "tool": "genomad",
+                    "classification": "virus",
+                }],
+            )
+            supported_directory = directory / "supported"
+            supported_directory.mkdir()
+            (supported_directory / "candidates.fasta").write_text(
+                f">sample__c000001\n{original}\n", encoding="utf-8"
+            )
+            supported = self.run_refiner(supported_directory, [vicat, genomad])
+            mapping = read_tsv(supported["map"])[0]
+            self.assertEqual(mapping["boundary_source"], "genomad")
+            self.assertEqual(mapping["supporting_boundary_tools"], "genomad,vicat")
+            self.assertEqual(mapping["coordinates"], "25-75")
+
 
 if __name__ == "__main__":
     unittest.main()

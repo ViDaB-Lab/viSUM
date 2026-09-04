@@ -63,21 +63,24 @@ def make_manifest(path: Path) -> None:
 def prepare_reference_subset(
     diamonds: list[Path],
     lookup: Path,
-    manifest: Path,
+    manifest: Path | None,
     directory: Path,
     environment: dict[str, str],
 ) -> tuple[Path, Path]:
     subset = directory / "reference_subset.parquet"
     metadata = directory / "reference_subset_metadata.tsv"
-    subprocess.run([
+    command = [
         sys.executable, str(ROOT / "bin" / "prepare_vicat_reference_subset.py"),
         "--diamond", *(str(path) for path in diamonds),
         "--taxonomy-lookup", str(lookup),
-        "--reference-manifest", str(manifest), "--threads", "2",
+        "--threads", "2",
         "--memory-limit", "1 GB",
         "--temp-directory", str(directory / "subset_duckdb_tmp"),
         "--output", str(subset), "--output-metadata", str(metadata),
-    ], check=True, env=environment)
+    ]
+    if manifest is not None:
+        command.extend(["--reference-manifest", str(manifest)])
+    subprocess.run(command, check=True, env=environment)
     return subset, metadata
 
 
@@ -414,3 +417,123 @@ def test_competitive_loci_detect_localized_provirus_and_suppress_isolated_hit(tm
     }
     for name, raw_output in raw_outputs.items():
         assert prepared_outputs[name].read_bytes() == raw_output.read_bytes()
+
+
+def test_dual_database_preserves_nonviral_classes_and_emits_advisory_provirus(
+    tmp_path: Path,
+) -> None:
+    columns = [
+        "qseqid", "sseqid", "pident", "length", "qlen", "slen",
+        "qstart", "qend", "sstart", "send", "evalue", "bitscore",
+        "qcovhsp", "scovhsp",
+    ]
+    orf_map = tmp_path / "orfs.tsv"
+    write_tsv(
+        orf_map,
+        [
+            "sample_id", "orf_id", "sequence_id", "start", "end", "strand",
+            "protein_length", "translation_table", "callers",
+        ],
+        [
+            ["sample", "orf1", "sample_c000001", 1, 300, "+", 100, 11, "pyrodigal-gv"],
+            ["sample", "orf2", "sample_c000001", 301, 600, "+", 100, 11, "pyrodigal-gv"],
+            ["sample", "orf3", "sample_c000001", 601, 900, "+", 100, 11, "pyrodigal-gv"],
+            ["sample", "orf4", "sample_c000001", 901, 1200, "+", 100, 11, "pyrodigal-gv"],
+        ],
+    )
+    header_map = tmp_path / "headers.tsv"
+    write_tsv(header_map, ["sequence_id", "length"], [["sample_c000001", 1200]])
+    viral = tmp_path / "viral.tsv"
+    write_tsv(
+        viral,
+        columns,
+        [
+            [orf, "repA", 80, 100, 100, 100, 1, 100, 1, 100, "1e-20", score, 100, 100]
+            for orf, score in [("orf1", 80), ("orf2", 120), ("orf3", 120), ("orf4", 80)]
+        ],
+    )
+    nonviral = tmp_path / "nonviral.tsv"
+    write_tsv(
+        nonviral,
+        columns,
+        [
+            ["orf1", "chrA", 90, 100, 100, 100, 1, 100, 1, 100, "1e-30", 120, 100, 100],
+            ["orf4", "unplacedA", 90, 100, 100, 100, 1, 100, 1, 100, "1e-30", 120, 100, 100],
+        ],
+    )
+    lookup = tmp_path / "lookup.parquet"
+    make_lookup(lookup)
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(ROOT / "bin") + os.pathsep + environment.get("PYTHONPATH", "")
+    viral_subset, viral_subset_metadata = prepare_reference_subset(
+        [viral], lookup, None, tmp_path, environment
+    )
+    nonviral_metadata = tmp_path / "nonviral_metadata.parquet"
+    connection = duckdb.connect()
+    nonviral_sql = str(nonviral_metadata).replace("'", "''")
+    connection.execute(
+        f"""COPY (SELECT * FROM (VALUES
+        ('chrA','chrA','CELLULAR_CHROMOSOME',1,'CELLULAR_CHROMOSOME','bacteria',
+         'GCF_1','NZ_1','chromosome',true,'','Bacterium','1'),
+        ('unplacedA','unplacedA','CELLULAR_UNPLACED',1,'CELLULAR_UNPLACED','bacteria',
+         'GCF_2','NZ_2','unplaced scaffold',false,'','Bacterium','2')
+        ) t(reference_id,source_protein_id,reference_class,cluster_member_count,
+            source_classes,cellular_group,source_accession,replicon_accessions,
+            replicon_types,provirus_flank_eligible,classification_note,
+            organism_name,taxid)) TO '{nonviral_sql}' (FORMAT PARQUET)"""
+    )
+    connection.close()
+    prepared = tmp_path / "prepared.parquet"
+    prepared_metadata = tmp_path / "prepared.tsv"
+    subprocess.run(
+        [
+            sys.executable, str(ROOT / "bin" / "prepare_vicat_hits.py"),
+            "--viral-diamond", str(viral),
+            "--viral-reference-subset", str(viral_subset),
+            "--viral-reference-subset-metadata", str(viral_subset_metadata),
+            "--nonviral-diamond", str(nonviral),
+            "--nonviral-metadata", str(nonviral_metadata),
+            "--threads", "2", "--memory-limit", "1 GB",
+            "--temp-directory", str(tmp_path / "duckdb"),
+            "--output", str(prepared), "--output-metadata", str(prepared_metadata),
+        ],
+        check=True,
+        env=environment,
+    )
+    outputs = {name: tmp_path / f"{name}.tsv" for name in (
+        "loci", "clusters", "context", "audit", "evidence", "provirus"
+    )}
+    subprocess.run(
+        [
+            sys.executable, str(ROOT / "bin" / "standardize_vicat.py"),
+            "--sample-id", "sample", "--input-type", "dna",
+            "--orf-map", str(orf_map), "--header-map", str(header_map),
+            "--prepared-hits", str(prepared),
+            "--prepared-metadata", str(prepared_metadata), "--threads", "2",
+            "--orf-taxonomy-support", "0.6", "--contig-taxonomy-support", "0.6",
+            "--locus-overlap", "0.8", "--competitive-min-margin", "0.05",
+            "--cluster-min-viral-loci", "2", "--cluster-max-neutral-gap", "1",
+            "--output-loci", str(outputs["loci"]),
+            "--output-clusters", str(outputs["clusters"]),
+            "--output-context", str(outputs["context"]),
+            "--output-audit", str(outputs["audit"]),
+            "--output-evidence", str(outputs["evidence"]),
+            "--output-provirus-evidence", str(outputs["provirus"]),
+        ],
+        check=True,
+        env=environment,
+    )
+    with outputs["loci"].open(encoding="utf-8", newline="") as handle:
+        loci = list(csv.DictReader(handle, delimiter="\t"))
+    assert loci[0]["best_nonviral_reference_class"] == "CELLULAR_CHROMOSOME"
+    assert loci[-1]["best_nonviral_reference_class"] == "CELLULAR_UNPLACED"
+    with outputs["evidence"].open(encoding="utf-8", newline="") as handle:
+        evidence = next(csv.DictReader(handle, delimiter="\t"))
+    assert evidence["nonviral_supported_classes"] == "CELLULAR_CHROMOSOME:1,CELLULAR_UNPLACED:1"
+    assert evidence["dominant_nonviral_class"] == "TIED"
+    with outputs["provirus"].open(encoding="utf-8", newline="") as handle:
+        advisory = next(csv.DictReader(handle, delimiter="\t"))
+    assert advisory["record_type"] == "provirus"
+    assert advisory["coordinates"] == "301-900"
+    assert advisory["viral_cluster_flank_status"] == "left_only"
+    assert advisory["evidence_scope"] == "provirus_boundary_advisory"

@@ -11,11 +11,16 @@ def test_vicat_publish_patterns_do_not_reference_process_inputs() -> None:
     for name in (
         "predict_vicat_orfs.nf",
         "run_vicat_diamond.nf",
+        "run_vicat_nonviral_diamond.nf",
         "standardize_vicat.nf",
     ):
         text = (ROOT / "modules" / "local" / name).read_text(encoding="utf-8")
         pattern_lines = [line.strip() for line in text.splitlines() if "pattern:" in line]
-        assert pattern_lines == ["pattern: '*.vicat_*'"]
+        assert len(pattern_lines) == 1
+        assert "*.vicat_" in pattern_lines[0]
+        if name.startswith("run_vicat_"):
+            assert "saveAs:" in text
+            assert "filename.contains('.raw.') ? null" in text
 
 
 def test_vicat_orf_commands_use_supported_cli_flags_and_pinned_versions() -> None:
@@ -94,8 +99,9 @@ def test_vicat_hit_preparation_is_cached_before_margin_classification() -> None:
     assert "ORDER BY" not in helper
     assert "relevant_reference_ids" in subset_helper
     assert "FORMAT PARQUET, COMPRESSION ZSTD" in helper
-    assert "--reference-subset" in preparation
-    assert "--reference-subset-metadata" in preparation
+    assert "--viral-reference-subset" in preparation
+    assert "--viral-reference-subset-metadata" in preparation
+    assert "--nonviral-metadata" in preparation
     assert "SET memory_limit" in subset_helper
     assert "SET temp_directory" in subset_helper
 
@@ -113,7 +119,7 @@ def test_vicat_uses_separate_orf_and_contig_taxonomy_thresholds() -> None:
     assert "vicat_taxonomy_support" not in workflow
 
 
-def test_vicat_competitive_database_extension_is_explicit_and_labeled() -> None:
+def test_legacy_combined_database_builder_is_not_exposed_by_runtime_config() -> None:
     config = (ROOT / "visum.config").read_text(encoding="utf-8")
     workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
     module = (ROOT / "modules" / "local" / "vicat_database.nf").read_text(encoding="utf-8")
@@ -124,18 +130,14 @@ def test_vicat_competitive_database_extension_is_explicit_and_labeled() -> None:
     helper = (ROOT / "bin" / "prepare_vicat_competitive_references.py").read_text(encoding="utf-8")
 
     for parameter in (
-        "vicat_viral_representatives",
-        "vicat_cellular_proteins",
-        "vicat_cellular_metadata",
-        "vicat_competitive_managed_db",
-        "vicat_cellular_min_seq_id",
-        "vicat_cellular_coverage",
-        "vicat_cellular_min_protein_length",
+        "vicat_viral_representatives", "vicat_cellular_proteins",
+        "vicat_cellular_metadata", "vicat_competitive_managed_db",
     ):
-        assert parameter in config
-        assert parameter in workflow
+        assert parameter not in config
+        assert parameter not in workflow
 
-    assert "viSUM-managed-competitive" in workflow
+    assert "vicat_nonviral_db" in config
+    assert "vicat_nonviral_db" in workflow
     assert "build_vicat_competitive_database.sh" in module
     assert "mmseqs linclust" in builder
     assert "vicat_viral_cellular.dmnd" in builder
@@ -172,7 +174,7 @@ def test_vicat_nonviral_builder_clusters_each_reference_class_independently() ->
     assert "cluster_member_count" in helper
 
 
-def test_vicat_analysis_prefers_competitive_database_and_wires_manifest() -> None:
+def test_vicat_analysis_searches_viral_and_class_aware_nonviral_databases() -> None:
     analysis = (ROOT / "modules" / "local" / "run_vicat_diamond.nf").read_text(
         encoding="utf-8"
     )
@@ -187,12 +189,20 @@ def test_vicat_analysis_prefers_competitive_database_and_wires_manifest() -> Non
     standardizer_helper = (ROOT / "bin" / "standardize_vicat.py").read_text(
         encoding="utf-8"
     )
+    workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+    nonviral_analysis = (
+        ROOT / "modules" / "local" / "run_vicat_nonviral_diamond.nf"
+    ).read_text(encoding="utf-8")
 
-    assert "vicat_viral_cellular.dmnd" in analysis
-    assert "vicat_competitive_reference_manifest.parquet" in analysis
-    assert "--reference-manifest" in preparation
+    assert "IMGVR5_UViG_representatives.dmnd" in analysis
+    assert "vicat_viral_cellular.dmnd" not in analysis
+    assert "vicat_nonviral.dmnd" in nonviral_analysis
+    assert "RUN_VICAT_NONVIRAL_DIAMOND" in workflow
+    assert "ch_vicat_dual_alignments" in workflow
+    assert "--reference-manifest" not in preparation
     assert "reference_class" in helper
     assert 'hit["reference_class"] == "viral"' in standardizer_helper
+    assert "best_nonviral_reference_class" in standardizer_helper
 
 
 def test_vicat_projects_precomputed_loci_after_provirus_refinement() -> None:

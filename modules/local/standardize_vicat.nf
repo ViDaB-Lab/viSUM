@@ -19,6 +19,7 @@ process STANDARDIZE_VICAT {
     tuple val(prefix), path("${prefix}.vicat_orf_evidence.tsv"), emit: loci
     tuple val(prefix), path("${prefix}.vicat_cluster_evidence.tsv"), emit: clusters
     tuple val(prefix), val('vicat_context'), path("${prefix}.vicat_context.tsv"), emit: context
+    tuple val(prefix), val('vicat'), path("${prefix}.vicat_provirus_evidence.tsv"), emit: provirus
     tuple val(prefix), path("${prefix}.vicat_reference_audit.tsv"), emit: audit
 
     script:
@@ -42,6 +43,7 @@ process STANDARDIZE_VICAT {
         --output-loci "${prefix}.vicat_orf_evidence.tsv" \
         --output-clusters "${prefix}.vicat_cluster_evidence.tsv" \
         --output-context "${prefix}.vicat_context.tsv" \
+        --output-provirus-evidence "${prefix}.vicat_provirus_evidence.tsv" \
         --output-audit "${prefix}.vicat_reference_audit.tsv" \
         --output-evidence "${prefix}.vicat_evidence.tsv"
     """

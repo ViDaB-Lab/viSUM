@@ -29,6 +29,28 @@ tool), `ambiguous` (viral and cellular/plasmid evidence), `likely_nonviral`
 Only the first three advance. These labels route candidates; they are not the
 pipeline's final viral-origin or taxonomy conclusions.
 
+viCAT competitive architecture
+==============================
+
+When `--run_vicat true`, viSUM predicts ORFs once and searches them separately
+against the viral MetaVR-derived database and the class-aware nonviral database
+selected by `--vicat_nonviral_db`. Per ORF locus, the best viral and nonviral
+hits compete by normalized bitscore using `--vicat_competitive_min_margin`.
+The nonviral winner retains its class (`CELLULAR_CHROMOSOME`,
+`CELLULAR_UNPLACED`, `PLASMID`, `PLASTID`, `MITOCHONDRIAL`, or
+`SHARED_NONVIRAL`) in the viCAT evidence and final viHARMONY metadata.
+
+An isolated viral-supported locus in cellular context is treated as cellular,
+not as an extracted viral candidate. A spatial cluster of at least
+`--vicat_cluster_min_viral_loci` viral-supported loci can flag a potential
+provirus and pass the parent contig through the discovery gate for refinement.
+Only `CELLULAR_CHROMOSOME` loci count as chromosome-flank support;
+`CELLULAR_UNPLACED` remains valid evidence against a viral ORF but cannot be
+used as a chromosome flank. viCAT cluster coordinates are advisory during
+provirus refinement: they are recorded and can corroborate geNomad or CheckV,
+but a viCAT-only boundary never trims a contig. Taxonomy for a refined provirus
+is recalculated from viral-supported ORFs contained within the selected region.
+
 CheckV database setup
 =====================
 

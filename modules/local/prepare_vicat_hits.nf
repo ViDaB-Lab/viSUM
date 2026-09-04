@@ -11,8 +11,10 @@ process PREPARE_VICAT_HITS {
         pattern: '*.vicat_hit_preparation.tsv'
 
     input:
-    tuple val(prefix), val(type), path(orf_map), path(header_map), path(diamond)
+    tuple val(prefix), val(type), path(orf_map), path(header_map),
+          path(viral_diamond), path(nonviral_diamond)
     tuple path(reference_subset), path(reference_subset_metadata)
+    tuple path(vicat_nonviral_database), path(vicat_nonviral_database_metadata)
 
     output:
     tuple val(prefix), val(type), path(orf_map), path(header_map),
@@ -25,9 +27,11 @@ process PREPARE_VICAT_HITS {
     set -euo pipefail
 
     python "${projectDir}/bin/prepare_vicat_hits.py" \
-        --diamond "${diamond}" \
-        --reference-subset "${reference_subset}" \
-        --reference-subset-metadata "${reference_subset_metadata}" \
+        --viral-diamond "${viral_diamond}" \
+        --viral-reference-subset "${reference_subset}" \
+        --viral-reference-subset-metadata "${reference_subset_metadata}" \
+        --nonviral-diamond "${nonviral_diamond}" \
+        --nonviral-metadata "${vicat_nonviral_database}/vicat_nonviral_representative_metadata.parquet" \
         --threads "${task.cpus}" \
         --memory-limit "${task.memory}" \
         --temp-directory "\$PWD/duckdb_tmp" \

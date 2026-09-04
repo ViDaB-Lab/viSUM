@@ -50,6 +50,7 @@ METADATA_COLUMNS = [
     "tesorter_superfamilies", "tesorter_assignment_methods",
     "vicat_origin_pattern", "vicat_provirus_status", "vicat_evidence_scope",
     "vicat_viral_supported_loci", "vicat_cellular_supported_loci",
+    "vicat_nonviral_supported_classes", "vicat_dominant_nonviral_class",
 ]
 
 STRENGTH_ORDER = {"": 0, "weak": 1, "qualified": 2, "strong": 3}
@@ -677,6 +678,17 @@ def run(args: argparse.Namespace) -> None:
             row.get("evidence_scope", "parent_discovery").strip()
             for row in selected_vicat_rows
         })
+        vicat_nonviral_classes = sorted({
+            item.strip()
+            for row in selected_vicat_rows
+            for item in row.get("nonviral_supported_classes", "").split(",")
+            if item.strip()
+        })
+        vicat_dominant_nonviral_classes = sorted({
+            row.get("dominant_nonviral_class", "").strip()
+            for row in selected_vicat_rows
+            if row.get("dominant_nonviral_class", "").strip()
+        })
         if "resolved_provirus_with_vicat_support" in vicat_patterns:
             vicat_provirus_status = "resolved_with_vicat_support"
         elif "localized_viral_cluster" in vicat_patterns:
@@ -721,6 +733,12 @@ def run(args: argparse.Namespace) -> None:
                 int(float(row.get("cellular_supported_loci", "0") or 0))
                 for row in selected_vicat_rows
             )),
+            "vicat_nonviral_supported_classes": (
+                ",".join(vicat_nonviral_classes) or "NA"
+            ),
+            "vicat_dominant_nonviral_class": (
+                ",".join(vicat_dominant_nonviral_classes) or "NA"
+            ),
             **tesorter_summary,
         }
         metadata_rows.append(metadata)

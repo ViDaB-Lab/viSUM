@@ -25,8 +25,10 @@ include { PREPARE_GIANTHUNTER_DATABASE } from './modules/local/gianthunter_datab
 include { RUN_GIANTHUNTER } from './modules/local/run_gianthunter'
 include { STANDARDIZE_GIANTHUNTER } from './modules/local/standardize_gianthunter'
 include { PREPARE_VICAT_DATABASE } from './modules/local/vicat_database'
+include { PREPARE_VICAT_NONVIRAL_DATABASE } from './modules/local/vicat_nonviral_database'
 include { PREDICT_VICAT_ORFS } from './modules/local/predict_vicat_orfs'
 include { RUN_VICAT_DIAMOND } from './modules/local/run_vicat_diamond'
+include { RUN_VICAT_NONVIRAL_DIAMOND } from './modules/local/run_vicat_nonviral_diamond'
 include { PREPARE_VICAT_REFERENCE_SUBSET } from './modules/local/prepare_vicat_reference_subset'
 include { PREPARE_VICAT_HITS } from './modules/local/prepare_vicat_hits'
 include { STANDARDIZE_VICAT } from './modules/local/standardize_vicat'
@@ -253,11 +255,9 @@ DATABASE AND INSTALLATION OVERRIDES
   --gianthunter_db PATH        Existing GiantHunter database.
   --checkv_db PATH             Existing CheckV database.
   --vicat_db PATH              Existing viCAT database.
+  --vicat_nonviral_db PATH     Existing class-aware nonviral viCAT database.
   --vicat_metavr_proteins PATH MetaVR proteins for a local viCAT build.
   --vicat_metavr_metadata PATH MetaVR metadata for a local viCAT build.
-  --vicat_viral_representatives PATH  Representative viral protein FASTA.
-  --vicat_cellular_proteins PATH      Cellular-decoy protein FASTA.
-  --vicat_cellular_metadata PATH      Cellular-decoy protein metadata TSV.
   --vitap_db PATH              Existing VITAP database.
   --vitap_vmr PATH             VMR workbook/CSV for a VITAP build.
   --vitap_update_database BOOL Check for a newer VMR [false].
@@ -1170,52 +1170,14 @@ workflow {
             error 'A local viCAT build requires both --vicat_metavr_proteins and --vicat_metavr_metadata.'
         }
 
-        def vicatCellularProteins = params.vicat_cellular_proteins == null
-            ? ''
-            : file(params.vicat_cellular_proteins).toString()
-        def vicatCellularMetadata = params.vicat_cellular_metadata == null
-            ? ''
-            : file(params.vicat_cellular_metadata).toString()
-        if( (vicatCellularProteins && !vicatCellularMetadata) ||
-            (!vicatCellularProteins && vicatCellularMetadata) ) {
-            error 'A competitive viCAT build requires both --vicat_cellular_proteins and --vicat_cellular_metadata.'
-        }
-
-        def competitiveBuild = !vicatCellularProteins.isEmpty()
-        def cellularMinSeqId = params.vicat_cellular_min_seq_id as Double
-        if( !Double.isFinite(cellularMinSeqId) ||
-            cellularMinSeqId <= 0.0 || cellularMinSeqId > 1.0 ) {
-            error '--vicat_cellular_min_seq_id must be greater than 0 and at most 1.'
-        }
-        def cellularCoverage = params.vicat_cellular_coverage as Double
-        if( !Double.isFinite(cellularCoverage) ||
-            cellularCoverage <= 0.0 || cellularCoverage > 1.0 ) {
-            error '--vicat_cellular_coverage must be greater than 0 and at most 1.'
-        }
-        def cellularMinProteinLength = params.vicat_cellular_min_protein_length as Integer
-        if( cellularMinProteinLength < 1 ) {
-            error '--vicat_cellular_min_protein_length must be at least 1.'
-        }
         def userSuppliedDatabase = params.vicat_db != null
         def vicatBaseDatabase = userSuppliedDatabase
             ? file(params.vicat_db).toString()
             : file(params.vicat_managed_db).toString()
-        def vicatViralRepresentatives = params.vicat_viral_representatives == null
-            ? ''
-            : file(params.vicat_viral_representatives).toString()
-        def extendExistingDatabase = competitiveBuild && !vicatSourceProteins
-        if( extendExistingDatabase && !vicatViralRepresentatives ) {
-            error 'Extending an existing viCAT database requires --vicat_viral_representatives.'
-        }
-
-        def vicatDatabasePath = competitiveBuild
-            ? file(params.vicat_competitive_managed_db).toString()
-            : vicatBaseDatabase
-        def vicatDatabaseSource = extendExistingDatabase
-            ? 'viSUM-managed-competitive'
-            : (competitiveBuild
-                ? 'viSUM-managed'
-                : (userSuppliedDatabase ? 'user-supplied' : 'viSUM-managed'))
+        def vicatDatabasePath = vicatBaseDatabase
+        def vicatDatabaseSource = userSuppliedDatabase
+            ? 'user-supplied'
+            : 'viSUM-managed'
 
         ch_vicat_database_request = NORMALIZE_FASTA.out.normalized_records
             .take(1)
@@ -1224,7 +1186,7 @@ workflow {
                     vicatDatabasePath,
                     vicatDatabaseSource,
                     vicatBaseDatabase,
-                    vicatViralRepresentatives,
+                    '',
                     vicatSourceProteins,
                     vicatSourceMetadata,
                     params.vicat_metavr_proteins_sha256,
@@ -1232,11 +1194,11 @@ workflow {
                     params.vicat_expected_uvigs,
                     params.vicat_expected_proteins,
                     params.vicat_expected_representatives,
-                    vicatCellularProteins,
-                    vicatCellularMetadata,
-                    cellularMinSeqId,
-                    cellularCoverage,
-                    cellularMinProteinLength
+                    '',
+                    '',
+                    0.90,
+                    0.80,
+                    50
                 )
             }
 
@@ -1250,6 +1212,23 @@ workflow {
             .map { database, metadata -> tuple(database, metadata) }
             .first()
 
+        def vicatNonviralDatabasePath = file(params.vicat_nonviral_db).toString()
+        ch_vicat_nonviral_database_request = NORMALIZE_FASTA.out.normalized_records
+            .take(1)
+            .map { prefix, type, fasta, headerMap ->
+                tuple(vicatNonviralDatabasePath, 'class-aware-nonviral')
+            }
+
+        PREPARE_VICAT_NONVIRAL_DATABASE(ch_vicat_nonviral_database_request)
+
+        PREPARE_VICAT_NONVIRAL_DATABASE.out.database.view { database, metadata ->
+            "VICAT_NONVIRAL_DB database=${database} metadata=${metadata.name}"
+        }
+
+        ch_vicat_nonviral_database = PREPARE_VICAT_NONVIRAL_DATABASE.out.database
+            .map { database, metadata -> tuple(database, metadata) }
+            .first()
+
         PREDICT_VICAT_ORFS(NORMALIZE_FASTA.out.normalized_records)
 
         PREDICT_VICAT_ORFS.out.orfs.view {
@@ -1260,6 +1239,11 @@ workflow {
         RUN_VICAT_DIAMOND(
             PREDICT_VICAT_ORFS.out.orfs,
             ch_vicat_database
+        )
+
+        RUN_VICAT_NONVIRAL_DIAMOND(
+            PREDICT_VICAT_ORFS.out.orfs,
+            ch_vicat_nonviral_database
         )
 
         RUN_VICAT_DIAMOND.out.results.view {
@@ -1283,9 +1267,24 @@ workflow {
 
         ch_vicat_reference_subset = PREPARE_VICAT_REFERENCE_SUBSET.out.subset.first()
 
+        ch_vicat_dual_alignments = RUN_VICAT_DIAMOND.out.results
+            .map { prefix, type, orfMap, headerMap, viralDiamond ->
+                tuple(prefix, type, orfMap, headerMap, viralDiamond)
+            }
+            .join(
+                RUN_VICAT_NONVIRAL_DIAMOND.out.results.map {
+                    prefix, type, orfMap, headerMap, nonviralDiamond ->
+                        tuple(prefix, nonviralDiamond)
+                }
+            )
+            .map { prefix, type, orfMap, headerMap, viralDiamond, nonviralDiamond ->
+                tuple(prefix, type, orfMap, headerMap, viralDiamond, nonviralDiamond)
+            }
+
         PREPARE_VICAT_HITS(
-            RUN_VICAT_DIAMOND.out.results,
-            ch_vicat_reference_subset
+            ch_vicat_dual_alignments,
+            ch_vicat_reference_subset,
+            ch_vicat_nonviral_database
         )
 
         PREPARE_VICAT_HITS.out.results.view {
@@ -1303,6 +1302,7 @@ workflow {
         )
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VICAT.out.evidence)
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VICAT.out.context)
+        ch_provirus_evidence = ch_provirus_evidence.mix(STANDARDIZE_VICAT.out.provirus)
     }
 
     // Prepare or validate the persistent VITAP database now. Taxonomic

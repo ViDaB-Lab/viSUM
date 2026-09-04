@@ -32,15 +32,9 @@ process PREPARE_VICAT_REFERENCE_SUBSET {
         exit 1
     fi
 
-    MANIFEST_ARGS=()
-    if [[ -s "${vicat_database}/vicat_competitive_reference_manifest.parquet" ]]; then
-        MANIFEST_ARGS=(--reference-manifest "${vicat_database}/vicat_competitive_reference_manifest.parquet")
-    fi
-
     python "${projectDir}/bin/prepare_vicat_reference_subset.py" \
         --diamond ${diamonds} \
         --taxonomy-lookup "\$LOOKUP" \
-        "\${MANIFEST_ARGS[@]}" \
         --threads "${task.cpus}" \
         --memory-limit "${task.memory}" \
         --temp-directory "\$PWD/duckdb_tmp" \

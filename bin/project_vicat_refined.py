@@ -142,6 +142,17 @@ def run(args: argparse.Namespace) -> None:
         )
         viral_count = counts["viral_supported"]
         cellular_count = counts["cellular_supported"]
+        nonviral_class_counts = Counter(
+            entry["row"].get("best_nonviral_reference_class", "")
+            for entry in projected
+            if entry["row"]["locus_classification"] == "cellular_supported"
+            and entry["row"].get("best_nonviral_reference_class", "")
+        )
+        maximum_nonviral_count = max(nonviral_class_counts.values(), default=0)
+        dominant_nonviral_candidates = sorted(
+            label for label, count in nonviral_class_counts.items()
+            if count == maximum_nonviral_count
+        )
         if viral_count >= args.cluster_min_viral_loci and cellular_count == 0:
             classification, pattern = "virus", "predominantly_viral"
             reason = "refined_region_has_multiple_viral_loci"
@@ -230,6 +241,15 @@ def run(args: argparse.Namespace) -> None:
             "viral_cluster_coordinates": ",".join(cluster_coordinates),
             "viral_cluster_flank_status": ",".join(flank_statuses),
             "competitive_decision_reason": reason,
+            "nonviral_supported_classes": ",".join(
+                f"{label}:{count}"
+                for label, count in sorted(nonviral_class_counts.items())
+            ),
+            "dominant_nonviral_class": (
+                dominant_nonviral_candidates[0]
+                if len(dominant_nonviral_candidates) == 1
+                else "TIED" if dominant_nonviral_candidates else ""
+            ),
         })
 
     write_tsv(args.output_evidence, OUTPUT_COLUMNS, evidence_rows)

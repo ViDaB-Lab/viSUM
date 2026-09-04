@@ -8,7 +8,8 @@ process RUN_VICAT_DIAMOND {
 
     publishDir { "${params.outdir}/${prefix}_results/vicat" },
         mode: 'copy',
-        pattern: '*.vicat_*'
+        pattern: '*.vicat_*',
+        saveAs: { filename -> filename.contains('.raw.') ? null : filename }
 
     input:
     tuple val(prefix), val(type), path(orfs_faa), path(orf_map), path(header_map)
@@ -30,9 +31,9 @@ process RUN_VICAT_DIAMOND {
     export OPENBLAS_NUM_THREADS="${task.cpus}"
     export NUMEXPR_NUM_THREADS="${task.cpus}"
 
-    if [[ -s "${vicat_database}/vicat_viral_cellular.dmnd" && -s "${vicat_database}/vicat_competitive_reference_manifest.parquet" ]]; then
-        DB="${vicat_database}/vicat_viral_cellular.dmnd"
-    elif [[ -s "${vicat_database}/IMGVR5_UViG_representatives.dmnd" ]]; then
+    # Viral and nonviral references are searched independently. Never select
+    # the deprecated combined database when a viral-only runtime is present.
+    if [[ -s "${vicat_database}/IMGVR5_UViG_representatives.dmnd" ]]; then
         DB="${vicat_database}/IMGVR5_UViG_representatives.dmnd"
     elif [[ -s "${vicat_database}/diamond/IMGVR5_UViG_representatives.dmnd" ]]; then
         DB="${vicat_database}/diamond/IMGVR5_UViG_representatives.dmnd"

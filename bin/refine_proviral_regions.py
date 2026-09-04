@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Iterator, TextIO
 
 
-TOOL_PRIORITY = {"genomad": 0, "checkv": 1, "cenotetaker3": 2}
+TOOL_PRIORITY = {"genomad": 0, "checkv": 1, "cenotetaker3": 2, "vicat": 3}
+AUTHORITATIVE_TOOLS = {"genomad", "checkv"}
 
 REQUIRED_EVIDENCE_COLUMNS = {
     "sample_id",
@@ -64,6 +65,8 @@ SUMMARY_COLUMNS = [
     "boundary_conflict_count",
     "ct3_only_boundary_call_count",
     "ct3_only_locus_skipped_count",
+    "vicat_advisory_boundary_call_count",
+    "vicat_only_locus_skipped_count",
     "allow_ct3_only_refinement",
     "evidence_file_count",
 ]
@@ -269,10 +272,10 @@ def group_loci(calls: list[BoundaryCall]) -> list[list[BoundaryCall]]:
 def select_boundary(
     locus: list[BoundaryCall], allow_ct3_only_refinement: bool
 ) -> BoundaryCall | None:
-    if (
-        not allow_ct3_only_refinement
-        and {call.tool for call in locus} == {"cenotetaker3"}
-    ):
+    tools = {call.tool for call in locus}
+    if tools == {"vicat"}:
+        return None
+    if not allow_ct3_only_refinement and not (tools & AUTHORITATIVE_TOOLS):
         return None
     priority = min(TOOL_PRIORITY[call.tool] for call in locus)
     eligible = [call for call in locus if TOOL_PRIORITY[call.tool] == priority]
@@ -303,6 +306,8 @@ def run(args: argparse.Namespace) -> None:
     unchanged_count = 0
     ct3_only_boundary_call_count = 0
     ct3_only_locus_skipped_count = 0
+    vicat_advisory_boundary_call_count = sum(call.tool == "vicat" for call in calls)
+    vicat_only_locus_skipped_count = 0
 
     for parent_id, sequence in fasta_records.items():
         parent_calls = calls_by_parent.get(parent_id, [])
@@ -335,7 +340,10 @@ def run(args: argparse.Namespace) -> None:
             distinct_boundaries = {(call.start, call.end) for call in locus}
             if supporting_tools == ["cenotetaker3"]:
                 ct3_only_boundary_call_count += len(locus)
-            if selected is None:
+            if supporting_tools == ["vicat"]:
+                boundary_status = "not_selected_vicat_advisory_only"
+                vicat_only_locus_skipped_count += 1
+            elif selected is None:
                 boundary_status = "not_selected_ct3_only_default"
                 ct3_only_locus_skipped_count += 1
             elif len(locus) == 1:
@@ -372,6 +380,7 @@ def run(args: argparse.Namespace) -> None:
                 )
 
         if not selected_loci:
+            supporting_tools = sorted({call.tool for call in parent_calls})
             unchanged_count += 1
             refined_fasta.append((parent_id, sequence))
             map_rows.append(
@@ -385,8 +394,12 @@ def run(args: argparse.Namespace) -> None:
                     "original_length": len(sequence),
                     "refined_length": len(sequence),
                     "boundary_source": "",
-                    "supporting_boundary_tools": "cenotetaker3",
-                    "boundary_status": "unchanged_ct3_only_boundary_not_allowed",
+                    "supporting_boundary_tools": ",".join(supporting_tools),
+                    "boundary_status": (
+                        "unchanged_vicat_advisory_only"
+                        if supporting_tools == ["vicat"]
+                        else "unchanged_ct3_only_boundary_not_allowed"
+                    ),
                 }
             )
             continue
@@ -436,6 +449,8 @@ def run(args: argparse.Namespace) -> None:
                 "boundary_conflict_count": conflict_count,
                 "ct3_only_boundary_call_count": ct3_only_boundary_call_count,
                 "ct3_only_locus_skipped_count": ct3_only_locus_skipped_count,
+                "vicat_advisory_boundary_call_count": vicat_advisory_boundary_call_count,
+                "vicat_only_locus_skipped_count": vicat_only_locus_skipped_count,
                 "allow_ct3_only_refinement": str(
                     args.allow_ct3_only_refinement
                 ).lower(),

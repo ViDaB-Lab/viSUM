@@ -26,7 +26,8 @@ EXTRA_COLUMNS = [
     "viral_supported_loci", "cellular_supported_loci", "ambiguous_loci",
     "uninformative_loci", "viral_cluster_count", "largest_viral_cluster_loci",
     "viral_cluster_coordinates", "viral_cluster_flank_status",
-    "competitive_decision_reason",
+    "competitive_decision_reason", "nonviral_supported_classes",
+    "dominant_nonviral_class",
 ]
 OUTPUT_COLUMNS = (
     CORE_EVIDENCE_COLUMNS
@@ -41,12 +42,16 @@ LOCUS_COLUMNS = [
     "reference_taxonomy_coverage", "reference_taxonomy_conflict", "taxonomy_support",
     "classification_rank", "caller_taxonomy_conflict", "locus_classification",
     "best_viral_bitscore", "best_cellular_bitscore", "competitive_score_margin",
-    "competitive_decision_reason", "competitive_mode", *TAXONOMY_COLUMNS,
+    "competitive_decision_reason", "best_nonviral_reference_class",
+    "competitive_mode", *TAXONOMY_COLUMNS,
 ]
 AUDIT_COLUMNS = [
     "sample_id", "sequence_id", "locus_id", "orf_id", "orf_callers",
     "coordinates", "strand", "protein_length", "selected_orf_for_locus",
     "selected_best_reference", "reference_id", "reference_class",
+    "nonviral_reference_class", "source_classes", "replicon_accessions",
+    "replicon_types", "provirus_flank_eligible", "classification_note",
+    "cluster_member_count",
     "source_protein_id", "cellular_group", "source_accession", "organism_name",
     "taxid", "identity", "alignment_length",
     "query_length", "subject_length", "query_start", "query_end", "subject_start",
@@ -99,6 +104,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-loci", required=True, type=Path)
     parser.add_argument("--output-clusters", type=Path)
     parser.add_argument("--output-context", type=Path)
+    parser.add_argument("--output-provirus-evidence", type=Path)
     parser.add_argument("--output-audit", required=True, type=Path)
     parser.add_argument("--output-evidence", required=True, type=Path)
     return parser.parse_args()
@@ -513,6 +519,10 @@ def classify_locus(
         "cellular_orf": cellular_orf,
         "cellular_hit": cellular_hit,
         "cellular_score": cellular_score,
+        "nonviral_reference_class": (
+            str(cellular_hit.get("nonviral_reference_class") or "CELLULAR")
+            if cellular_hit else ""
+        ),
     }
 
 
@@ -551,13 +561,22 @@ def viral_clusters(entries: list[dict], minimum_loci: int, maximum_neutral_gap: 
 
 def cluster_flanks(cluster: list[dict], entries: list[dict]) -> tuple[str, int, int]:
     start, end = cluster[0]["start"], cluster[-1]["end"]
+    def flank_eligible(entry: dict) -> bool:
+        # Legacy competitive databases had no class-aware field and their
+        # generic cellular references remain eligible for compatibility.
+        return entry["row"].get("best_nonviral_reference_class", "") in {
+            "", "CELLULAR", "CELLULAR_CHROMOSOME"
+        }
+
     left = sum(
         entry["row"]["locus_classification"] == "cellular_supported"
+        and flank_eligible(entry)
         and entry["end"] < start
         for entry in entries
     )
     right = sum(
         entry["row"]["locus_classification"] == "cellular_supported"
+        and flank_eligible(entry)
         and entry["start"] > end
         for entry in entries
     )
@@ -743,6 +762,7 @@ def main() -> None:
             "best_cellular_bitscore": format_number(competition["cellular_score"]),
             "competitive_score_margin": format_number(competition["margin"]),
             "competitive_decision_reason": competition["reason"],
+            "best_nonviral_reference_class": competition["nonviral_reference_class"],
             "competitive_mode": "true" if competitive_mode else "false",
             **(selected.get("taxonomy") or unclassified_taxonomy("")),
         }
@@ -786,6 +806,15 @@ def main() -> None:
                         ) else "false",
                         "reference_id": hit["sseqid"],
                         "reference_class": hit["reference_class"],
+                        "nonviral_reference_class": hit.get("nonviral_reference_class", "") or "",
+                        "source_classes": hit.get("source_classes", "") or "",
+                        "replicon_accessions": hit.get("replicon_accessions", "") or "",
+                        "replicon_types": hit.get("replicon_types", "") or "",
+                        "provirus_flank_eligible": str(
+                            bool(hit.get("provirus_flank_eligible", False))
+                        ).lower(),
+                        "classification_note": hit.get("classification_note", "") or "",
+                        "cluster_member_count": hit.get("cluster_member_count", "") or "",
                         "source_protein_id": hit["source_protein_id"] or "",
                         "cellular_group": hit["cellular_group"] or "",
                         "source_accession": hit["source_accession"] or "",
@@ -836,6 +865,7 @@ def main() -> None:
     evidence_rows = []
     context_rows = []
     cluster_rows = []
+    provirus_rows = []
     for sequence_id, entries in sorted(contig_loci.items()):
         total_loci = len(entries)
         counts = Counter(entry["row"]["locus_classification"] for entry in entries)
@@ -850,6 +880,27 @@ def main() -> None:
         cellular_count = counts["cellular_supported"]
         ambiguous_count = counts["ambiguous"]
         uninformative_count = counts["uninformative"]
+        nonviral_class_counts = Counter(
+            entry["row"].get("best_nonviral_reference_class", "")
+            for entry in entries
+            if entry["row"]["locus_classification"] == "cellular_supported"
+            and entry["row"].get("best_nonviral_reference_class", "")
+        )
+        nonviral_supported_classes = ",".join(
+            f"{label}:{count}"
+            for label, count in sorted(nonviral_class_counts.items())
+        )
+        if nonviral_class_counts:
+            maximum_nonviral_count = max(nonviral_class_counts.values())
+            dominant_candidates = sorted(
+                label for label, count in nonviral_class_counts.items()
+                if count == maximum_nonviral_count
+            )
+            dominant_nonviral_class = (
+                dominant_candidates[0] if len(dominant_candidates) == 1 else "TIED"
+            )
+        else:
+            dominant_nonviral_class = ""
 
         if viral_count >= args.cluster_min_viral_loci and cellular_count == 0:
             pattern = "predominantly_viral"
@@ -921,6 +972,8 @@ def main() -> None:
                 "viral_cluster_coordinates": ",".join(cluster_coordinates),
                 "viral_cluster_flank_status": ",".join(flank_statuses),
                 "competitive_decision_reason": decision_reason,
+                "nonviral_supported_classes": nonviral_supported_classes,
+                "dominant_nonviral_class": dominant_nonviral_class,
             })
             continue
 
@@ -975,6 +1028,59 @@ def main() -> None:
                 "taxonomy_conflict": "true" if cluster_taxonomy["taxonomy_conflict"] else "false",
                 **cluster_taxonomy["taxonomy"],
             })
+            if args.input_type == "dna" and cellular_count:
+                cluster_start, cluster_end = cluster[0]["start"], cluster[-1]["end"]
+                provirus_rows.append({
+                    "sample_id": args.sample_id,
+                    "sequence_id": f"{sequence_id}|vicat_provirus_{cluster_start}_{cluster_end}",
+                    "parent_sequence_id": sequence_id,
+                    "record_type": "provirus",
+                    "coordinates": f"{cluster_start}-{cluster_end}",
+                    "tool": "vicat",
+                    "classification": "virus",
+                    "score": format_number(len(cluster_viral_entries) / len(cluster)),
+                    "score_type": "viral_supported_locus_fraction",
+                    "length": cluster_end - cluster_start + 1,
+                    "topology": "",
+                    "n_genes": len(cluster),
+                    "n_hallmarks": "",
+                    "evidence_strength": "qualified",
+                    "strength_basis": "vicat_advisory_provirus_boundary",
+                    **cluster_taxonomy["taxonomy"],
+                    "orf_loci": len(cluster),
+                    "hit_loci": len(cluster_viral_entries),
+                    "hit_locus_fraction": format_number(
+                        len(cluster_viral_entries) / len(cluster)
+                    ),
+                    "taxonomy_support": format_number(cluster_taxonomy["taxonomy_support"]),
+                    "taxonomy_eligible_loci": cluster_taxonomy["taxonomy_eligible_loci"],
+                    "taxonomy_supporting_loci": cluster_taxonomy["taxonomy_supporting_loci"],
+                    "classification_rank": cluster_taxonomy["classification_rank"],
+                    "taxonomy_conflict": (
+                        "true" if cluster_taxonomy["taxonomy_conflict"] else "false"
+                    ),
+                    "competitive_mode": "true" if competitive_mode else "false",
+                    "evidence_scope": "provirus_boundary_advisory",
+                    "origin_pattern": "localized_viral_cluster",
+                    "potential_provirus": "true",
+                    "viral_supported_loci": len(cluster_viral_entries),
+                    "cellular_supported_loci": cellular_count,
+                    "ambiguous_loci": sum(
+                        item["row"]["locus_classification"] == "ambiguous"
+                        for item in cluster
+                    ),
+                    "uninformative_loci": sum(
+                        item["row"]["locus_classification"] == "uninformative"
+                        for item in cluster
+                    ),
+                    "viral_cluster_count": 1,
+                    "largest_viral_cluster_loci": len(cluster_viral_entries),
+                    "viral_cluster_coordinates": f"{cluster_start}-{cluster_end}",
+                    "viral_cluster_flank_status": flank_status,
+                    "competitive_decision_reason": "spatial_viral_cluster_with_nonviral_context",
+                    "nonviral_supported_classes": nonviral_supported_classes,
+                    "dominant_nonviral_class": dominant_nonviral_class,
+                })
         largest_cluster = max(
             (
                 sum(item["row"]["locus_classification"] == "viral_supported" for item in cluster)
@@ -1033,6 +1139,8 @@ def main() -> None:
                 "viral_cluster_coordinates": ",".join(cluster_coordinates),
                 "viral_cluster_flank_status": ",".join(flank_statuses),
                 "competitive_decision_reason": decision_reason,
+                "nonviral_supported_classes": nonviral_supported_classes,
+                "dominant_nonviral_class": dominant_nonviral_class,
             }
         )
 
@@ -1058,6 +1166,16 @@ def main() -> None:
             )
             writer.writeheader()
             writer.writerows(context_rows)
+    if args.output_provirus_evidence is not None:
+        args.output_provirus_evidence.parent.mkdir(parents=True, exist_ok=True)
+        with args.output_provirus_evidence.open(
+            "w", encoding="utf-8", newline=""
+        ) as handle:
+            writer = csv.DictWriter(
+                handle, fieldnames=OUTPUT_COLUMNS, delimiter="\t", lineterminator="\n"
+            )
+            writer.writeheader()
+            writer.writerows(provirus_rows)
     with args.output_evidence.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=OUTPUT_COLUMNS, delimiter="\t", lineterminator="\n")
         writer.writeheader()
