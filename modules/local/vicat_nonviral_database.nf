@@ -76,19 +76,15 @@ invalid_classes = connection.execute(
     [metadata, *allowed],
 ).fetchone()[0]
 invalid_flanks = connection.execute(
-    """
-    SELECT count(*) FROM read_parquet(?)
-    WHERE provirus_flank_eligible != (reference_class = 'CELLULAR_CHROMOSOME')
-    """,
+    "SELECT count(*) FROM read_parquet(?) "
+    "WHERE provirus_flank_eligible != "
+    "(reference_class = 'CELLULAR_CHROMOSOME')",
     [metadata],
 ).fetchone()[0]
 duplicates = connection.execute(
-    """
-    SELECT count(*) FROM (
-        SELECT reference_id FROM read_parquet(?)
-        GROUP BY reference_id HAVING count(*) != 1
-    )
-    """,
+    "SELECT count(*) FROM ("
+    "SELECT reference_id FROM read_parquet(?) "
+    "GROUP BY reference_id HAVING count(*) != 1)",
     [metadata],
 ).fetchone()[0]
 print(diamond_count, metadata_count, invalid_classes, invalid_flanks, duplicates)

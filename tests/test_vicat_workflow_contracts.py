@@ -174,6 +174,17 @@ def test_vicat_nonviral_builder_clusters_each_reference_class_independently() ->
     assert "cluster_member_count" in helper
 
 
+def test_vicat_nonviral_database_module_has_no_nested_groovy_triple_quotes() -> None:
+    module = (
+        ROOT / "modules" / "local" / "vicat_nonviral_database.nf"
+    ).read_text(encoding="utf-8")
+    # The process script itself uses one Groovy triple-quoted string. Python
+    # embedded in its heredoc must not contain another triple-quoted string,
+    # which would terminate the Groovy script at Nextflow compile time.
+    assert module.count('"""') == 2
+    assert "SELECT count(*) FROM read_parquet(?)" in module
+
+
 def test_vicat_analysis_searches_viral_and_class_aware_nonviral_databases() -> None:
     analysis = (ROOT / "modules" / "local" / "run_vicat_diamond.nf").read_text(
         encoding="utf-8"
