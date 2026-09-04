@@ -173,12 +173,16 @@ def main() -> None:
                 occurrences = load_feature_occurrences(feature)
                 seen = set()
                 assemblies += 1
+                assembly_input = 0
+                assembly_included = 0
+                assembly_excluded = 0
                 for header, sequence in fasta_records(proteins):
                     protein_id = header.split()[0]
                     if protein_id in seen:
                         raise ValueError(f"Duplicate protein in {proteins}: {protein_id}")
                     seen.add(protein_id)
                     input_proteins += 1
+                    assembly_input += 1
                     source_occurrences = occurrences.get(protein_id, [])
                     label, reason = classify_occurrences(source_occurrences)
                     raw_types = sorted({raw_type or "blank" for _, raw_type, _ in source_occurrences})
@@ -191,6 +195,7 @@ def main() -> None:
                             "replicon_types": ",".join(raw_types),
                         })
                         exclusion_counts[reason] += 1
+                        assembly_excluded += 1
                         continue
                     source_classes = sorted({item for item, _, _ in source_occurrences if item})
                     replicons = sorted({replicon for _, _, replicon in source_occurrences if replicon})
@@ -211,6 +216,13 @@ def main() -> None:
                     })
                     class_counts[label] += 1
                     group_counts[group] += 1
+                    assembly_included += 1
+                print(
+                    f"CLASSIFIED group={group} assembly={accession} "
+                    f"input={assembly_input} included={assembly_included} "
+                    f"excluded={assembly_excluded}",
+                    flush=True,
+                )
         finally:
             metadata_handle.close()
             excluded_handle.close()
