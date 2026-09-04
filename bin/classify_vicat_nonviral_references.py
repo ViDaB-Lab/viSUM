@@ -60,11 +60,15 @@ def reference_class(sequence_type: str) -> str | None:
         return "CELLULAR_CHROMOSOME"
     if normalized == "unplaced scaffold":
         return "CELLULAR_UNPLACED"
-    if normalized == "plasmid":
+    if normalized in {"plasmid", "unlocalized scaffold on plasmid"}:
         return "PLASMID"
-    if normalized in {"chloroplast", "plastid"}:
+    if normalized in {"apicoplast", "chloroplast", "plastid"}:
         return "PLASTID"
-    if normalized in {"mitochondrion", "mitochondrial"}:
+    if normalized in {
+        "mitochondrion",
+        "mitochondrial",
+        "unlocalized scaffold on mitochondrion",
+    }:
         return "MITOCHONDRIAL"
     return None
 
@@ -110,7 +114,7 @@ def fasta_records(path: Path):
 
 def classify_occurrences(occurrences: list[tuple[str | None, str, str]]) -> tuple[str | None, str]:
     if not occurrences:
-        return None, "protein_absent_from_feature_table"
+        return "CELLULAR_UNPLACED", "catalog_fallback_no_feature_mapping"
     unsupported = sorted({raw_type or "blank" for label, raw_type, _ in occurrences if label is None})
     if unsupported:
         return None, "unsupported_sequence_type:" + ",".join(unsupported)
@@ -144,7 +148,7 @@ def main() -> None:
         metadata_columns = [
             "reference_id", "source_protein_id", "reference_class", "source_classes",
             "cellular_group", "source_accession", "replicon_accessions", "replicon_types",
-            "provirus_flank_eligible", "organism_name", "taxid",
+            "provirus_flank_eligible", "classification_note", "organism_name", "taxid",
         ]
         exclusion_columns = [
             "source_accession", "cellular_group", "source_protein_id", "reason", "replicon_types",
@@ -211,6 +215,7 @@ def main() -> None:
                         "replicon_accessions": ",".join(replicons),
                         "replicon_types": ",".join(raw_types),
                         "provirus_flank_eligible": "true" if label == "CELLULAR_CHROMOSOME" else "false",
+                        "classification_note": reason,
                         "organism_name": row.get("organism_name", "").strip(),
                         "taxid": (row.get("taxid") or row.get("species_taxid") or "").strip(),
                     })

@@ -54,6 +54,7 @@ class NonviralReferenceTests(unittest.TestCase):
                 "P_MITO": "MMITO",
                 "P_SHARED": "MSHARED",
                 "P_UNKNOWN": "MUNKNOWN",
+                "P_MISSING": "MMISSING",
             }
             (package_data / "protein.faa").write_text(
                 "".join(f">{protein} description\n{sequence}\n" for protein, sequence in proteins.items()),
@@ -111,6 +112,12 @@ class NonviralReferenceTests(unittest.TestCase):
                 "CELLULAR_CHROMOSOME,PLASMID",
             )
             self.assertEqual(rows["P_SHARED"]["provirus_flank_eligible"], "false")
+            self.assertEqual(rows["P_MISSING"]["reference_class"], "CELLULAR_UNPLACED")
+            self.assertEqual(rows["P_MISSING"]["provirus_flank_eligible"], "false")
+            self.assertEqual(
+                rows["P_MISSING"]["classification_note"],
+                "catalog_fallback_no_feature_mapping",
+            )
 
             with gzip.open(
                 output / "vicat_nonviral_exclusions.tsv.gz",
@@ -123,12 +130,17 @@ class NonviralReferenceTests(unittest.TestCase):
             self.assertEqual(excluded[0]["source_protein_id"], "P_UNKNOWN")
             self.assertEqual(excluded[0]["reason"], "unsupported_sequence_type:contig")
 
-            for label in (
-                "cellular_chromosome", "cellular_unplaced", "plasmid", "plastid",
-                "mitochondrial", "shared_nonviral",
-            ):
+            expected_fasta_counts = {
+                "cellular_chromosome": 1,
+                "cellular_unplaced": 2,
+                "plasmid": 1,
+                "plastid": 1,
+                "mitochondrial": 1,
+                "shared_nonviral": 1,
+            }
+            for label, expected_count in expected_fasta_counts.items():
                 with gzip.open(output / f"{label}.faa.gz", "rt", encoding="utf-8") as handle:
-                    self.assertEqual(handle.read().count(">"), 1)
+                    self.assertEqual(handle.read().count(">"), expected_count)
 
     def test_linkage_and_unlocalized_chromosome_are_flank_eligible(self):
         for sequence_type in ("linkage group", "unlocalized scaffold on chromosome"):
@@ -136,6 +148,19 @@ class NonviralReferenceTests(unittest.TestCase):
                 self.assertEqual(
                     classifier.reference_class(sequence_type),
                     "CELLULAR_CHROMOSOME",
+                )
+
+    def test_organelle_and_plasmid_sequence_type_variants(self):
+        expected = {
+            "apicoplast": "PLASTID",
+            "unlocalized scaffold on plasmid": "PLASMID",
+            "unlocalized scaffold on mitochondrion": "MITOCHONDRIAL",
+        }
+        for sequence_type, reference_class in expected.items():
+            with self.subTest(sequence_type=sequence_type):
+                self.assertEqual(
+                    classifier.reference_class(sequence_type),
+                    reference_class,
                 )
 
     def test_downloader_derives_refseq_urls_and_reuses_valid_files(self):
