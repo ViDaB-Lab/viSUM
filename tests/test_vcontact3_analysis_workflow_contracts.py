@@ -22,6 +22,18 @@ class Vcontact3AnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn("['both', 'prokaryotes', 'eukaryotes']", workflow)
         self.assertIn("STANDARDIZE_VCONTACT3(RUN_VCONTACT3.out.results)", workflow)
 
+    def test_database_output_is_reusable_for_every_sample(self) -> None:
+        workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+        assignment = workflow.index(
+            "ch_vcontact3_database = PREPARE_VCONTACT3_DATABASE.out.database"
+        )
+        invocation = workflow.index("RUN_VCONTACT3(", assignment)
+        database_block = workflow[assignment:invocation]
+
+        self.assertIn("tuple(database, metadata)", database_block)
+        self.assertIn(".first()", database_block)
+        self.assertIn("if( runVcontact3 ) tools += 'vcontact3'", workflow)
+
     def test_module_uses_official_command_and_resource_budget(self) -> None:
         module = (ROOT / "modules/local/run_vcontact3.nf").read_text(encoding="utf-8")
 

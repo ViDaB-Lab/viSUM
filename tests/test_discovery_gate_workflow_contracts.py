@@ -44,9 +44,19 @@ class DiscoveryGateWorkflowContractTests(unittest.TestCase):
 
         self.assertTrue(placeholder.is_file())
         self.assertIn("empty_discovery_evidence.tsv", workflow)
-        self.assertIn("joined.size() < 5 || joined[4] == null", workflow)
+        self.assertIn("if( evidenceFiles.isEmpty() )", workflow)
         self.assertIn("val(evidence_file_count)", module)
         self.assertIn("evidence_file_count > 0", module)
+
+    def test_missing_enabled_tool_is_not_treated_as_zero_calls(self) -> None:
+        workflow = (REPOSITORY_ROOT / "visum_nextflow.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("def validateEvidenceArtifacts", workflow)
+        self.assertIn("A valid zero-call run must still emit a header-only evidence file", workflow)
+        self.assertIn("expectedDiscoveryTools", workflow)
+        self.assertIn("tuple(prefix, tool, evidence)", workflow)
 
 
 if __name__ == "__main__":

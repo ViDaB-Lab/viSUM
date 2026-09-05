@@ -62,7 +62,11 @@ class TEsorterAnalysisWorkflowContractTests(unittest.TestCase):
             self.workflow,
         )
         self.assertIn(
-            "ch_harmony_inputs = ch_refined_for_taxonomy",
+            "ch_refined_for_harmony = ch_refined_for_taxonomy",
+            self.workflow,
+        )
+        self.assertIn(
+            "ch_harmony_inputs = ch_refined_for_harmony",
             self.workflow,
         )
 

@@ -77,3 +77,31 @@ def test_projects_only_contained_loci_and_recalculates_region_taxonomy(tmp_path:
     assert projected["viral_two"]["projected_coordinates"] == "251-450"
     assert projected["crossing"]["projection_status"] == "crosses_boundary"
     assert projected["crossing"]["projected_coordinates"] == ""
+
+
+def test_empty_refined_sample_writes_header_only_outputs(tmp_path: Path) -> None:
+    loci = tmp_path / "loci.tsv"
+    write_tsv(loci, LOCUS_COLUMNS, [])
+    regions = tmp_path / "regions.tsv"
+    write_tsv(
+        regions,
+        [
+            "sample_id", "sequence_id", "parent_sequence_id", "record_type",
+            "coordinates", "refined_length",
+        ],
+        [],
+    )
+    evidence = tmp_path / "evidence.tsv"
+    projection = tmp_path / "projection.tsv"
+
+    project_vicat_refined.run(Namespace(
+        sample_id="sample", input_type="dna", loci=loci, region_map=regions,
+        contig_taxonomy_support=0.6, cluster_min_viral_loci=2,
+        cluster_max_neutral_gap=1, output_evidence=evidence,
+        output_projection=projection,
+    ))
+
+    assert read_tsv(evidence) == []
+    assert read_tsv(projection) == []
+    assert evidence.read_text(encoding="utf-8").startswith("sample_id\t")
+    assert projection.read_text(encoding="utf-8").startswith("sample_id\t")

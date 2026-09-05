@@ -149,6 +149,33 @@ def parseNonnegativeIntegerParameter(rawValue, parameterName) {
 }
 
 
+def validateEvidenceArtifacts(prefix, stage, expectedTools, actualTools, evidenceFiles) {
+    def expected = expectedTools.collect { it.toString() }.toSet()
+    def actual = actualTools.collect { it.toString() }.toSet()
+    def missing = expected.findAll { !actual.contains(it) }.sort()
+    def unexpected = actual.findAll { !expected.contains(it) }.sort()
+
+    if( actualTools.size() != evidenceFiles.size() ) {
+        throw new IllegalStateException(
+            "Evidence channel contract failed for sample '${prefix}' at ${stage}: " +
+            "received ${actualTools.size()} tool labels but ${evidenceFiles.size()} files."
+        )
+    }
+    if( missing ) {
+        throw new IllegalStateException(
+            "Missing required evidence for sample '${prefix}' at ${stage}: " +
+            missing.join(', ') + '. A valid zero-call run must still emit a header-only evidence file.'
+        )
+    }
+    if( unexpected ) {
+        throw new IllegalStateException(
+            "Unexpected evidence for sample '${prefix}' at ${stage}: " +
+            unexpected.join(', ') + '.'
+        )
+    }
+}
+
+
 def visumHelp() {
     return '''
 viSUM 0.1.0 — viral sequence discovery, refinement, and taxonomy harmonization
@@ -456,6 +483,45 @@ workflow {
         params.run_vcontact3,
         '--run_vcontact3'
     )
+
+    // These contracts distinguish a successful zero-call result (a
+    // header-only evidence table) from a missing process result. Tool sets
+    // differ by molecule type only where the discovery programs do.
+    def sharedDiscoveryTools = []
+    if( runGenomad ) sharedDiscoveryTools << 'genomad'
+    if( runVirsorter2 ) sharedDiscoveryTools << 'virsorter2'
+    if( runCenotetaker3 ) sharedDiscoveryTools << 'cenotetaker3'
+    if( runVicat ) sharedDiscoveryTools << 'vicat'
+
+    def dnaDiscoveryTools = []
+    if( runDeepmicroclass2 ) dnaDiscoveryTools << 'deepmicroclass2'
+    if( runGianthunter ) dnaDiscoveryTools << 'gianthunter'
+
+    def rnaDiscoveryTools = []
+    if( runDeep6 ) rnaDiscoveryTools << 'deep6'
+    if( runVirbot ) rnaDiscoveryTools << 'virbot'
+
+    def expectedDiscoveryTools = { type ->
+        (sharedDiscoveryTools + (type == 'dna' ? dnaDiscoveryTools : rnaDiscoveryTools))
+            .unique()
+            .sort()
+    }
+
+    def sharedProvirusTools = []
+    if( runGenomad ) sharedProvirusTools << 'genomad'
+    if( runCenotetaker3 ) sharedProvirusTools << 'cenotetaker3'
+    if( runVicat ) sharedProvirusTools << 'vicat'
+    if( runCheckv ) sharedProvirusTools << 'checkv'
+
+    def expectedHarmonyTools = { type ->
+        def tools = expectedDiscoveryTools(type)
+        if( runVicat ) tools += 'vicat_context'
+        if( runCheckv ) tools += 'checkv'
+        if( runTesorter ) tools += 'tesorter'
+        if( runVitap ) tools += 'vitap'
+        if( runVcontact3 ) tools += 'vcontact3'
+        tools.unique().sort()
+    }
     def vcontact3DbDomain = params.vcontact3_db_domain
         ?.toString()
         ?.trim()
@@ -1358,7 +1424,11 @@ workflow {
             "VITAP_DB database=${database} metadata=${metadata.name}"
         }
 
+        // Database preparation emits once; convert that emission to a value
+        // so every sample can reuse it rather than consuming a one-shot item.
         ch_vitap_database = PREPARE_VITAP_DATABASE.out.database
+            .map { database, metadata -> tuple(database, metadata) }
+            .first()
     }
 
     // Prepare or validate the persistent vConTACT3 reference database.
@@ -1400,10 +1470,12 @@ workflow {
         }
 
         ch_vcontact3_database = PREPARE_VCONTACT3_DATABASE.out.database
+            .map { database, metadata -> tuple(database, metadata) }
+            .first()
     }
 
     ch_discovery_evidence_by_sample = ch_discovery_evidence
-        .map { prefix, tool, evidence -> tuple(prefix, evidence) }
+        .map { prefix, tool, evidence -> tuple(prefix, tool, evidence) }
         .groupTuple()
 
     ch_discovery_gate_inputs = NORMALIZE_FASTA.out.normalized_records
@@ -1412,7 +1484,14 @@ workflow {
         }
         .join(ch_discovery_evidence_by_sample, remainder: true)
         .map { joined ->
-            if( joined.size() < 5 || joined[4] == null ) {
+            def expectedTools = expectedDiscoveryTools(joined[1])
+            def actualTools = joined.size() >= 5 && joined[4] != null ? joined[4] : []
+            def evidenceFiles = joined.size() >= 6 && joined[5] != null ? joined[5] : []
+            validateEvidenceArtifacts(
+                joined[0], 'discovery_gate', expectedTools, actualTools, evidenceFiles
+            )
+
+            if( evidenceFiles.isEmpty() ) {
                 // A path input cannot stage an empty collection in Nextflow
                 // 26.04.x. Stage a valid header-only placeholder, while the
                 // explicit count tells the module not to pass it to Python.
@@ -1430,8 +1509,8 @@ workflow {
                 joined[1],
                 joined[2],
                 joined[3],
-                joined[4].size(),
-                joined[4]
+                evidenceFiles.size(),
+                evidenceFiles
             )
         }
 
@@ -1470,6 +1549,8 @@ workflow {
         }
 
         ch_checkv_database = PREPARE_CHECKV_DATABASE.out.database
+            .map { database, metadata -> tuple(database, metadata) }
+            .first()
 
         RUN_CHECKV(
             DISCOVERY_GATE.out.candidates,
@@ -1514,13 +1595,20 @@ workflow {
     }
 
     ch_provirus_evidence_by_sample = ch_provirus_evidence
-        .map { prefix, tool, evidence -> tuple(prefix, evidence) }
+        .map { prefix, tool, evidence -> tuple(prefix, tool, evidence) }
         .groupTuple()
 
     ch_provirus_refinement_inputs = DISCOVERY_GATE.out.candidates
         .join(ch_provirus_evidence_by_sample, remainder: true)
         .map { joined ->
-            if( joined.size() < 6 || joined[5] == null ) {
+            def actualTools = joined.size() >= 6 && joined[5] != null ? joined[5] : []
+            def evidenceFiles = joined.size() >= 7 && joined[6] != null ? joined[6] : []
+            validateEvidenceArtifacts(
+                joined[0], 'provirus_refinement', sharedProvirusTools,
+                actualTools, evidenceFiles
+            )
+
+            if( evidenceFiles.isEmpty() ) {
                 return tuple(
                     joined[0],
                     joined[1],
@@ -1538,8 +1626,8 @@ workflow {
                 joined[2],
                 joined[3],
                 joined[4],
-                joined[5].size(),
-                joined[5],
+                evidenceFiles.size(),
+                evidenceFiles,
                 allowCt3OnlyRefinement
             )
         }
@@ -1609,6 +1697,27 @@ workflow {
         ch_refined_for_taxonomy = REFINE_PROVIRAL_REGIONS.out.refined
     }
 
+    if( runVicat ) {
+        // This is a completion barrier, not another biological vote. It
+        // guarantees that every viCAT-enabled sample has completed the
+        // coordinate projection before viHARMONY is allowed to run.
+        ch_refined_for_harmony = ch_refined_for_taxonomy
+            .join(
+                PROJECT_VICAT_REFINED.out.projection.map {
+                    prefix, projection -> tuple(prefix, projection)
+                }
+            )
+            .map { prefix, type, refinedFasta, regionMap, boundaryAudit,
+                   refinementSummary, projection ->
+                tuple(
+                    prefix, type, refinedFasta, regionMap,
+                    boundaryAudit, refinementSummary
+                )
+            }
+    } else {
+        ch_refined_for_harmony = ch_refined_for_taxonomy
+    }
+
     if( runVitap ) {
         RUN_VITAP(
             ch_refined_for_taxonomy,
@@ -1653,21 +1762,30 @@ workflow {
     }
 
     ch_harmony_evidence_by_sample = ch_harmony_evidence
-        .map { prefix, tool, evidence -> tuple(prefix, evidence) }
+        .map { prefix, tool, evidence -> tuple(prefix, tool, evidence) }
         .groupTuple()
 
     ch_harmony_evidence_for_sample = NORMALIZE_FASTA.out.normalized_records
-        .map { prefix, type, fasta, headerMap -> tuple(prefix) }
+        .map { prefix, type, fasta, headerMap ->
+            tuple(prefix, expectedHarmonyTools(type))
+        }
         .join(ch_harmony_evidence_by_sample, remainder: true)
         .map { joined ->
-            if( joined.size() < 2 || joined[1] == null ) {
+            def expectedTools = joined[1]
+            def actualTools = joined.size() >= 3 && joined[2] != null ? joined[2] : []
+            def evidenceFiles = joined.size() >= 4 && joined[3] != null ? joined[3] : []
+            validateEvidenceArtifacts(
+                joined[0], 'viharmony', expectedTools, actualTools, evidenceFiles
+            )
+
+            if( evidenceFiles.isEmpty() ) {
                 return tuple(
                     joined[0],
                     0,
                     file("${projectDir}/assets/empty_discovery_evidence.tsv")
                 )
             }
-            tuple(joined[0], joined[1].size(), joined[1])
+            tuple(joined[0], evidenceFiles.size(), evidenceFiles)
         }
 
     if( runVcontact3 ) {
@@ -1679,7 +1797,7 @@ workflow {
         }
     }
 
-    ch_harmony_inputs = ch_refined_for_taxonomy
+    ch_harmony_inputs = ch_refined_for_harmony
         .map { prefix, type, refined, regionMap, boundaryAudit, summary ->
             tuple(prefix, type, refined, regionMap)
         }

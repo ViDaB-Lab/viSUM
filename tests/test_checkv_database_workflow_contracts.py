@@ -48,6 +48,20 @@ class CheckVDatabaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("DISCOVERY_GATE.out.candidates", workflow)
         self.assertIn("RUN_CHECKV(", workflow)
 
+    def test_database_output_is_reusable_for_every_sample(self) -> None:
+        workflow = (REPOSITORY_ROOT / "visum_nextflow.nf").read_text(
+            encoding="utf-8"
+        )
+        assignment = workflow.index(
+            "ch_checkv_database = PREPARE_CHECKV_DATABASE.out.database"
+        )
+        invocation = workflow.index("RUN_CHECKV(", assignment)
+        database_block = workflow[assignment:invocation]
+
+        self.assertIn("tuple(database, metadata)", database_block)
+        self.assertIn(".first()", database_block)
+        self.assertIn("sharedProvirusTools << 'checkv'", workflow)
+
     def test_checkv_standardization_and_provirus_refinement_are_wired(self) -> None:
         workflow = (REPOSITORY_ROOT / "visum_nextflow.nf").read_text(
             encoding="utf-8"

@@ -22,6 +22,18 @@ class VitapAnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn("STANDARDIZE_VITAP(\n            RUN_VITAP.out.results", workflow)
         self.assertIn("STANDARDIZE_VITAP.out.evidence", workflow)
 
+    def test_database_output_is_a_reusable_value_for_analysis_and_standardization(self) -> None:
+        workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+        assignment = workflow.index(
+            "ch_vitap_database = PREPARE_VITAP_DATABASE.out.database"
+        )
+        invocation = workflow.index("RUN_VITAP(", assignment)
+        database_block = workflow[assignment:invocation]
+
+        self.assertIn("tuple(database, metadata)", database_block)
+        self.assertIn(".first()", database_block)
+        self.assertIn("if( runVitap ) tools += 'vitap'", workflow)
+
     def test_module_uses_refined_fasta_and_enforces_task_cpu_budget(self) -> None:
         module = (ROOT / "modules/local/run_vitap.nf").read_text(encoding="utf-8")
 

@@ -12,6 +12,15 @@ class ViharmonyWorkflowContractTests(unittest.TestCase):
         self.assertGreater(workflow.index("VIHARMONY(ch_harmony_inputs)"), workflow.index("STANDARDIZE_VCONTACT3(RUN_VCONTACT3.out.results)"))
         self.assertIn("ch_harmony_evidence_for_sample", workflow)
         self.assertIn("assets/empty_discovery_evidence.tsv", workflow)
+        self.assertIn("ch_refined_for_harmony", workflow)
+        self.assertIn("PROJECT_VICAT_REFINED.out.projection", workflow)
+
+    def test_harmonizer_requires_each_enabled_per_sample_evidence_artifact(self) -> None:
+        workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+
+        self.assertIn("expectedHarmonyTools", workflow)
+        self.assertIn("'viharmony', expectedTools, actualTools, evidenceFiles", workflow)
+        self.assertIn("ch_harmony_inputs = ch_refined_for_harmony", workflow)
 
     def test_module_declares_agreed_final_outputs(self) -> None:
         module = (ROOT / "modules" / "local" / "viharmony.nf").read_text(encoding="utf-8")
