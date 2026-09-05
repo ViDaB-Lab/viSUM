@@ -32,7 +32,7 @@ class Vcontact3AnalysisWorkflowContractTests(unittest.TestCase):
 
         self.assertIn("tuple(database, metadata)", database_block)
         self.assertIn(".first()", database_block)
-        self.assertIn("if( runVcontact3 ) tools += 'vcontact3'", workflow)
+        self.assertIn("if( runVcontact3 ) harmonyOnlyTools << 'vcontact3'", workflow)
 
     def test_module_uses_official_command_and_resource_budget(self) -> None:
         module = (ROOT / "modules/local/run_vcontact3.nf").read_text(encoding="utf-8")

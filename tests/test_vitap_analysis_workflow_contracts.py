@@ -32,7 +32,7 @@ class VitapAnalysisWorkflowContractTests(unittest.TestCase):
 
         self.assertIn("tuple(database, metadata)", database_block)
         self.assertIn(".first()", database_block)
-        self.assertIn("if( runVitap ) tools += 'vitap'", workflow)
+        self.assertIn("if( runVitap ) harmonyOnlyTools << 'vitap'", workflow)
 
     def test_module_uses_refined_fasta_and_enforces_task_cpu_budget(self) -> None:
         module = (ROOT / "modules/local/run_vitap.nf").read_text(encoding="utf-8")

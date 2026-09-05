@@ -501,11 +501,10 @@ workflow {
     if( runDeep6 ) rnaDiscoveryTools << 'deep6'
     if( runVirbot ) rnaDiscoveryTools << 'virbot'
 
-    def expectedDiscoveryTools = { type ->
-        (sharedDiscoveryTools + (type == 'dna' ? dnaDiscoveryTools : rnaDiscoveryTools))
-            .unique()
-            .sort()
-    }
+    def expectedDiscoveryToolsByType = [
+        dna: (sharedDiscoveryTools + dnaDiscoveryTools).unique().sort(),
+        rna: (sharedDiscoveryTools + rnaDiscoveryTools).unique().sort(),
+    ]
 
     def sharedProvirusTools = []
     if( runGenomad ) sharedProvirusTools << 'genomad'
@@ -513,15 +512,17 @@ workflow {
     if( runVicat ) sharedProvirusTools << 'vicat'
     if( runCheckv ) sharedProvirusTools << 'checkv'
 
-    def expectedHarmonyTools = { type ->
-        def tools = expectedDiscoveryTools(type)
-        if( runVicat ) tools += 'vicat_context'
-        if( runCheckv ) tools += 'checkv'
-        if( runTesorter ) tools += 'tesorter'
-        if( runVitap ) tools += 'vitap'
-        if( runVcontact3 ) tools += 'vcontact3'
-        tools.unique().sort()
-    }
+    def harmonyOnlyTools = []
+    if( runVicat ) harmonyOnlyTools << 'vicat_context'
+    if( runCheckv ) harmonyOnlyTools << 'checkv'
+    if( runTesorter ) harmonyOnlyTools << 'tesorter'
+    if( runVitap ) harmonyOnlyTools << 'vitap'
+    if( runVcontact3 ) harmonyOnlyTools << 'vcontact3'
+
+    def expectedHarmonyToolsByType = [
+        dna: (expectedDiscoveryToolsByType.dna + harmonyOnlyTools).unique().sort(),
+        rna: (expectedDiscoveryToolsByType.rna + harmonyOnlyTools).unique().sort(),
+    ]
     def vcontact3DbDomain = params.vcontact3_db_domain
         ?.toString()
         ?.trim()
@@ -1484,7 +1485,7 @@ workflow {
         }
         .join(ch_discovery_evidence_by_sample, remainder: true)
         .map { joined ->
-            def expectedTools = expectedDiscoveryTools(joined[1])
+            def expectedTools = expectedDiscoveryToolsByType[joined[1]]
             def actualTools = joined.size() >= 5 && joined[4] != null ? joined[4] : []
             def evidenceFiles = joined.size() >= 6 && joined[5] != null ? joined[5] : []
             validateEvidenceArtifacts(
@@ -1767,7 +1768,7 @@ workflow {
 
     ch_harmony_evidence_for_sample = NORMALIZE_FASTA.out.normalized_records
         .map { prefix, type, fasta, headerMap ->
-            tuple(prefix, expectedHarmonyTools(type))
+            tuple(prefix, expectedHarmonyToolsByType[type])
         }
         .join(ch_harmony_evidence_by_sample, remainder: true)
         .map { joined ->

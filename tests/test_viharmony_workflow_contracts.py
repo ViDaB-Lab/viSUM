@@ -18,7 +18,7 @@ class ViharmonyWorkflowContractTests(unittest.TestCase):
     def test_harmonizer_requires_each_enabled_per_sample_evidence_artifact(self) -> None:
         workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
 
-        self.assertIn("expectedHarmonyTools", workflow)
+        self.assertIn("expectedHarmonyToolsByType", workflow)
         self.assertIn("'viharmony', expectedTools, actualTools, evidenceFiles", workflow)
         self.assertIn("ch_harmony_inputs = ch_refined_for_harmony", workflow)
 

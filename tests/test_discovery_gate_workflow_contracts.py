@@ -55,7 +55,7 @@ class DiscoveryGateWorkflowContractTests(unittest.TestCase):
 
         self.assertIn("def validateEvidenceArtifacts", workflow)
         self.assertIn("A valid zero-call run must still emit a header-only evidence file", workflow)
-        self.assertIn("expectedDiscoveryTools", workflow)
+        self.assertIn("expectedDiscoveryToolsByType", workflow)
         self.assertIn("tuple(prefix, tool, evidence)", workflow)
 
 
