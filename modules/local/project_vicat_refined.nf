@@ -18,6 +18,9 @@ process PROJECT_VICAT_REFINED {
     tuple val(prefix), path("${prefix}.vicat_refined_projection.tsv"), emit: projection
 
     script:
+    def configuredMinViralLoci = params.vicat_cluster_min_viral_loci.toString().trim()
+    def effectiveMinViralLoci = configuredMinViralLoci.equalsIgnoreCase('auto') ?
+        (type == 'rna' ? 1 : 2) : configuredMinViralLoci.toInteger()
     """
     python "${projectDir}/bin/project_vicat_refined.py" \
         --sample-id "${prefix}" \
@@ -25,7 +28,7 @@ process PROJECT_VICAT_REFINED {
         --loci "${vicat_loci}" \
         --region-map "${region_map}" \
         --contig-taxonomy-support "${params.vicat_contig_taxonomy_support}" \
-        --cluster-min-viral-loci "${params.vicat_cluster_min_viral_loci}" \
+        --cluster-min-viral-loci "${effectiveMinViralLoci}" \
         --cluster-max-neutral-gap "${params.vicat_cluster_max_neutral_gap}" \
         --output-evidence "${prefix}.vicat_refined_evidence.tsv" \
         --output-projection "${prefix}.vicat_refined_projection.tsv"

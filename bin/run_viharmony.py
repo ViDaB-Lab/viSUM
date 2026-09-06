@@ -43,6 +43,7 @@ METADATA_COLUMNS = [
     "provirus_coordinates", "original_length", "refined_length", "discovery_status",
     "viral_decision",
     "viral_confidence", "strong_tools", "qualified_tools", "cellular_conflict_tools",
+    "parent_cellular_context_tools", "parent_plasmid_context_tools",
     "checkv_complete_viral_contig_support",
     "plasmid_conflict_tools", "strict_taxonomy", "strict_taxonomy_rank",
     "analysis_taxonomy", "analysis_taxonomy_rank", "taxonomy_confidence",
@@ -453,6 +454,32 @@ def select_vicat_scope(
     return selected, region_rows, suppress_parent
 
 
+def partition_refined_region_context(
+    rows: list[dict[str, str]],
+    final_id: str,
+    record_type: str,
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Keep parent nonviral calls as context after a partial-region refinement.
+
+    A selected partial provirus/viral region no longer contains the parent flanks.
+    Consequently, a cellular or plasmid call made only on the parent contig must
+    remain auditable but cannot veto the extracted region. Exact region evidence
+    (including projected viCAT evidence) remains active in adjudication.
+    """
+    if record_type.strip().lower() not in {"provirus", "viral_region"}:
+        return rows, []
+    decision_rows: list[dict[str, str]] = []
+    context_rows: list[dict[str, str]] = []
+    for row in rows:
+        classification = row.get("classification", "").strip().lower()
+        exact_region_evidence = row.get("sequence_id", "").strip() == final_id
+        if classification in {"cellular", "plasmid"} and not exact_region_evidence:
+            context_rows.append(row)
+        else:
+            decision_rows.append(row)
+    return decision_rows, context_rows
+
+
 def taxonomy_string(lineage: dict[str, str]) -> str:
     return ";".join(f"{PREFIXES[rank]}{lineage.get(rank) or 'unclassified'}" for rank in RANKS)
 
@@ -736,6 +763,10 @@ def run(args: argparse.Namespace) -> None:
         rows, region_vicat_rows, suppress_parent_vicat = select_vicat_scope(
             all_rows, final_id, parent_id
         )
+        rows, parent_context_rows = partition_refined_region_context(
+            rows, final_id, record_type
+        )
+        parent_context_ids = {id(row) for row in parent_context_rows}
         for source_row in all_rows:
             audit = dict(source_row)
             is_suppressed_parent_vicat = (
@@ -759,6 +790,8 @@ def run(args: argparse.Namespace) -> None:
                 "superseded_parent_vicat"
                 if is_suppressed_parent_vicat else "used_for_final_decision"
             )
+            if id(source_row) in parent_context_ids:
+                audit["evidence_application"] = "parent_context_only"
             evidence_audit_rows.append(audit)
         tools_by_class: dict[str, set[str]] = defaultdict(set)
         strong_tools: set[str] = set()
@@ -823,6 +856,18 @@ def run(args: argparse.Namespace) -> None:
         original_name = header["original_id"]
         cellular = sorted(tools_by_class.get("cellular", set()))
         plasmid = sorted(tools_by_class.get("plasmid", set()))
+        parent_cellular_context = sorted({
+            row.get("tool", "").strip().lower()
+            for row in parent_context_rows
+            if row.get("classification", "").strip().lower() == "cellular"
+            and row.get("tool", "").strip()
+        })
+        parent_plasmid_context = sorted({
+            row.get("tool", "").strip().lower()
+            for row in parent_context_rows
+            if row.get("classification", "").strip().lower() == "plasmid"
+            and row.get("tool", "").strip()
+        })
         selected_vicat_rows = [
             row for row in rows if row.get("tool", "").strip().lower() == "vicat"
         ]
@@ -874,6 +919,12 @@ def run(args: argparse.Namespace) -> None:
             "strong_tools": ",".join(sorted(strong_tools)) or "NA",
             "qualified_tools": ",".join(sorted(qualified_tools)) or "NA",
             "cellular_conflict_tools": ",".join(cellular) or "NA",
+            "parent_cellular_context_tools": (
+                ",".join(parent_cellular_context) or "NA"
+            ),
+            "parent_plasmid_context_tools": (
+                ",".join(parent_plasmid_context) or "NA"
+            ),
             "checkv_complete_viral_contig_support": str(
                 checkv_complete_support
             ).lower(),
@@ -1072,7 +1123,7 @@ def run(args: argparse.Namespace) -> None:
 
     manifest_path = Path(f"{prefix}.harmonizer_manifest.json")
     manifest = {
-        "schema_version": "viharmony-0.6",
+        "schema_version": "viharmony-0.7",
         "sample_id": args.sample_id,
         "input_type": args.input_type,
         "ictv_msl": args.ictv_msl.name,
@@ -1086,7 +1137,7 @@ def run(args: argparse.Namespace) -> None:
             "vcontact3_min_taxonomy_length": minimum_vcontact3_length,
             "vcontact3_project_groups": "ancestry-compatible, unambiguous groups only",
             "vicat_scope": "refined-region evidence supersedes parent-discovery evidence",
-            "provirus_adjudication": "refinement selects coordinates; origin and mobile-element conflicts still control final retention",
+            "provirus_adjudication": "refinement selects coordinates; region-specific conflicts control retention while parent-only cellular/plasmid calls are retained as context",
             "tesorter_retrovirus": "explicit viral-like labels remain compatible; high-confidence multi-tool viral consensus overrides generic mobile-element conflict while retaining annotation",
             "final_output": "primary requires strong or multi-tool qualified viral support; single-tool qualified calls are emitted separately as provisional",
         },

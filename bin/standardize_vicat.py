@@ -27,7 +27,8 @@ EXTRA_COLUMNS = [
     "uninformative_loci", "viral_cluster_count", "largest_viral_cluster_loci",
     "viral_cluster_coordinates", "viral_cluster_flank_status",
     "competitive_decision_reason", "nonviral_supported_classes",
-    "dominant_nonviral_class",
+    "dominant_nonviral_class", "cluster_min_viral_loci",
+    "embedded_context_min_viral_loci",
 ]
 OUTPUT_COLUMNS = (
     CORE_EVIDENCE_COLUMNS
@@ -643,8 +644,8 @@ def main() -> None:
         raise SystemExit("--locus-overlap must be greater than 0 and at most 1")
     if not 0.0 <= args.competitive_min_margin < 1.0:
         raise SystemExit("--competitive-min-margin must be between 0 and 1")
-    if args.cluster_min_viral_loci < 2:
-        raise SystemExit("--cluster-min-viral-loci must be at least 2")
+    if args.cluster_min_viral_loci < 1:
+        raise SystemExit("--cluster-min-viral-loci must be at least 1")
     if args.cluster_max_neutral_gap < 0:
         raise SystemExit("--cluster-max-neutral-gap must be zero or greater")
     if args.threads < 1:
@@ -876,6 +877,14 @@ def main() -> None:
         clusters = viral_clusters(
             entries, args.cluster_min_viral_loci, args.cluster_max_neutral_gap
         )
+        embedded_context_min = max(2, args.cluster_min_viral_loci)
+        embedded_clusters = [
+            cluster for cluster in clusters
+            if sum(
+                item["row"]["locus_classification"] == "viral_supported"
+                for item in cluster
+            ) >= embedded_context_min
+        ]
         viral_count = counts["viral_supported"]
         cellular_count = counts["cellular_supported"]
         ambiguous_count = counts["ambiguous"]
@@ -905,8 +914,8 @@ def main() -> None:
         if viral_count >= args.cluster_min_viral_loci and cellular_count == 0:
             pattern = "predominantly_viral"
             classification = "virus"
-            decision_reason = "multiple_viral_loci_without_cellular_supported_loci"
-        elif clusters and cellular_count:
+            decision_reason = "viral_locus_threshold_met_without_cellular_supported_loci"
+        elif embedded_clusters and cellular_count:
             pattern = (
                 "localized_viral_cluster"
                 if args.input_type == "dna"
@@ -974,6 +983,8 @@ def main() -> None:
                 "competitive_decision_reason": decision_reason,
                 "nonviral_supported_classes": nonviral_supported_classes,
                 "dominant_nonviral_class": dominant_nonviral_class,
+                "cluster_min_viral_loci": args.cluster_min_viral_loci,
+                "embedded_context_min_viral_loci": embedded_context_min,
             })
             continue
 
@@ -1028,7 +1039,11 @@ def main() -> None:
                 "taxonomy_conflict": "true" if cluster_taxonomy["taxonomy_conflict"] else "false",
                 **cluster_taxonomy["taxonomy"],
             })
-            if args.input_type == "dna" and cellular_count:
+            if (
+                args.input_type == "dna"
+                and cellular_count
+                and cluster in embedded_clusters
+            ):
                 cluster_start, cluster_end = cluster[0]["start"], cluster[-1]["end"]
                 provirus_rows.append({
                     "sample_id": args.sample_id,
@@ -1080,6 +1095,8 @@ def main() -> None:
                     "competitive_decision_reason": "spatial_viral_cluster_with_nonviral_context",
                     "nonviral_supported_classes": nonviral_supported_classes,
                     "dominant_nonviral_class": dominant_nonviral_class,
+                    "cluster_min_viral_loci": args.cluster_min_viral_loci,
+                    "embedded_context_min_viral_loci": embedded_context_min,
                 })
         largest_cluster = max(
             (
@@ -1141,6 +1158,8 @@ def main() -> None:
                 "competitive_decision_reason": decision_reason,
                 "nonviral_supported_classes": nonviral_supported_classes,
                 "dominant_nonviral_class": dominant_nonviral_class,
+                "cluster_min_viral_loci": args.cluster_min_viral_loci,
+                "embedded_context_min_viral_loci": embedded_context_min,
             }
         )
 

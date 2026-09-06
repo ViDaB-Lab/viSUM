@@ -48,6 +48,37 @@ def test_refined_vicat_scope_supersedes_parent_without_counting_twice() -> None:
     assert genomad in selected
 
 
+def test_parent_nonviral_evidence_becomes_context_only_for_refined_region() -> None:
+    parent_cellular = {
+        "tool": "deepmicroclass2", "sequence_id": "parent",
+        "classification": "cellular",
+    }
+    parent_plasmid = {
+        "tool": "genomad", "sequence_id": "parent",
+        "classification": "plasmid",
+    }
+    region_cellular = {
+        "tool": "vicat", "sequence_id": "child",
+        "parent_sequence_id": "parent", "classification": "cellular",
+        "evidence_scope": "refined_region",
+    }
+    region_viral = {
+        "tool": "genomad", "sequence_id": "child",
+        "parent_sequence_id": "parent", "classification": "virus",
+    }
+    decision, context = run_viharmony.partition_refined_region_context(
+        [parent_cellular, parent_plasmid, region_cellular, region_viral],
+        "child", "provirus",
+    )
+    assert context == [parent_cellular, parent_plasmid]
+    assert decision == [region_cellular, region_viral]
+    unchanged, context = run_viharmony.partition_refined_region_context(
+        [parent_cellular], "parent", "input_contig"
+    )
+    assert unchanged == [parent_cellular]
+    assert context == []
+
+
 class ViharmonyTests(unittest.TestCase):
     def test_only_exact_full_span_region_evidence_follows_preserved_contig(self) -> None:
         common = {
@@ -217,10 +248,11 @@ class ViharmonyTests(unittest.TestCase):
                 ("sample__c000001", "virsorter2", "strong"),
                 ("sample__c000001", "deep6", ""),
                 ("sample__c000002", "genomad", "qualified"),
+                ("sample__c000002", "deepmicroclass2", "qualified"),
                 ("sample__c000002|viral_region_11_80", "vitap", ""),
             ]:
                 row = {column: "" for column in evidence_columns}
-                row.update({"sample_id": "sample", "sequence_id": sequence_id, "parent_sequence_id": "", "tool": tool, "classification": "virus", "evidence_strength": strength})
+                row.update({"sample_id": "sample", "sequence_id": sequence_id, "parent_sequence_id": "", "tool": tool, "classification": "cellular" if tool == "deepmicroclass2" else "virus", "evidence_strength": strength})
                 if tool in {"genomad", "vitap"}:
                     row.update(base_taxonomy)
                     row["classification_rank"] = "family"
@@ -267,6 +299,11 @@ class ViharmonyTests(unittest.TestCase):
             self.assertEqual(metadata[0]["strict_taxonomy_rank"], "family")
             self.assertEqual(metadata[0]["provirus_coordinates"], "NA")
             self.assertEqual(metadata[1]["provirus_coordinates"], "11-80")
+            self.assertEqual(metadata[1]["cellular_conflict_tools"], "NA")
+            self.assertEqual(
+                metadata[1]["parent_cellular_context_tools"],
+                "deepmicroclass2",
+            )
             self.assertEqual(metadata[1]["strict_taxonomy_rank"], "family")
             self.assertIn("g__viharmony_sample_novel_genus_7_of_Chiyouviridae", metadata[1]["analysis_taxonomy"])
             primary_fasta = (directory / "sample.final.original_ids.fasta").read_text(
@@ -294,10 +331,18 @@ class ViharmonyTests(unittest.TestCase):
                 audit = list(csv.DictReader(handle, delimiter="\t"))
             deep6 = next(row for row in audit if row["tool"] == "deep6")
             self.assertEqual(deep6["evidence_strength"], "qualified")
+            parent_cellular = next(
+                row for row in audit
+                if row["tool"] == "deepmicroclass2"
+                and row["final_sequence_id"] == "sample__c000002|viral_region_11_80"
+            )
+            self.assertEqual(
+                parent_cellular["evidence_application"], "parent_context_only"
+            )
             manifest = json.loads((directory / "sample.harmonizer_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], "viharmony-0.6")
+            self.assertEqual(manifest["schema_version"], "viharmony-0.7")
             self.assertIn(
-                "origin and mobile-element conflicts",
+                "parent-only cellular/plasmid calls are retained as context",
                 manifest["policy"]["provirus_adjudication"],
             )
 

@@ -263,8 +263,9 @@ viCAT OPTIONS
   --vicat_locus_overlap FLOAT       GV/RV ORF overlap threshold [0.80].
   --vicat_competitive_min_margin FLOAT
                                     Minimum viral/cellular bitscore margin [0.05].
-  --vicat_cluster_min_viral_loci INT
-                                    Minimum viral loci in a spatial cluster [2].
+  --vicat_cluster_min_viral_loci auto|INT
+                                    Clean-sequence threshold [auto: DNA=2, RNA=1].
+                                    Cellular context always requires >=2 loci.
   --vicat_cluster_max_neutral_gap INT
                                     Ambiguous/uninformative loci bridged in a cluster [1].
   --vicat_orf_taxonomy_support FLOAT
@@ -1201,9 +1202,10 @@ workflow {
             vicatCompetitiveMinMargin < 0.0 || vicatCompetitiveMinMargin >= 1.0 ) {
             error '--vicat_competitive_min_margin must be at least 0 and less than 1.0.'
         }
-        def vicatClusterMinViralLoci = params.vicat_cluster_min_viral_loci as Integer
-        if( vicatClusterMinViralLoci < 2 ) {
-            error '--vicat_cluster_min_viral_loci must be at least 2.'
+        def vicatClusterMinViralLoci = params.vicat_cluster_min_viral_loci.toString().trim()
+        if( !vicatClusterMinViralLoci.equalsIgnoreCase('auto') &&
+            (!vicatClusterMinViralLoci.isInteger() || vicatClusterMinViralLoci.toInteger() < 1) ) {
+            error '--vicat_cluster_min_viral_loci must be auto or a positive integer.'
         }
         def vicatClusterMaxNeutralGap = params.vicat_cluster_max_neutral_gap as Integer
         if( vicatClusterMaxNeutralGap < 0 ) {

@@ -23,6 +23,9 @@ process STANDARDIZE_VICAT {
     tuple val(prefix), path("${prefix}.vicat_reference_audit.tsv"), emit: audit
 
     script:
+    def configuredMinViralLoci = params.vicat_cluster_min_viral_loci.toString().trim()
+    def effectiveMinViralLoci = configuredMinViralLoci.equalsIgnoreCase('auto') ?
+        (type == 'rna' ? 1 : 2) : configuredMinViralLoci.toInteger()
     """
     set -euo pipefail
 
@@ -38,7 +41,7 @@ process STANDARDIZE_VICAT {
         --contig-taxonomy-support "${params.vicat_contig_taxonomy_support}" \
         --locus-overlap "${params.vicat_locus_overlap}" \
         --competitive-min-margin "${params.vicat_competitive_min_margin}" \
-        --cluster-min-viral-loci "${params.vicat_cluster_min_viral_loci}" \
+        --cluster-min-viral-loci "${effectiveMinViralLoci}" \
         --cluster-max-neutral-gap "${params.vicat_cluster_max_neutral_gap}" \
         --output-loci "${prefix}.vicat_orf_evidence.tsv" \
         --output-clusters "${prefix}.vicat_cluster_evidence.tsv" \

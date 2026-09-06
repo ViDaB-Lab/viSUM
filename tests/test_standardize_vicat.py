@@ -370,6 +370,39 @@ def test_competitive_loci_detect_localized_provirus_and_suppress_isolated_hit(tm
     assert context_rows[0]["tool"] == "vicat_context"
     assert context_rows[0]["evidence_strength"] == "weak"
 
+    # RNA auto mode resolves to one locus: a clean single viral locus is
+    # eligible, while a single viral locus embedded in cellular evidence is
+    # still rejected by the two-locus cellular-context safeguard.
+    rna_outputs = {
+        name: tmp_path / f"rna_{name}.tsv"
+        for name in ("loci", "clusters", "context", "audit", "evidence", "provirus")
+    }
+    subprocess.run([
+        sys.executable, str(ROOT / "bin" / "standardize_vicat.py"),
+        "--sample-id", "sample", "--input-type", "rna", "--orf-map", str(orf_map),
+        "--diamond", str(diamond), "--taxonomy-lookup", str(lookup),
+        "--reference-manifest", str(manifest), "--header-map", str(header_map),
+        "--orf-taxonomy-support", "0.60", "--contig-taxonomy-support", "0.60",
+        "--locus-overlap", "0.80", "--competitive-min-margin", "0.05",
+        "--cluster-min-viral-loci", "1", "--cluster-max-neutral-gap", "1",
+        "--output-loci", str(rna_outputs["loci"]),
+        "--output-clusters", str(rna_outputs["clusters"]),
+        "--output-context", str(rna_outputs["context"]),
+        "--output-provirus-evidence", str(rna_outputs["provirus"]),
+        "--output-audit", str(rna_outputs["audit"]),
+        "--output-evidence", str(rna_outputs["evidence"]),
+    ], check=True, env=environment)
+    with rna_outputs["evidence"].open(encoding="utf-8", newline="") as handle:
+        rna_evidence = {
+            row["sequence_id"]: row for row in csv.DictReader(handle, delimiter="\t")
+        }
+    assert rna_evidence["sample_c000003"]["classification"] == "virus"
+    assert rna_evidence["sample_c000003"]["origin_pattern"] == "predominantly_viral"
+    assert rna_evidence["sample_c000003"]["cluster_min_viral_loci"] == "1"
+    assert rna_evidence["sample_c000003"]["embedded_context_min_viral_loci"] == "2"
+    assert rna_evidence["sample_c000002"]["classification"] == "cellular"
+    assert rna_evidence["sample_c000002"]["origin_pattern"] == "isolated_viral_locus"
+
     prepared_hits = tmp_path / "prepared_hits.parquet"
     prepared_metadata = tmp_path / "prepared_metadata.tsv"
     reference_subset, reference_subset_metadata = prepare_reference_subset(

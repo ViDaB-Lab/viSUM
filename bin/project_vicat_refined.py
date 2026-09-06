@@ -66,6 +66,8 @@ def write_tsv(path: Path, columns: list[str], rows: list[dict[str, object]]) -> 
 
 
 def run(args: argparse.Namespace) -> None:
+    if args.cluster_min_viral_loci < 1:
+        raise ValueError("--cluster-min-viral-loci must be at least 1")
     locus_rows = read_tsv(
         args.loci,
         {"sample_id", "sequence_id", "locus_id", "coordinates", "locus_classification"}
@@ -140,6 +142,14 @@ def run(args: argparse.Namespace) -> None:
         clusters = viral_clusters(
             projected, args.cluster_min_viral_loci, args.cluster_max_neutral_gap
         )
+        embedded_context_min = max(2, args.cluster_min_viral_loci)
+        embedded_clusters = [
+            cluster for cluster in clusters
+            if sum(
+                item["row"]["locus_classification"] == "viral_supported"
+                for item in cluster
+            ) >= embedded_context_min
+        ]
         viral_count = counts["viral_supported"]
         cellular_count = counts["cellular_supported"]
         nonviral_class_counts = Counter(
@@ -155,8 +165,8 @@ def run(args: argparse.Namespace) -> None:
         )
         if viral_count >= args.cluster_min_viral_loci and cellular_count == 0:
             classification, pattern = "virus", "predominantly_viral"
-            reason = "refined_region_has_multiple_viral_loci"
-        elif clusters and cellular_count:
+            reason = "refined_region_meets_viral_locus_threshold"
+        elif embedded_clusters and cellular_count:
             classification = "virus"
             if args.input_type == "dna" and region["record_type"] == "provirus":
                 pattern = "resolved_provirus_with_vicat_support"
@@ -250,6 +260,8 @@ def run(args: argparse.Namespace) -> None:
                 if len(dominant_nonviral_candidates) == 1
                 else "TIED" if dominant_nonviral_candidates else ""
             ),
+            "cluster_min_viral_loci": args.cluster_min_viral_loci,
+            "embedded_context_min_viral_loci": embedded_context_min,
         })
 
     write_tsv(args.output_evidence, OUTPUT_COLUMNS, evidence_rows)
