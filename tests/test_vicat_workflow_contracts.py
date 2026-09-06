@@ -183,6 +183,21 @@ def test_vicat_nonviral_database_module_has_no_nested_groovy_triple_quotes() -> 
     # which would terminate the Groovy script at Nextflow compile time.
     assert module.count('"""') == 2
     assert "SELECT count(*) FROM read_parquet(?)" in module
+    assert "parse_diamond_dbinfo.py" in module
+
+
+def test_vicat_database_validators_share_version_tolerant_dbinfo_parser() -> None:
+    viral = (ROOT / "modules" / "local" / "vicat_database.nf").read_text(
+        encoding="utf-8"
+    )
+    nonviral = (
+        ROOT / "modules" / "local" / "vicat_nonviral_database.nf"
+    ).read_text(encoding="utf-8")
+
+    assert viral.count("parse_diamond_dbinfo.py") == 2
+    assert "parse_diamond_dbinfo.py" in nonviral
+    assert "awk '$1 == \"Sequences\"" not in viral
+    assert 'startswith("Sequences")' not in nonviral
 
 
 def test_vicat_analysis_searches_viral_and_class_aware_nonviral_databases() -> None:

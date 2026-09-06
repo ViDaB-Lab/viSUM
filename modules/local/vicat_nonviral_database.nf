@@ -46,23 +46,14 @@ process PREPARE_VICAT_NONVIRAL_DATABASE {
     done
 
     diamond dbinfo --db "\$DB/vicat_nonviral.dmnd" >/dev/null
-    read -r DIAMOND_COUNT METADATA_COUNT INVALID_CLASSES INVALID_FLANKS DUPLICATES <<< "\$(
-        python - "\$DB/vicat_nonviral.dmnd" \
-            "\$DB/vicat_nonviral_representative_metadata.parquet" <<'PY'
+    DIAMOND_COUNT=\$(diamond dbinfo --db "\$DB/vicat_nonviral.dmnd" \
+        | python3 "${projectDir}/bin/parse_diamond_dbinfo.py")
+    read -r METADATA_COUNT INVALID_CLASSES INVALID_FLANKS DUPLICATES <<< "\$(
+        python - "\$DB/vicat_nonviral_representative_metadata.parquet" <<'PY'
 import duckdb
-import subprocess
 import sys
 
-database, metadata = sys.argv[1:]
-dbinfo = subprocess.run(
-    ["diamond", "dbinfo", "--db", database],
-    check=True,
-    capture_output=True,
-    text=True,
-).stdout.splitlines()
-diamond_count = next(
-    int(line.split()[-1]) for line in dbinfo if line.strip().startswith("Sequences")
-)
+metadata = sys.argv[1]
 connection = duckdb.connect()
 metadata_count = connection.execute(
     "SELECT count(*) FROM read_parquet(?)", [metadata]
@@ -87,7 +78,7 @@ duplicates = connection.execute(
     "GROUP BY reference_id HAVING count(*) != 1)",
     [metadata],
 ).fetchone()[0]
-print(diamond_count, metadata_count, invalid_classes, invalid_flanks, duplicates)
+print(metadata_count, invalid_classes, invalid_flanks, duplicates)
 PY
     )"
 

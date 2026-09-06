@@ -87,7 +87,7 @@ process PREPARE_VICAT_DATABASE {
         locate_database_files "\$candidate" || return 1
         diamond dbinfo --db "\$VICAT_DIAMOND" >/dev/null 2>&1 || return 1
         diamond_count=\$(diamond dbinfo --db "\$VICAT_DIAMOND" \
-            | awk '\$1 == "Sequences" {print \$2}')
+            | python3 "${projectDir}/bin/parse_diamond_dbinfo.py")
         lookup_count=\$(python - "\$VICAT_TAXONOMY" <<'PY'
 import duckdb
 import sys
@@ -99,8 +99,14 @@ print(connection.execute(
 PY
         )
 
-        [[ "\$diamond_count" == "${expected_representatives}" ]] || return 1
-        [[ "\$lookup_count" == "${expected_representatives}" ]] || return 1
+        [[ "\$diamond_count" == "${expected_representatives}" ]] || {
+            echo "ERROR: viCAT viral DIAMOND count \$diamond_count does not match expected ${expected_representatives}." >&2
+            return 1
+        }
+        [[ "\$lookup_count" == "${expected_representatives}" ]] || {
+            echo "ERROR: viCAT taxonomy lookup count \$lookup_count does not match expected ${expected_representatives}." >&2
+            return 1
+        }
 
         if [[ "\$EXPECT_COMPETITIVE" == 'true' ]]; then
             [[ -s "\$candidate/vicat_viral_cellular.dmnd" && \
@@ -110,7 +116,7 @@ PY
                 >/dev/null 2>&1 || return 1
             competitive_count=\$(diamond dbinfo \
                 --db "\$candidate/vicat_viral_cellular.dmnd" \
-                | awk '\$1 == "Sequences" {print \$2}')
+                | python3 "${projectDir}/bin/parse_diamond_dbinfo.py")
             manifest_count=\$(python - \
                 "\$candidate/vicat_competitive_reference_manifest.parquet" <<'PY'
 import duckdb
