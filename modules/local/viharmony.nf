@@ -57,8 +57,8 @@ process VIHARMONY {
         ? groupList.collect { groups -> "'${groups}'" }.join(' ')
         : ''
     """
-    # viHARMONY decision policy v0.6: refined regions remain subject to
-    # viral-origin and mobile-element conflict adjudication.
+    # viHARMONY decision policy v0.7: region-specific conflicts remain active;
+    # parent-only cellular/plasmid evidence is retained as context.
     python3 "${projectDir}/bin/run_viharmony.py" \
         --sample-id "${prefix}" \
         --input-type "${type}" \

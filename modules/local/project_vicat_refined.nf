@@ -22,6 +22,8 @@ process PROJECT_VICAT_REFINED {
     def effectiveMinViralLoci = configuredMinViralLoci.equalsIgnoreCase('auto') ?
         (type == 'rna' ? 1 : 2) : configuredMinViralLoci.toInteger()
     """
+    # viCAT refined-evidence policy v2: type-aware clean-locus threshold with
+    # a two-locus minimum whenever cellular context is present.
     python "${projectDir}/bin/project_vicat_refined.py" \
         --sample-id "${prefix}" \
         --input-type "${type}" \

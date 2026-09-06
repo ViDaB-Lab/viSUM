@@ -27,6 +27,8 @@ process STANDARDIZE_VICAT {
     def effectiveMinViralLoci = configuredMinViralLoci.equalsIgnoreCase('auto') ?
         (type == 'rna' ? 1 : 2) : configuredMinViralLoci.toInteger()
     """
+    # viCAT evidence policy v2: type-aware clean-locus threshold with a
+    # two-locus minimum whenever cellular context is present.
     set -euo pipefail
 
     python "${projectDir}/bin/standardize_vicat.py" \
