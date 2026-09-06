@@ -38,6 +38,9 @@ process VIHARMONY {
           path("${prefix}.database_candidates.tsv"),
           path("${prefix}.all_candidates.fasta"),
           path("${prefix}.review_candidates.fasta"),
+          path("${prefix}.provisional.normalized.fasta"),
+          path("${prefix}.provisional.original_ids.fasta"),
+          path("${prefix}.provisional_metadata.tsv"),
           emit: results
     tuple val(prefix),
           path("${prefix}.*_audit.tsv.gz"),
@@ -54,7 +57,7 @@ process VIHARMONY {
         ? groupList.collect { groups -> "'${groups}'" }.join(' ')
         : ''
     """
-    # viHARMONY decision policy v0.5: refined regions remain subject to
+    # viHARMONY decision policy v0.6: refined regions remain subject to
     # viral-origin and mobile-element conflict adjudication.
     python3 "${projectDir}/bin/run_viharmony.py" \
         --sample-id "${prefix}" \

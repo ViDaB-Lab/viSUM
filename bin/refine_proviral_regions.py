@@ -60,6 +60,7 @@ SUMMARY_COLUMNS = [
     "unchanged_candidate_count",
     "refined_parent_count",
     "refined_region_count",
+    "full_span_call_preserved_count",
     "boundary_call_count",
     "boundary_conflict_count",
     "ct3_only_boundary_call_count",
@@ -395,6 +396,7 @@ def run(args: argparse.Namespace) -> None:
     audit_rows: list[dict[str, object]] = []
     refined_parent_count = 0
     refined_region_count = 0
+    full_span_call_preserved_count = 0
     conflict_count = 0
     unchanged_count = 0
     ct3_only_boundary_call_count = 0
@@ -517,6 +519,45 @@ def run(args: argparse.Namespace) -> None:
             )
             continue
 
+        # A boundary covering the exact input span does not define an embedded
+        # provirus. Preserve the original sequence identity and record type so
+        # downstream consumers do not misreport an intact viral contig as a
+        # trimmed provirus merely because a caller emitted 1..contig_length.
+        if (
+            len(selected_loci) == 1
+            and selected_loci[0][2].start == 1
+            and selected_loci[0][2].end == len(sequence)
+        ):
+            _, _, selected, supporting_tools, _ = selected_loci[0]
+            full_span_call_preserved_count += 1
+            unchanged_count += 1
+            refined_fasta.append((parent_id, sequence))
+            map_rows.append(
+                {
+                    "sample_id": args.sample_id,
+                    "input_type": args.input_type,
+                    "sequence_id": parent_id,
+                    "parent_sequence_id": "",
+                    "record_type": "input_contig",
+                    "coordinates": "",
+                    "original_length": len(sequence),
+                    "refined_length": len(sequence),
+                    "boundary_source": selected.tool,
+                    "supporting_boundary_tools": ",".join(supporting_tools),
+                    "boundary_status": "selected_full_span_preserved_contig",
+                }
+            )
+            for audit_row in audit_rows:
+                if (
+                    audit_row["parent_sequence_id"] == parent_id
+                    and audit_row["selected_start"] == selected.start
+                    and audit_row["selected_end"] == selected.end
+                ):
+                    audit_row["boundary_status"] = (
+                        "selected_full_span_preserved_contig"
+                    )
+            continue
+
         refined_parent_count += 1
         for _, _, selected, supporting_tools, boundary_status in selected_loci:
             refined_sequence = sequence[selected.start - 1 : selected.end]
@@ -558,6 +599,7 @@ def run(args: argparse.Namespace) -> None:
                 "unchanged_candidate_count": unchanged_count,
                 "refined_parent_count": refined_parent_count,
                 "refined_region_count": refined_region_count,
+                "full_span_call_preserved_count": full_span_call_preserved_count,
                 "boundary_call_count": len(calls),
                 "boundary_conflict_count": conflict_count,
                 "ct3_only_boundary_call_count": ct3_only_boundary_call_count,

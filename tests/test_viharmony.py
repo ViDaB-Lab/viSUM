@@ -49,6 +49,29 @@ def test_refined_vicat_scope_supersedes_parent_without_counting_twice() -> None:
 
 
 class ViharmonyTests(unittest.TestCase):
+    def test_only_exact_full_span_region_evidence_follows_preserved_contig(self) -> None:
+        common = {
+            "exact_id": "sample__c000001|provirus_1_100",
+            "parent_id": "sample__c000001",
+            "row_record_type": "provirus",
+            "final_id": "sample__c000001",
+            "final_parent": "sample__c000001",
+            "final_record_type": "input_contig",
+            "final_interval": None,
+            "final_length": 100,
+            "known_final_ids": {"sample__c000001"},
+        }
+        self.assertTrue(
+            run_viharmony.evidence_applies_to_final(
+                row_interval=(1, 100), **common
+            )
+        )
+        self.assertFalse(
+            run_viharmony.evidence_applies_to_final(
+                row_interval=(10, 90), **common
+            )
+        )
+
     def test_tesorter_changes_interpretation_without_voting_or_rejection(self) -> None:
         viral = [{"tool": "genomad", "classification": "virus", "evidence_strength": "qualified"}]
 
@@ -118,6 +141,36 @@ class ViharmonyTests(unittest.TestCase):
             "assignment_method": "direct_hmm",
         }], True)
         self.assertEqual(ambiguous["sequence_interpretation"], "ambiguous_mobile_element")
+
+        overridden = run_viharmony.summarize_tesorter(
+            strong_retroelement, True, True
+        )
+        self.assertEqual(
+            overridden["sequence_interpretation"],
+            "viral_with_mobile_element_features",
+        )
+        self.assertEqual(
+            overridden["tesorter_status"],
+            "mobile_element_annotation_overridden_by_high_viral_consensus",
+        )
+
+    def test_checkv_complete_zero_host_pattern_is_strong_contig_support(self) -> None:
+        rows = [{
+            "tool": "checkv",
+            "classification": "virus",
+            "checkv_quality": "High-quality",
+            "provirus": "No",
+            "viral_genes": "4",
+            "host_genes": "0",
+        }]
+        self.assertTrue(
+            run_viharmony.checkv_supports_complete_viral_contig(
+                rows, "input_contig"
+            )
+        )
+        self.assertFalse(
+            run_viharmony.checkv_supports_complete_viral_contig(rows, "provirus")
+        )
 
     def test_combines_parent_evidence_region_taxonomy_and_original_ids(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -209,8 +262,8 @@ class ViharmonyTests(unittest.TestCase):
             metadata = read_tsv(directory / "sample.final_metadata.tsv")
             self.assertEqual(len(metadata), 2)
             self.assertEqual(metadata[0]["viral_confidence"], "high")
-            self.assertEqual(metadata[0]["sequence_interpretation"], "viral_retroelement_conflict")
-            self.assertEqual(metadata[0]["tesorter_status"], "strong_retroelement_conflict")
+            self.assertEqual(metadata[0]["sequence_interpretation"], "viral_with_mobile_element_features")
+            self.assertEqual(metadata[0]["tesorter_status"], "mobile_element_annotation_overridden_by_high_viral_consensus")
             self.assertEqual(metadata[0]["strict_taxonomy_rank"], "family")
             self.assertEqual(metadata[0]["provirus_coordinates"], "NA")
             self.assertEqual(metadata[1]["provirus_coordinates"], "11-80")
@@ -219,8 +272,19 @@ class ViharmonyTests(unittest.TestCase):
             primary_fasta = (directory / "sample.final.original_ids.fasta").read_text(
                 encoding="utf-8"
             )
-            self.assertNotIn(">original-one", primary_fasta)
-            self.assertIn(">original-two|provirus_11_80", primary_fasta)
+            self.assertIn(">original-one", primary_fasta)
+            self.assertNotIn(">original-two|provirus_11_80", primary_fasta)
+            provisional_fasta = (
+                directory / "sample.provisional.original_ids.fasta"
+            ).read_text(encoding="utf-8")
+            self.assertIn(">original-two|provirus_11_80", provisional_fasta)
+            provisional_metadata = read_tsv(
+                directory / "sample.provisional_metadata.tsv"
+            )
+            self.assertEqual(
+                provisional_metadata[0]["viral_decision"],
+                "provisional_provirus",
+            )
             review_fasta = (directory / "sample.review_candidates.fasta").read_text(
                 encoding="utf-8"
             )
@@ -231,7 +295,7 @@ class ViharmonyTests(unittest.TestCase):
             deep6 = next(row for row in audit if row["tool"] == "deep6")
             self.assertEqual(deep6["evidence_strength"], "qualified")
             manifest = json.loads((directory / "sample.harmonizer_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], "viharmony-0.5")
+            self.assertEqual(manifest["schema_version"], "viharmony-0.6")
             self.assertIn(
                 "origin and mobile-element conflicts",
                 manifest["policy"]["provirus_adjudication"],
@@ -270,7 +334,7 @@ class ViharmonyTests(unittest.TestCase):
                 "likely_viral", "provirus", set(), {"checkv"}, [], [],
                 "viral_candidate",
             ),
-            "retained_provirus",
+            "provisional_provirus",
         )
         self.assertEqual(
             run_viharmony.adjudicate_viral_decision(

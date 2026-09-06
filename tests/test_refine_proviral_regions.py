@@ -189,6 +189,47 @@ class RefineProviralRegionsTests(unittest.TestCase):
             self.assertEqual(len(fasta), 2)
             self.assertTrue(all(len(sequence) == 20 for sequence in fasta.values()))
 
+    def test_exact_full_span_call_preserves_input_contig_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            sequence = "A" * 100
+            (directory / "candidates.fasta").write_text(
+                f">sample__c000001\n{sequence}\n", encoding="utf-8"
+            )
+            genomad = directory / "genomad.tsv"
+            write_evidence(
+                genomad,
+                [{
+                    "sample_id": "sample",
+                    "sequence_id": "sample__c000001|provirus_1_100",
+                    "parent_sequence_id": "sample__c000001",
+                    "record_type": "provirus",
+                    "coordinates": "1-100",
+                    "tool": "genomad",
+                    "classification": "virus",
+                }],
+            )
+
+            paths = self.run_refiner(directory, [genomad])
+
+            self.assertEqual(
+                read_fasta(paths["output"]), {"sample__c000001": sequence}
+            )
+            mapping = read_tsv(paths["map"])[0]
+            self.assertEqual(mapping["record_type"], "input_contig")
+            self.assertEqual(mapping["coordinates"], "")
+            self.assertEqual(
+                mapping["boundary_status"],
+                "selected_full_span_preserved_contig",
+            )
+            self.assertEqual(
+                read_tsv(paths["audit"])[0]["boundary_status"],
+                "selected_full_span_preserved_contig",
+            )
+            summary = read_tsv(paths["summary"])[0]
+            self.assertEqual(summary["refined_parent_count"], "0")
+            self.assertEqual(summary["full_span_call_preserved_count"], "1")
+
     def test_no_boundaries_preserves_candidate_fasta(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)

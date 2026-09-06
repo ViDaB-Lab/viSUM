@@ -43,6 +43,7 @@ METADATA_COLUMNS = [
     "provirus_coordinates", "original_length", "refined_length", "discovery_status",
     "viral_decision",
     "viral_confidence", "strong_tools", "qualified_tools", "cellular_conflict_tools",
+    "checkv_complete_viral_contig_support",
     "plasmid_conflict_tools", "strict_taxonomy", "strict_taxonomy_rank",
     "analysis_taxonomy", "analysis_taxonomy_rank", "taxonomy_confidence",
     "taxonomy_supporting_tools", "taxonomy_conflict", "vcontact3_groups",
@@ -57,6 +58,7 @@ METADATA_COLUMNS = [
 STRENGTH_ORDER = {"": 0, "weak": 1, "qualified": 2, "strong": 3}
 
 PRIMARY_VIRAL_DECISIONS = {"retained_viral", "retained_provirus"}
+PROVISIONAL_VIRAL_DECISIONS = {"provisional_viral", "provisional_provirus"}
 
 
 def parse_optional_interval(value: str) -> tuple[int, int] | None:
@@ -77,6 +79,37 @@ def intervals_overlap(
     return bool(
         left and right and left[0] <= right[1] and right[0] <= left[1]
     )
+
+
+def evidence_applies_to_final(
+    exact_id: str,
+    parent_id: str,
+    row_record_type: str,
+    row_interval: tuple[int, int] | None,
+    final_id: str,
+    final_parent: str,
+    final_record_type: str,
+    final_interval: tuple[int, int] | None,
+    final_length: int,
+    known_final_ids: set[str],
+) -> bool:
+    """Determine whether one evidence row applies to one final sequence."""
+    if exact_id in known_final_ids:
+        return exact_id == final_id
+    region_specific = (
+        row_record_type in {"provirus", "viral_region"}
+        and row_interval is not None
+    )
+    if region_specific:
+        if parent_id != final_parent:
+            return False
+        if final_record_type == "input_contig":
+            # A selected exact full-span call is represented downstream by its
+            # parent ID. Carry that evidence across the identity collapse, but
+            # never attach a partial/unselected region call to the full contig.
+            return row_interval == (1, final_length)
+        return intervals_overlap(row_interval, final_interval)
+    return parent_id == final_parent or exact_id == final_parent
 
 
 def adjudicate_viral_decision(
@@ -108,13 +141,43 @@ def adjudicate_viral_decision(
         if discovery_status == "ambiguous" and not strong_tools and len(qualified_tools) <= 1:
             return "likely_nonviral"
         return "ambiguous_review"
-    if strong_tools or qualified_tools:
+    if strong_tools or len(qualified_tools) >= 2:
         return "retained_provirus" if refined_region else "retained_viral"
+    if qualified_tools:
+        return "provisional_provirus" if refined_region else "provisional_viral"
     return "ambiguous_review"
 
 
+def checkv_supports_complete_viral_contig(
+    rows: list[dict[str, str]], record_type: str
+) -> bool:
+    """Recognize CheckV's strongest intact-contig viral-origin pattern."""
+    if record_type != "input_contig":
+        return False
+    for row in rows:
+        if row.get("tool", "").strip().lower() != "checkv":
+            continue
+        if row.get("classification", "").strip().lower() != "virus":
+            continue
+        if row.get("checkv_quality", "").strip().lower() not in {
+            "complete", "high-quality"
+        }:
+            continue
+        if row.get("provirus", "").strip().lower() != "no":
+            continue
+        try:
+            viral_genes = int(float(row.get("viral_genes", "0") or 0))
+            host_genes = int(float(row.get("host_genes", "0") or 0))
+        except ValueError:
+            continue
+        if viral_genes > 0 and host_genes == 0:
+            return True
+    return False
+
+
 def summarize_tesorter(
-    rows: list[dict[str, str]], has_qualified_viral_evidence: bool
+    rows: list[dict[str, str]], has_qualified_viral_evidence: bool,
+    has_high_viral_consensus: bool = False,
 ) -> dict[str, str]:
     """Summarize TEsorter as auxiliary mobile-element evidence.
 
@@ -169,6 +232,12 @@ def summarize_tesorter(
             if has_supported_retroelement
             else "viral_like_mobile_element_with_viral_support"
         )
+    elif (
+        (has_supported_retroelement or has_ambiguous)
+        and has_high_viral_consensus
+    ):
+        interpretation = "viral_with_mobile_element_features"
+        status = "mobile_element_annotation_overridden_by_high_viral_consensus"
     elif has_supported_retroelement and has_qualified_viral_evidence:
         interpretation = "viral_retroelement_conflict"
         status = f"{retroelement_strength}_retroelement_conflict"
@@ -600,6 +669,7 @@ def run(args: argparse.Namespace) -> None:
         raise ValueError("Refined FASTA and provirus-region map contain different sequence IDs")
 
     final_to_parent = {sequence_id: row["parent_sequence_id"].strip() or sequence_id for sequence_id, row in regions.items()}
+    known_final_ids = set(final_to_parent)
     evidence_rows: list[dict[str, str]] = []
     evidence_columns: list[str] = []
     for path in args.evidence:
@@ -627,23 +697,22 @@ def run(args: argparse.Namespace) -> None:
         parent = row.get("parent_sequence_id", "").strip() or exact
         row_record_type = row.get("record_type", "").strip().lower()
         row_interval = parse_optional_interval(row.get("coordinates", ""))
-        region_specific = row_record_type in {"provirus", "viral_region"} and row_interval
         for final_id, final_parent in final_to_parent.items():
             # Region-specific refinement calls must never leak into a sibling
             # region from the same parent. Parent-contig discovery evidence is
             # inherited by every refined child from that parent.
-            if exact in final_to_parent:
-                applies = exact == final_id
-            elif region_specific:
-                applies = (
-                    parent == final_parent
-                    and intervals_overlap(
-                        row_interval,
-                        parse_optional_interval(regions[final_id].get("coordinates", "")),
-                    )
-                )
-            else:
-                applies = parent == final_parent or exact == final_parent
+            applies = evidence_applies_to_final(
+                exact,
+                parent,
+                row_record_type,
+                row_interval,
+                final_id,
+                final_parent,
+                regions[final_id].get("record_type", "").strip(),
+                parse_optional_interval(regions[final_id].get("coordinates", "")),
+                len(refined[final_id]),
+                known_final_ids,
+            )
             if applies:
                 rows_by_final[final_id].append(row)
 
@@ -653,11 +722,14 @@ def run(args: argparse.Namespace) -> None:
     taxonomy_audit_rows: list[dict[str, object]] = []
     normalized_fasta_rows: list[tuple[str, str]] = []
     original_fasta_rows: list[tuple[str, str]] = []
+    provisional_normalized_rows: list[tuple[str, str]] = []
+    provisional_original_rows: list[tuple[str, str]] = []
     used_original_output_ids: set[str] = set()
     map_rows: list[dict[str, object]] = []
 
     for final_id, sequence in refined.items():
         region = regions[final_id]
+        record_type = region["record_type"].strip()
         parent_id = final_to_parent[final_id]
         header = headers[parent_id]
         all_rows = rows_by_final.get(final_id, [])
@@ -691,6 +763,9 @@ def run(args: argparse.Namespace) -> None:
         tools_by_class: dict[str, set[str]] = defaultdict(set)
         strong_tools: set[str] = set()
         qualified_tools: set[str] = set()
+        checkv_complete_support = checkv_supports_complete_viral_contig(
+            rows, record_type
+        )
         for row in rows:
             tool = row.get("tool", "").strip().lower()
             classification = row.get("classification", "").strip().lower()
@@ -706,15 +781,20 @@ def run(args: argparse.Namespace) -> None:
                         qualified_tools.add(tool)
 
         qualified_tools.difference_update(strong_tools)
-        tesorter_summary = summarize_tesorter(
-            rows, bool(strong_tools or qualified_tools)
-        )
+        if checkv_complete_support:
+            strong_tools.add("checkv")
+            qualified_tools.discard("checkv")
         if len(strong_tools) >= 2:
             viral_confidence = "high"
         elif strong_tools or len(qualified_tools) >= 2:
             viral_confidence = "supported"
         else:
             viral_confidence = "provisional"
+        tesorter_summary = summarize_tesorter(
+            rows,
+            bool(strong_tools or qualified_tools),
+            viral_confidence == "high",
+        )
 
         strict, strict_rank, tax_confidence, tax_tools, vote_rows = decide_taxonomy(
             rows, msl, minimum_vcontact3_length
@@ -737,7 +817,6 @@ def run(args: argparse.Namespace) -> None:
             taxonomy_audit_rows.append(vote)
 
         coords = region["coordinates"].strip() or "NA"
-        record_type = region["record_type"].strip()
         discovery_status = gate[parent_id]["discovery_status"].strip()
         strict_taxonomy = taxonomy_string(strict)
         analysis_taxonomy = taxonomy_string(analysis)
@@ -795,6 +874,9 @@ def run(args: argparse.Namespace) -> None:
             "strong_tools": ",".join(sorted(strong_tools)) or "NA",
             "qualified_tools": ",".join(sorted(qualified_tools)) or "NA",
             "cellular_conflict_tools": ",".join(cellular) or "NA",
+            "checkv_complete_viral_contig_support": str(
+                checkv_complete_support
+            ).lower(),
             "plasmid_conflict_tools": ",".join(plasmid) or "NA",
             "strict_taxonomy": strict_taxonomy,
             "strict_taxonomy_rank": strict_rank,
@@ -847,6 +929,8 @@ def run(args: argparse.Namespace) -> None:
         if "incompatible_or_unknown_parent_context" in group_statuses: reasons.append("vcontact3_group_context_conflict")
         if tesorter_summary["sequence_interpretation"] == "viral_retroelement_conflict":
             reasons.append("viral_retroelement_conflict")
+        elif tesorter_summary["sequence_interpretation"] == "viral_with_mobile_element_features":
+            reasons.append("mobile_element_annotation")
         elif tesorter_summary["sequence_interpretation"] == "likely_retroelement":
             reasons.append("likely_retroelement")
         elif tesorter_summary["sequence_interpretation"] == "ambiguous_mobile_element":
@@ -857,12 +941,16 @@ def run(args: argparse.Namespace) -> None:
 
         if viral_decision in PRIMARY_VIRAL_DECISIONS:
             normalized_fasta_rows.append((final_id, sequence))
+        elif viral_decision in PROVISIONAL_VIRAL_DECISIONS:
+            provisional_normalized_rows.append((final_id, sequence))
         original_output = original_output_id(original_name, record_type, coords)
         if original_output in used_original_output_ids:
             original_output = f"{original_output}|visum_{parent_id}"
         used_original_output_ids.add(original_output)
         if viral_decision in PRIMARY_VIRAL_DECISIONS:
             original_fasta_rows.append((original_output, sequence))
+        elif viral_decision in PROVISIONAL_VIRAL_DECISIONS:
+            provisional_original_rows.append((original_output, sequence))
         map_rows.append({
             "original_contig_name": original_name, "original_header": header["original_header"],
             "normalized_parent_id": parent_id, "final_sequence_id": final_id,
@@ -874,6 +962,13 @@ def run(args: argparse.Namespace) -> None:
     outputs = {
         "normalized_fasta": Path(f"{prefix}.final.normalized.fasta"),
         "original_fasta": Path(f"{prefix}.final.original_ids.fasta"),
+        "provisional_normalized_fasta": Path(
+            f"{prefix}.provisional.normalized.fasta"
+        ),
+        "provisional_original_fasta": Path(
+            f"{prefix}.provisional.original_ids.fasta"
+        ),
+        "provisional_metadata": Path(f"{prefix}.provisional_metadata.tsv"),
         "metadata": Path(f"{prefix}.final_metadata.tsv"),
         "review": Path(f"{prefix}.review_queue.tsv"),
         "disposition": Path(f"{prefix}.sequence_disposition.tsv"),
@@ -885,6 +980,8 @@ def run(args: argparse.Namespace) -> None:
     }
     write_fasta(outputs["normalized_fasta"], normalized_fasta_rows)
     write_fasta(outputs["original_fasta"], original_fasta_rows)
+    write_fasta(outputs["provisional_normalized_fasta"], provisional_normalized_rows)
+    write_fasta(outputs["provisional_original_fasta"], provisional_original_rows)
     write_tsv(outputs["metadata"], METADATA_COLUMNS, metadata_rows)
     write_tsv(outputs["review"], ["review_reasons", *METADATA_COLUMNS], review_rows)
     write_tsv(outputs["map"], ["original_contig_name", "original_header", "normalized_parent_id", "final_sequence_id", "final_original_id", "record_type", "provirus_coordinates"], map_rows)
@@ -893,6 +990,13 @@ def run(args: argparse.Namespace) -> None:
     primary_metadata = [
         row for row in metadata_rows if row["final_sequence_id"] in primary_ids
     ]
+    provisional_ids = {
+        identifier for identifier, _ in provisional_normalized_rows
+    }
+    provisional_metadata = [
+        row for row in metadata_rows if row["final_sequence_id"] in provisional_ids
+    ]
+    write_tsv(outputs["provisional_metadata"], METADATA_COLUMNS, provisional_metadata)
     write_tsv(outputs["database_tsv"], METADATA_COLUMNS, primary_metadata)
     write_fasta(outputs["all_candidates_fasta"], list(refined.items()))
     review_ids = {str(row["final_sequence_id"]) for row in review_rows}
@@ -906,6 +1010,7 @@ def run(args: argparse.Namespace) -> None:
     )
 
     final_by_parent: dict[str, list[str]] = defaultdict(list)
+    provisional_by_parent: dict[str, list[str]] = defaultdict(list)
     decision_by_final = {
         str(row["final_sequence_id"]): str(row["viral_decision"])
         for row in metadata_rows
@@ -914,12 +1019,21 @@ def run(args: argparse.Namespace) -> None:
         final_id = str(row["final_sequence_id"])
         if decision_by_final.get(final_id) in PRIMARY_VIRAL_DECISIONS:
             final_by_parent[str(row["normalized_parent_id"])].append(final_id)
+        elif decision_by_final.get(final_id) in PROVISIONAL_VIRAL_DECISIONS:
+            provisional_by_parent[str(row["normalized_parent_id"])].append(final_id)
     disposition_rows = []
     for sequence_id in normalized:
         gate_row = gate[sequence_id]
         final_ids = final_by_parent.get(sequence_id, [])
+        provisional_ids_for_parent = provisional_by_parent.get(sequence_id, [])
         if final_ids:
             disposition = "retained_as_provirus" if any("|viral_region_" in item for item in final_ids) else "retained_contig"
+        elif provisional_ids_for_parent:
+            disposition = (
+                "provisional_provirus_after_harmony"
+                if any("|viral_region_" in item for item in provisional_ids_for_parent)
+                else "provisional_viral_after_harmony"
+            )
         elif gate_row["advance_to_refinement"].strip().lower() == "true":
             candidate_decisions = [
                 decision_by_final.get(str(row["final_sequence_id"]), "")
@@ -936,8 +1050,8 @@ def run(args: argparse.Namespace) -> None:
             disposition = "discovery_noncandidate_conflicting_origin"
         else:
             disposition = "discovery_noncandidate_insufficient_support"
-        disposition_rows.append({"original_contig_name": headers[sequence_id]["original_id"], "normalized_name": sequence_id, "disposition": disposition, "final_sequence_ids": ",".join(final_ids) or "NA"})
-    write_tsv(outputs["disposition"], ["original_contig_name", "normalized_name", "disposition", "final_sequence_ids"], disposition_rows)
+        disposition_rows.append({"original_contig_name": headers[sequence_id]["original_id"], "normalized_name": sequence_id, "disposition": disposition, "final_sequence_ids": ",".join(final_ids) or "NA", "provisional_sequence_ids": ",".join(provisional_ids_for_parent) or "NA"})
+    write_tsv(outputs["disposition"], ["original_contig_name", "normalized_name", "disposition", "final_sequence_ids", "provisional_sequence_ids"], disposition_rows)
 
     if args.audit_mode == "full":
         evidence_path = Path(f"{prefix}.evidence_audit.tsv.gz")
@@ -958,7 +1072,7 @@ def run(args: argparse.Namespace) -> None:
 
     manifest_path = Path(f"{prefix}.harmonizer_manifest.json")
     manifest = {
-        "schema_version": "viharmony-0.5",
+        "schema_version": "viharmony-0.6",
         "sample_id": args.sample_id,
         "input_type": args.input_type,
         "ictv_msl": args.ictv_msl.name,
@@ -967,13 +1081,14 @@ def run(args: argparse.Namespace) -> None:
         "tools_present": sorted({row.get("tool", "") for row in evidence_rows if row.get("tool")}),
         "policy": {
             "viral_confidence": "high=2+ strong; supported=1 strong or 2+ qualified; provisional=1 qualified",
+            "checkv_complete_contig": "complete/high-quality, provirus=No, viral genes present, and zero host genes is strong intact-contig viral support",
             "taxonomy": "configured-ICTV-MSL-validated method-aware rank voting",
             "vcontact3_min_taxonomy_length": minimum_vcontact3_length,
             "vcontact3_project_groups": "ancestry-compatible, unambiguous groups only",
             "vicat_scope": "refined-region evidence supersedes parent-discovery evidence",
             "provirus_adjudication": "refinement selects coordinates; origin and mobile-element conflicts still control final retention",
-            "tesorter_retrovirus": "explicit viral-like mobile-element labels require independent viral support and are not generic retroelement conflicts",
-            "final_output": "primary viral/provirus calls only; all and review FASTAs preserve auditability",
+            "tesorter_retrovirus": "explicit viral-like labels remain compatible; high-confidence multi-tool viral consensus overrides generic mobile-element conflict while retaining annotation",
+            "final_output": "primary requires strong or multi-tool qualified viral support; single-tool qualified calls are emitted separately as provisional",
         },
         "outputs": {},
     }

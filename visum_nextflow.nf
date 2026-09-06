@@ -1836,7 +1836,8 @@ workflow {
     VIHARMONY.out.results.view { prefix, normalizedFasta, originalFasta, metadata,
                                 reviewQueue, disposition, sequenceMap, manifest,
                                 databaseFasta, databaseMetadata, allCandidatesFasta,
-                                reviewCandidatesFasta ->
+                                reviewCandidatesFasta, provisionalNormalizedFasta,
+                                provisionalOriginalFasta, provisionalMetadata ->
         "VIHARMONY sample=${prefix} fasta=${normalizedFasta.name} metadata=${metadata.name}"
     }
 }

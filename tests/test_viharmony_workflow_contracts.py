@@ -31,12 +31,14 @@ class ViharmonyWorkflowContractTests(unittest.TestCase):
             ".harmonizer_manifest.json", ".database_candidates.fasta",
             ".database_candidates.tsv",
             ".all_candidates.fasta", ".review_candidates.fasta",
+            ".provisional.normalized.fasta",
+            ".provisional.original_ids.fasta", ".provisional_metadata.tsv",
         ):
             self.assertIn(suffix, module)
         self.assertIn("--audit-mode", module)
         self.assertIn("--vcontact3-min-taxonomy-length", module)
         self.assertIn('path("${prefix}.*_audit.tsv.gz"),\n          optional: true', module)
-        self.assertIn("viHARMONY decision policy v0.5", module)
+        self.assertIn("viHARMONY decision policy v0.6", module)
 
     def test_config_uses_one_canonical_msl_parameter(self) -> None:
         config = (ROOT / "visum.config").read_text(encoding="utf-8")
