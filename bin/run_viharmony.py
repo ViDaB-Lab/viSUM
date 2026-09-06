@@ -88,9 +88,14 @@ def adjudicate_viral_decision(
     plasmid_tools: list[str],
     sequence_interpretation: str,
 ) -> str:
-    """Convert gathered evidence into a conservative final disposition."""
-    if record_type in {"provirus", "viral_region"}:
-        return "retained_provirus"
+    """Convert gathered evidence into a conservative final disposition.
+
+    Refinement establishes the sequence interval to evaluate; it does not prove
+    viral origin.  Refined regions therefore pass through the same origin and
+    mobile-element conflict checks as intact contigs.  Only a refined region
+    that survives those checks receives the ``retained_provirus`` disposition.
+    """
+    refined_region = record_type in {"provirus", "viral_region"}
     if sequence_interpretation == "likely_retroelement":
         return "likely_retroelement"
     if sequence_interpretation in {
@@ -104,7 +109,7 @@ def adjudicate_viral_decision(
             return "likely_nonviral"
         return "ambiguous_review"
     if strong_tools or qualified_tools:
-        return "retained_viral"
+        return "retained_provirus" if refined_region else "retained_viral"
     return "ambiguous_review"
 
 
@@ -153,15 +158,23 @@ def summarize_tesorter(
     has_viral_like = "viral_like_mobile_element" in categories
     has_ambiguous = "ambiguous_mobile_element" in categories
 
-    if has_supported_retroelement and has_qualified_viral_evidence:
+    # An explicit Retrovirus/Pararetrovirus classification is biologically
+    # compatible with viral origin.  When an independent viSUM caller also
+    # supports viral origin, do not let a generic retroelement annotation from
+    # another TEsorter window take precedence over the explicit viral label.
+    if has_viral_like and has_qualified_viral_evidence:
+        interpretation = "retrovirus_compatible"
+        status = (
+            "viral_like_mobile_element_with_mixed_retroelement_evidence"
+            if has_supported_retroelement
+            else "viral_like_mobile_element_with_viral_support"
+        )
+    elif has_supported_retroelement and has_qualified_viral_evidence:
         interpretation = "viral_retroelement_conflict"
         status = f"{retroelement_strength}_retroelement_conflict"
     elif has_supported_retroelement:
         interpretation = "likely_retroelement"
         status = f"{retroelement_strength}_retroelement_evidence"
-    elif has_viral_like and has_qualified_viral_evidence:
-        interpretation = "retrovirus_compatible"
-        status = "viral_like_mobile_element_with_viral_support"
     elif has_viral_like:
         interpretation = "viral_like_mobile_element"
         status = "viral_like_mobile_element"
@@ -945,7 +958,7 @@ def run(args: argparse.Namespace) -> None:
 
     manifest_path = Path(f"{prefix}.harmonizer_manifest.json")
     manifest = {
-        "schema_version": "viharmony-0.4",
+        "schema_version": "viharmony-0.5",
         "sample_id": args.sample_id,
         "input_type": args.input_type,
         "ictv_msl": args.ictv_msl.name,
@@ -958,6 +971,8 @@ def run(args: argparse.Namespace) -> None:
             "vcontact3_min_taxonomy_length": minimum_vcontact3_length,
             "vcontact3_project_groups": "ancestry-compatible, unambiguous groups only",
             "vicat_scope": "refined-region evidence supersedes parent-discovery evidence",
+            "provirus_adjudication": "refinement selects coordinates; origin and mobile-element conflicts still control final retention",
+            "tesorter_retrovirus": "explicit viral-like mobile-element labels require independent viral support and are not generic retroelement conflicts",
             "final_output": "primary viral/provirus calls only; all and review FASTAs preserve auditability",
         },
         "outputs": {},

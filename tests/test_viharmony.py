@@ -86,6 +86,30 @@ class ViharmonyTests(unittest.TestCase):
         }], True)
         self.assertEqual(viral_like["sequence_interpretation"], "retrovirus_compatible")
 
+        mixed_viral_like = run_viharmony.summarize_tesorter([
+            {
+                "tool": "tesorter", "classification": "viral_like_mobile_element",
+                "evidence_strength": "qualified",
+                "tesorter_evidence_category": "viral_like_mobile_element",
+                "tesorter_order": "LTR", "tesorter_superfamily": "Retrovirus",
+                "assignment_method": "direct_hmm",
+            },
+            {
+                "tool": "tesorter", "classification": "retroelement",
+                "evidence_strength": "strong",
+                "tesorter_evidence_category": "retroelement",
+                "tesorter_order": "LTR", "tesorter_superfamily": "Gypsy",
+                "assignment_method": "direct_hmm",
+            },
+        ], True)
+        self.assertEqual(
+            mixed_viral_like["sequence_interpretation"], "retrovirus_compatible"
+        )
+        self.assertEqual(
+            mixed_viral_like["tesorter_status"],
+            "viral_like_mobile_element_with_mixed_retroelement_evidence",
+        )
+
         ambiguous = run_viharmony.summarize_tesorter([{
             "tool": "tesorter", "classification": "ambiguous_mobile_element",
             "evidence_strength": "strong",
@@ -207,7 +231,11 @@ class ViharmonyTests(unittest.TestCase):
             deep6 = next(row for row in audit if row["tool"] == "deep6")
             self.assertEqual(deep6["evidence_strength"], "qualified")
             manifest = json.loads((directory / "sample.harmonizer_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], "viharmony-0.4")
+            self.assertEqual(manifest["schema_version"], "viharmony-0.5")
+            self.assertIn(
+                "origin and mobile-element conflicts",
+                manifest["policy"]["provirus_adjudication"],
+            )
 
     def test_adjudication_separates_primary_review_and_nonviral_calls(self) -> None:
         self.assertEqual(
@@ -235,7 +263,28 @@ class ViharmonyTests(unittest.TestCase):
                 "ambiguous", "provirus", set(), {"checkv"}, ["checkv"], [],
                 "viral_candidate",
             ),
+            "likely_nonviral",
+        )
+        self.assertEqual(
+            run_viharmony.adjudicate_viral_decision(
+                "likely_viral", "provirus", set(), {"checkv"}, [], [],
+                "viral_candidate",
+            ),
             "retained_provirus",
+        )
+        self.assertEqual(
+            run_viharmony.adjudicate_viral_decision(
+                "viral", "provirus", {"genomad"}, set(), ["checkv"], [],
+                "viral_candidate",
+            ),
+            "ambiguous_review",
+        )
+        self.assertEqual(
+            run_viharmony.adjudicate_viral_decision(
+                "viral", "provirus", {"genomad"}, set(), [], [],
+                "likely_retroelement",
+            ),
+            "likely_retroelement",
         )
 
     def test_vcontact3_groups_require_length_context_and_unique_rank(self) -> None:
