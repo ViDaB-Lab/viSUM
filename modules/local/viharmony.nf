@@ -54,6 +54,8 @@ process VIHARMONY {
         ? groupList.collect { groups -> "'${groups}'" }.join(' ')
         : ''
     """
+    # viHARMONY decision policy v0.5: refined regions remain subject to
+    # viral-origin and mobile-element conflict adjudication.
     python3 "${projectDir}/bin/run_viharmony.py" \
         --sample-id "${prefix}" \
         --input-type "${type}" \
