@@ -294,6 +294,77 @@ class RefineProviralRegionsTests(unittest.TestCase):
             self.assertEqual(summary["ct3_only_boundary_call_count"], "1")
             self.assertEqual(summary["allow_ct3_only_refinement"], "true")
 
+    def test_vicat_advisory_region_does_not_merge_independent_ct3_loci(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            (directory / "candidates.fasta").write_text(
+                ">sample__c000001\n" + "A" * 70000 + "\n", encoding="utf-8"
+            )
+            ct3 = directory / "ct3.tsv"
+            vicat = directory / "vicat.tsv"
+            common = {
+                "sample_id": "sample",
+                "parent_sequence_id": "sample__c000001",
+                "record_type": "provirus",
+                "classification": "virus",
+            }
+            write_evidence(
+                ct3,
+                [
+                    {
+                        **common,
+                        "sequence_id": "sample__c000001|provirus_7367_47239",
+                        "coordinates": "7367-47239",
+                        "tool": "cenotetaker3",
+                    },
+                    {
+                        **common,
+                        "sequence_id": "sample__c000001|provirus_51272_63319",
+                        "coordinates": "51272-63319",
+                        "tool": "cenotetaker3",
+                    },
+                ],
+            )
+            write_evidence(
+                vicat,
+                [
+                    {
+                        **common,
+                        "sequence_id": "sample__c000001|vicat_provirus_45000_53000",
+                        "coordinates": "45000-53000",
+                        "tool": "vicat",
+                    }
+                ],
+            )
+
+            paths = self.run_refiner(
+                directory,
+                [ct3, vicat],
+                allow_ct3_only_refinement=True,
+            )
+
+            fasta = read_fasta(paths["output"])
+            self.assertEqual(
+                set(fasta),
+                {
+                    "sample__c000001|viral_region_7367_47239",
+                    "sample__c000001|viral_region_51272_63319",
+                },
+            )
+            self.assertEqual(
+                len(fasta["sample__c000001|viral_region_7367_47239"]), 39873
+            )
+            self.assertEqual(
+                len(fasta["sample__c000001|viral_region_51272_63319"]), 12048
+            )
+            mapping = read_tsv(paths["map"])
+            self.assertTrue(
+                all(row["boundary_source"] == "cenotetaker3" for row in mapping)
+            )
+            self.assertEqual(
+                read_tsv(paths["summary"])[0]["refined_region_count"], "2"
+            )
+
     def test_vicat_boundary_is_advisory_and_supports_genomad(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)

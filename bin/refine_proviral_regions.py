@@ -285,8 +285,8 @@ def corroborating_tools(
     return sorted(tools)
 
 
-def group_loci(calls: list[BoundaryCall]) -> list[list[BoundaryCall]]:
-    """Group transitively overlapping boundary calls into independent loci."""
+def group_overlapping_calls(calls: list[BoundaryCall]) -> list[list[BoundaryCall]]:
+    """Group transitively overlapping calls without applying tool semantics."""
     remaining = sorted(calls, key=lambda call: (call.start, call.end, call.tool))
     loci: list[list[BoundaryCall]] = []
     while remaining:
@@ -304,6 +304,43 @@ def group_loci(calls: list[BoundaryCall]) -> list[list[BoundaryCall]]:
             remaining = kept
         loci.append(sorted(locus, key=lambda call: (call.start, call.end, call.tool)))
     return loci
+
+
+def group_loci(calls: list[BoundaryCall]) -> list[list[BoundaryCall]]:
+    """Group boundary-driving calls, then attach advisory viCAT support.
+
+    viCAT regions can corroborate a boundary selected from another tool, but they
+    are not boundary authorities.  Excluding them while forming loci prevents a
+    broad viCAT region from transitively joining otherwise independent provirus
+    calls.  A viCAT region that overlaps multiple independent loci is retained in
+    each locus audit so its thresholded support can be evaluated independently.
+    """
+    boundary_calls = [call for call in calls if call.tool != "vicat"]
+    vicat_calls = [call for call in calls if call.tool == "vicat"]
+    loci = group_overlapping_calls(boundary_calls)
+    unattached_vicat: list[BoundaryCall] = []
+
+    for vicat_call in vicat_calls:
+        overlapping_loci = [
+            locus
+            for locus in loci
+            if any(intervals_overlap(vicat_call, member) for member in locus)
+        ]
+        if overlapping_loci:
+            for locus in overlapping_loci:
+                locus.append(vicat_call)
+                locus.sort(key=lambda call: (call.start, call.end, call.tool))
+        else:
+            unattached_vicat.append(vicat_call)
+
+    loci.extend(group_overlapping_calls(unattached_vicat))
+    return sorted(
+        loci,
+        key=lambda locus: (
+            min(call.start for call in locus),
+            max(call.end for call in locus),
+        ),
+    )
 
 
 def unique_call_for_tool(locus: list[BoundaryCall], tool: str) -> BoundaryCall:
