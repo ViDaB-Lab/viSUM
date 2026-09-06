@@ -30,6 +30,7 @@ class ViharmonyWorkflowContractTests(unittest.TestCase):
             ".sequence_disposition.tsv", ".sequence_map.tsv",
             ".harmonizer_manifest.json", ".database_candidates.fasta",
             ".database_candidates.tsv",
+            ".all_candidates.fasta", ".review_candidates.fasta",
         ):
             self.assertIn(suffix, module)
         self.assertIn("--audit-mode", module)

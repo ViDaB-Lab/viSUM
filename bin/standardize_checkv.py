@@ -268,16 +268,47 @@ def build_evidence_row(
     aai_confidence = clean_missing(completeness_detail["aai_confidence"])
     confident_aai = aai_confidence.lower() in {"medium", "high"}
     high_completeness_tier = checkv_quality.lower() in {"complete", "high-quality"}
-    if high_completeness_tier and confident_aai:
+    viral_genes = parse_nonnegative_integer(
+        clean_missing(quality["viral_genes"]) or "0", "CheckV viral gene count"
+    )
+    host_genes = parse_nonnegative_integer(
+        clean_missing(quality["host_genes"]) or "0", "CheckV host gene count"
+    )
+
+    # CheckV quality describes estimated completeness, not probability of viral
+    # origin.  Origin strength therefore requires gene-content support.
+    if viral_genes == 0 and host_genes > 0:
+        classification = "cellular"
+        evidence_strength = "qualified"
+        strength_basis = "checkv_host_genes_without_viral_genes"
+    elif viral_genes == 0:
+        classification = "unclassified"
+        evidence_strength = "weak"
+        strength_basis = "checkv_annotation_only_no_informative_genes"
+    elif high_completeness_tier and confident_aai:
+        classification = "virus"
         evidence_strength = "strong"
         strength_basis = "checkv_high_quality_confident_aai"
-    else:
+    elif record_type == "provirus":
+        classification = "virus"
         evidence_strength = "qualified"
-        strength_basis = (
-            "checkv_provirus_boundary"
-            if record_type == "provirus"
-            else "checkv_determined_viral_quality"
-        )
+        strength_basis = "checkv_provirus_boundary_with_viral_genes"
+    elif high_completeness_tier and host_genes == 0:
+        classification = "virus"
+        evidence_strength = "qualified"
+        strength_basis = "checkv_high_quality_viral_genes_without_confident_aai"
+    elif checkv_quality.lower() == "medium-quality" and host_genes == 0:
+        classification = "virus"
+        evidence_strength = "qualified"
+        strength_basis = "checkv_medium_quality_viral_genes_without_host_genes"
+    elif host_genes == 0:
+        classification = "virus"
+        evidence_strength = "weak"
+        strength_basis = "checkv_low_quality_viral_genes_without_host_genes"
+    else:
+        classification = "virus"
+        evidence_strength = "weak"
+        strength_basis = "checkv_mixed_host_and_viral_genes_without_boundary"
     output = {
         "sample_id": sample_id,
         "sequence_id": sequence_id,
@@ -285,7 +316,7 @@ def build_evidence_row(
         "record_type": record_type,
         "coordinates": coordinates,
         "tool": "checkv",
-        "classification": "virus",
+        "classification": classification,
         "score": completeness,
         "score_type": "checkv_completeness_percent" if completeness else "",
         "length": str(length),
@@ -328,7 +359,7 @@ def build_evidence_row(
         "hmm_hit_count": clean_missing(completeness_detail["hmm_num_hits"]),
         "warnings": clean_missing(quality["warnings"]),
     }
-    output.update(unclassified_taxonomy("virus"))
+    output.update(unclassified_taxonomy(classification))
     return output
 
 

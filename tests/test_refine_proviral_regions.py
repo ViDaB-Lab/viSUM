@@ -42,6 +42,7 @@ class RefineProviralRegionsTests(unittest.TestCase):
         evidence_paths: list[Path],
         input_type: str = "dna",
         allow_ct3_only_refinement: bool = False,
+        vicat_support_min_overlap_fraction: float = 0.5,
     ) -> dict[str, Path]:
         paths = {
             "fasta": directory / "candidates.fasta",
@@ -68,6 +69,8 @@ class RefineProviralRegionsTests(unittest.TestCase):
             str(paths["audit"]),
             "--output-summary",
             str(paths["summary"]),
+            "--vicat-support-min-overlap-fraction",
+            str(vicat_support_min_overlap_fraction),
         ]
         if allow_ct3_only_refinement:
             argv.append("--allow-ct3-only-refinement")
@@ -347,6 +350,92 @@ class RefineProviralRegionsTests(unittest.TestCase):
             self.assertEqual(mapping["boundary_source"], "genomad")
             self.assertEqual(mapping["supporting_boundary_tools"], "genomad,vicat")
             self.assertEqual(mapping["coordinates"], "25-75")
+
+    def test_checkv_requires_ct3_or_thresholded_vicat_support(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            sequence = "A" * 200
+            (directory / "candidates.fasta").write_text(
+                f">sample__c000001\n{sequence}\n", encoding="utf-8"
+            )
+            checkv = directory / "checkv.tsv"
+            write_evidence(checkv, [{
+                "sample_id": "sample",
+                "sequence_id": "sample__c000001|provirus_51_150",
+                "parent_sequence_id": "sample__c000001",
+                "record_type": "provirus",
+                "coordinates": "51-150",
+                "tool": "checkv",
+                "classification": "virus",
+            }])
+
+            checkv_only = self.run_refiner(directory, [checkv])
+            self.assertEqual(
+                read_fasta(checkv_only["output"]), {"sample__c000001": sequence}
+            )
+            self.assertEqual(
+                read_tsv(checkv_only["audit"])[0]["boundary_status"],
+                "not_selected_checkv_only_candidate",
+            )
+
+            supported_directory = directory / "supported"
+            supported_directory.mkdir()
+            (supported_directory / "candidates.fasta").write_text(
+                f">sample__c000001\n{sequence}\n", encoding="utf-8"
+            )
+            vicat = directory / "vicat.tsv"
+            write_evidence(vicat, [{
+                "sample_id": "sample",
+                "sequence_id": "sample__c000001|vicat_provirus_101_180",
+                "parent_sequence_id": "sample__c000001",
+                "record_type": "provirus",
+                "coordinates": "101-180",
+                "tool": "vicat",
+                "classification": "virus",
+            }])
+            supported = self.run_refiner(supported_directory, [checkv, vicat])
+            self.assertEqual(
+                read_fasta(supported["output"]),
+                {"sample__c000001|viral_region_51_150": "A" * 100},
+            )
+            self.assertEqual(
+                read_tsv(supported["map"])[0]["boundary_status"],
+                "selected_checkv_with_vicat_support",
+            )
+
+    def test_checkv_vicat_support_below_overlap_threshold_does_not_trim(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            sequence = "A" * 200
+            (directory / "candidates.fasta").write_text(
+                f">sample__c000001\n{sequence}\n", encoding="utf-8"
+            )
+            checkv = directory / "checkv.tsv"
+            vicat = directory / "vicat.tsv"
+            common = {
+                "sample_id": "sample",
+                "parent_sequence_id": "sample__c000001",
+                "record_type": "provirus",
+                "classification": "virus",
+            }
+            write_evidence(checkv, [{
+                **common,
+                "sequence_id": "sample__c000001|provirus_51_100",
+                "coordinates": "51-100",
+                "tool": "checkv",
+            }])
+            write_evidence(vicat, [{
+                **common,
+                "sequence_id": "sample__c000001|vicat_provirus_100_200",
+                "coordinates": "100-200",
+                "tool": "vicat",
+            }])
+            paths = self.run_refiner(directory, [checkv, vicat])
+            self.assertEqual(read_fasta(paths["output"]), {"sample__c000001": sequence})
+            self.assertTrue(all(
+                row["boundary_status"] == "not_selected_vicat_overlap_below_threshold"
+                for row in read_tsv(paths["audit"])
+            ))
 
 
 if __name__ == "__main__":

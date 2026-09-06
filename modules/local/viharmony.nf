@@ -36,6 +36,8 @@ process VIHARMONY {
           path("${prefix}.harmonizer_manifest.json"),
           path("${prefix}.database_candidates.fasta"),
           path("${prefix}.database_candidates.tsv"),
+          path("${prefix}.all_candidates.fasta"),
+          path("${prefix}.review_candidates.fasta"),
           emit: results
     tuple val(prefix),
           path("${prefix}.*_audit.tsv.gz"),

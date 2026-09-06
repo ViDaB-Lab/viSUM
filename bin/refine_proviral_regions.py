@@ -11,7 +11,6 @@ from typing import Iterator, TextIO
 
 
 TOOL_PRIORITY = {"genomad": 0, "checkv": 1, "cenotetaker3": 2, "vicat": 3}
-AUTHORITATIVE_TOOLS = {"genomad", "checkv"}
 
 REQUIRED_EVIDENCE_COLUMNS = {
     "sample_id",
@@ -67,6 +66,9 @@ SUMMARY_COLUMNS = [
     "ct3_only_locus_skipped_count",
     "vicat_advisory_boundary_call_count",
     "vicat_only_locus_skipped_count",
+    "checkv_only_locus_skipped_count",
+    "checkv_vicat_supported_locus_count",
+    "vicat_support_min_overlap_fraction",
     "allow_ct3_only_refinement",
     "evidence_file_count",
 ]
@@ -108,6 +110,16 @@ def parse_args() -> argparse.Namespace:
             "Allow Cenote-Taker 3 boundaries to modify the FASTA without an "
             "overlapping geNomad or CheckV boundary. Disabled by default; CT3-only "
             "calls remain in the boundary audit while the parent stays unchanged."
+        ),
+    )
+    parser.add_argument(
+        "--vicat-support-min-overlap-fraction",
+        "--vicat_support_min_overlap_fraction",
+        type=float,
+        default=0.5,
+        help=(
+            "Minimum fraction of a viCAT viral-cluster span that must overlap a "
+            "CheckV region before viCAT can corroborate CheckV trimming [0.5]."
         ),
     )
     return parser.parse_args()
@@ -248,6 +260,31 @@ def intervals_overlap(left: BoundaryCall, right: BoundaryCall) -> bool:
     return left.start <= right.end and right.start <= left.end
 
 
+def overlap_fraction_of_support(
+    boundary: BoundaryCall, support: BoundaryCall
+) -> float:
+    overlap = max(0, min(boundary.end, support.end) - max(boundary.start, support.start) + 1)
+    return overlap / support.length
+
+
+def corroborating_tools(
+    locus: list[BoundaryCall],
+    selected: BoundaryCall | None,
+    vicat_support_min_overlap_fraction: float,
+) -> list[str]:
+    tools = {call.tool for call in locus if call.tool != "vicat"}
+    if selected is None:
+        tools.update(call.tool for call in locus if call.tool == "vicat")
+    elif any(
+        overlap_fraction_of_support(selected, call)
+        >= vicat_support_min_overlap_fraction
+        for call in locus
+        if call.tool == "vicat"
+    ):
+        tools.add("vicat")
+    return sorted(tools)
+
+
 def group_loci(calls: list[BoundaryCall]) -> list[list[BoundaryCall]]:
     """Group transitively overlapping boundary calls into independent loci."""
     remaining = sorted(calls, key=lambda call: (call.start, call.end, call.tool))
@@ -269,20 +306,10 @@ def group_loci(calls: list[BoundaryCall]) -> list[list[BoundaryCall]]:
     return loci
 
 
-def select_boundary(
-    locus: list[BoundaryCall], allow_ct3_only_refinement: bool
-) -> BoundaryCall | None:
-    tools = {call.tool for call in locus}
-    if tools == {"vicat"}:
-        return None
-    if not allow_ct3_only_refinement and not (tools & AUTHORITATIVE_TOOLS):
-        return None
-    priority = min(TOOL_PRIORITY[call.tool] for call in locus)
-    eligible = [call for call in locus if TOOL_PRIORITY[call.tool] == priority]
+def unique_call_for_tool(locus: list[BoundaryCall], tool: str) -> BoundaryCall:
+    eligible = [call for call in locus if call.tool == tool]
     if len(eligible) != 1:
-        details = ", ".join(
-            f"{call.tool}:{call.start}-{call.end}" for call in eligible
-        )
+        details = ", ".join(f"{call.tool}:{call.start}-{call.end}" for call in eligible)
         raise ValueError(
             "A single tool reported overlapping provirus calls for one locus; "
             f"manual disambiguation is required: {details}"
@@ -290,7 +317,36 @@ def select_boundary(
     return eligible[0]
 
 
+def select_boundary(
+    locus: list[BoundaryCall],
+    allow_ct3_only_refinement: bool,
+    vicat_support_min_overlap_fraction: float,
+) -> BoundaryCall | None:
+    tools = {call.tool for call in locus}
+    if "genomad" in tools:
+        return unique_call_for_tool(locus, "genomad")
+    if "checkv" in tools and "cenotetaker3" in tools:
+        return unique_call_for_tool(locus, "checkv")
+    if "cenotetaker3" in tools:
+        return (
+            unique_call_for_tool(locus, "cenotetaker3")
+            if allow_ct3_only_refinement else None
+        )
+    if "checkv" in tools and "vicat" in tools:
+        checkv = unique_call_for_tool(locus, "checkv")
+        if any(
+            overlap_fraction_of_support(checkv, call)
+            >= vicat_support_min_overlap_fraction
+            for call in locus
+            if call.tool == "vicat"
+        ):
+            return checkv
+    return None
+
+
 def run(args: argparse.Namespace) -> None:
+    if not 0.0 <= args.vicat_support_min_overlap_fraction <= 1.0:
+        raise ValueError("viCAT support overlap fraction must be between 0 and 1")
     fasta_records = load_fasta(args.candidate_fasta)
     calls = load_boundary_calls(args.evidence, args.sample_id, fasta_records)
     calls_by_parent: dict[str, list[BoundaryCall]] = defaultdict(list)
@@ -308,6 +364,8 @@ def run(args: argparse.Namespace) -> None:
     ct3_only_locus_skipped_count = 0
     vicat_advisory_boundary_call_count = sum(call.tool == "vicat" for call in calls)
     vicat_only_locus_skipped_count = 0
+    checkv_only_locus_skipped_count = 0
+    checkv_vicat_supported_locus_count = 0
 
     for parent_id, sequence in fasta_records.items():
         parent_calls = calls_by_parent.get(parent_id, [])
@@ -335,17 +393,33 @@ def run(args: argparse.Namespace) -> None:
             tuple[int, list[BoundaryCall], BoundaryCall, list[str], str]
         ] = []
         for locus_index, locus in enumerate(group_loci(parent_calls), start=1):
-            selected = select_boundary(locus, args.allow_ct3_only_refinement)
-            supporting_tools = sorted({call.tool for call in locus})
+            selected = select_boundary(
+                locus,
+                args.allow_ct3_only_refinement,
+                args.vicat_support_min_overlap_fraction,
+            )
+            locus_tools = sorted({call.tool for call in locus})
+            supporting_tools = corroborating_tools(
+                locus, selected, args.vicat_support_min_overlap_fraction
+            )
             distinct_boundaries = {(call.start, call.end) for call in locus}
-            if supporting_tools == ["cenotetaker3"]:
+            if locus_tools == ["cenotetaker3"]:
                 ct3_only_boundary_call_count += len(locus)
-            if supporting_tools == ["vicat"]:
+            if locus_tools == ["vicat"]:
                 boundary_status = "not_selected_vicat_advisory_only"
                 vicat_only_locus_skipped_count += 1
+            elif selected is None and locus_tools == ["checkv"]:
+                boundary_status = "not_selected_checkv_only_candidate"
+                checkv_only_locus_skipped_count += 1
+            elif selected is None and set(locus_tools) == {"checkv", "vicat"}:
+                boundary_status = "not_selected_vicat_overlap_below_threshold"
+                checkv_only_locus_skipped_count += 1
             elif selected is None:
                 boundary_status = "not_selected_ct3_only_default"
                 ct3_only_locus_skipped_count += 1
+            elif set(locus_tools) == {"checkv", "vicat"}:
+                boundary_status = "selected_checkv_with_vicat_support"
+                checkv_vicat_supported_locus_count += 1
             elif len(locus) == 1:
                 boundary_status = "selected_single_tool"
             elif len(distinct_boundaries) == 1:
@@ -398,6 +472,8 @@ def run(args: argparse.Namespace) -> None:
                     "boundary_status": (
                         "unchanged_vicat_advisory_only"
                         if supporting_tools == ["vicat"]
+                        else "unchanged_checkv_candidate_not_corroborated"
+                        if "checkv" in supporting_tools
                         else "unchanged_ct3_only_boundary_not_allowed"
                     ),
                 }
@@ -451,6 +527,9 @@ def run(args: argparse.Namespace) -> None:
                 "ct3_only_locus_skipped_count": ct3_only_locus_skipped_count,
                 "vicat_advisory_boundary_call_count": vicat_advisory_boundary_call_count,
                 "vicat_only_locus_skipped_count": vicat_only_locus_skipped_count,
+                "checkv_only_locus_skipped_count": checkv_only_locus_skipped_count,
+                "checkv_vicat_supported_locus_count": checkv_vicat_supported_locus_count,
+                "vicat_support_min_overlap_fraction": args.vicat_support_min_overlap_fraction,
                 "allow_ct3_only_refinement": str(
                     args.allow_ct3_only_refinement
                 ).lower(),

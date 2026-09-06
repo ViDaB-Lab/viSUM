@@ -192,14 +192,51 @@ class ViharmonyTests(unittest.TestCase):
             self.assertEqual(metadata[1]["provirus_coordinates"], "11-80")
             self.assertEqual(metadata[1]["strict_taxonomy_rank"], "family")
             self.assertIn("g__viharmony_sample_novel_genus_7_of_Chiyouviridae", metadata[1]["analysis_taxonomy"])
-            self.assertIn(">original-two|provirus_11_80", (directory / "sample.final.original_ids.fasta").read_text(encoding="utf-8"))
+            primary_fasta = (directory / "sample.final.original_ids.fasta").read_text(
+                encoding="utf-8"
+            )
+            self.assertNotIn(">original-one", primary_fasta)
+            self.assertIn(">original-two|provirus_11_80", primary_fasta)
+            review_fasta = (directory / "sample.review_candidates.fasta").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(">sample__c000001", review_fasta)
             self.assertTrue((directory / "sample.evidence_audit.tsv.gz").exists())
             with gzip.open(directory / "sample.evidence_audit.tsv.gz", "rt", encoding="utf-8", newline="") as handle:
                 audit = list(csv.DictReader(handle, delimiter="\t"))
             deep6 = next(row for row in audit if row["tool"] == "deep6")
             self.assertEqual(deep6["evidence_strength"], "qualified")
             manifest = json.loads((directory / "sample.harmonizer_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], "viharmony-0.3")
+            self.assertEqual(manifest["schema_version"], "viharmony-0.4")
+
+    def test_adjudication_separates_primary_review_and_nonviral_calls(self) -> None:
+        self.assertEqual(
+            run_viharmony.adjudicate_viral_decision(
+                "viral", "input_contig", {"genomad"}, set(), [], [], "viral_candidate"
+            ),
+            "retained_viral",
+        )
+        self.assertEqual(
+            run_viharmony.adjudicate_viral_decision(
+                "ambiguous", "input_contig", set(), {"vicat"}, ["checkv"], [],
+                "viral_candidate",
+            ),
+            "likely_nonviral",
+        )
+        self.assertEqual(
+            run_viharmony.adjudicate_viral_decision(
+                "ambiguous", "input_contig", {"genomad"}, set(), ["checkv"], [],
+                "viral_candidate",
+            ),
+            "ambiguous_review",
+        )
+        self.assertEqual(
+            run_viharmony.adjudicate_viral_decision(
+                "ambiguous", "provirus", set(), {"checkv"}, ["checkv"], [],
+                "viral_candidate",
+            ),
+            "retained_provirus",
+        )
 
     def test_vcontact3_groups_require_length_context_and_unique_rank(self) -> None:
         strict = {rank: "" for rank in run_viharmony.RANKS}

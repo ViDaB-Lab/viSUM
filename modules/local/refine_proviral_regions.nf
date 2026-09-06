@@ -14,7 +14,8 @@ process REFINE_PROVIRAL_REGIONS {
           path(discovery_summary),
           val(evidence_file_count),
           path(evidence_files),
-          val(allow_ct3_only_refinement)
+          val(allow_ct3_only_refinement),
+          val(vicat_provirus_min_overlap)
 
     output:
     tuple val(prefix),
@@ -40,6 +41,7 @@ process REFINE_PROVIRAL_REGIONS {
         --candidate-fasta "${candidate_fasta}" \
         --evidence ${evidenceArguments} \
         ${allowCt3OnlyArgument} \
+        --vicat-support-min-overlap-fraction "${vicat_provirus_min_overlap}" \
         --output-fasta "${prefix}.refined_candidates.fasta" \
         --output-map "${prefix}.provirus_region_map.tsv" \
         --output-audit "${prefix}.provirus_boundary_audit.tsv" \

@@ -245,7 +245,8 @@ COMMON ANALYSIS OPTIONS
   --gianthunter_min_length INT      GiantHunter minimum length [3000].
   --gianthunter_reject FLOAT        Minimum aligned-protein fraction [0.1].
   --gianthunter_query_cover INT     Minimum query coverage percent [40].
-  --allow_ct3_only_refinement BOOL  Permit uncorroborated CT3 trimming [false].
+  --allow_ct3_only_refinement BOOL  Permit CT3-only provirus trimming [true].
+  --vicat_provirus_min_overlap FLOAT  viCAT cluster overlap needed to corroborate CheckV [0.5].
   --vitap_include_low_confidence BOOL
                                     Retain VITAP low-confidence calls [false].
   --vcontact3_db_domain MODE        both, prokaryotes, or eukaryotes [both].
@@ -538,6 +539,10 @@ workflow {
         params.allow_ct3_only_refinement,
         '--allow_ct3_only_refinement'
     )
+    def vicatProvirusMinOverlap = params.vicat_provirus_min_overlap as double
+    if( vicatProvirusMinOverlap < 0.0 || vicatProvirusMinOverlap > 1.0 ) {
+        error "Invalid --vicat_provirus_min_overlap '${params.vicat_provirus_min_overlap}'. Use a value from 0 to 1."
+    }
     def harmonizerAudit = params.harmonizer_audit?.toString()?.trim()?.toLowerCase()
     if( !(harmonizerAudit in ['none', 'compact', 'full']) ) {
         error "Invalid --harmonizer_audit '${params.harmonizer_audit}'. Use none, compact, or full."
@@ -1618,7 +1623,8 @@ workflow {
                     joined[4],
                     0,
                     file("${projectDir}/assets/empty_discovery_evidence.tsv"),
-                    allowCt3OnlyRefinement
+                    allowCt3OnlyRefinement,
+                    vicatProvirusMinOverlap
                 )
             }
             tuple(
@@ -1629,7 +1635,8 @@ workflow {
                 joined[4],
                 evidenceFiles.size(),
                 evidenceFiles,
-                allowCt3OnlyRefinement
+                allowCt3OnlyRefinement,
+                vicatProvirusMinOverlap
             )
         }
 
@@ -1828,7 +1835,8 @@ workflow {
 
     VIHARMONY.out.results.view { prefix, normalizedFasta, originalFasta, metadata,
                                 reviewQueue, disposition, sequenceMap, manifest,
-                                databaseFasta, databaseMetadata ->
+                                databaseFasta, databaseMetadata, allCandidatesFasta,
+                                reviewCandidatesFasta ->
         "VIHARMONY sample=${prefix} fasta=${normalizedFasta.name} metadata=${metadata.name}"
     }
 }

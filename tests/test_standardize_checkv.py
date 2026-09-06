@@ -224,7 +224,10 @@ class StandardizeCheckVTests(unittest.TestCase):
             self.assertEqual(provirus["topology"], "Provirus")
             self.assertEqual(provirus["d__Domain"], "d__Viruses")
             self.assertEqual(provirus["evidence_strength"], "qualified")
-            self.assertEqual(provirus["strength_basis"], "checkv_provirus_boundary")
+            self.assertEqual(
+                provirus["strength_basis"],
+                "checkv_provirus_boundary_with_viral_genes",
+            )
 
             high_quality = next(
                 row for row in rows if row["sequence_id"] == "sample__c000002"
@@ -272,10 +275,65 @@ class StandardizeCheckVTests(unittest.TestCase):
             )
             self.assertEqual(evidence["evidence_strength"], "qualified")
             self.assertEqual(
-                evidence["strength_basis"], "checkv_determined_viral_quality"
+                evidence["strength_basis"],
+                "checkv_high_quality_viral_genes_without_confident_aai",
             )
             self.assertEqual(evidence["hmm_completeness_lower"], "92.0")
             self.assertEqual(evidence["hmm_hit_count"], "3")
+
+    def test_medium_quality_viral_genes_without_host_genes_is_qualified(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            paths = self.build_inputs(Path(temporary_directory))
+            quality_rows = read_tsv(paths["quality.tsv"])
+            row = next(
+                item for item in quality_rows if item["contig_id"] == "sample__c000002"
+            )
+            row["checkv_quality"] = "Medium-quality"
+            write_tsv(paths["quality.tsv"], list(quality_rows[0]), quality_rows)
+            completeness_rows = read_tsv(paths["completeness.tsv"])
+            detail = next(
+                item
+                for item in completeness_rows
+                if item["contig_id"] == "sample__c000002"
+            )
+            detail["aai_confidence"] = "low"
+            write_tsv(
+                paths["completeness.tsv"], list(completeness_rows[0]), completeness_rows
+            )
+
+            self.run_standardizer(paths)
+            evidence = next(
+                item
+                for item in read_tsv(paths["evidence.tsv"])
+                if item["sequence_id"] == "sample__c000002"
+            )
+            self.assertEqual(evidence["classification"], "virus")
+            self.assertEqual(evidence["evidence_strength"], "qualified")
+            self.assertEqual(
+                evidence["strength_basis"],
+                "checkv_medium_quality_viral_genes_without_host_genes",
+            )
+
+    def test_host_genes_without_viral_genes_is_cellular_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            paths = self.build_inputs(Path(temporary_directory))
+            quality_rows = read_tsv(paths["quality.tsv"])
+            row = next(
+                item for item in quality_rows if item["contig_id"] == "sample__c000002"
+            )
+            row["viral_genes"] = "0"
+            row["host_genes"] = "3"
+            write_tsv(paths["quality.tsv"], list(quality_rows[0]), quality_rows)
+
+            self.run_standardizer(paths)
+            evidence = next(
+                item
+                for item in read_tsv(paths["evidence.tsv"])
+                if item["sequence_id"] == "sample__c000002"
+            )
+            self.assertEqual(evidence["classification"], "cellular")
+            self.assertEqual(evidence["evidence_strength"], "qualified")
+            self.assertEqual(evidence["d__Domain"], "d__unclassified")
 
     def test_zero_candidates_writes_header_only_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

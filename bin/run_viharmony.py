@@ -40,7 +40,8 @@ TIER_SCORE = {"provisional": 1, "moderate": 2, "high": 3}
 
 METADATA_COLUMNS = [
     "original_contig_name", "normalized_name", "final_sequence_id", "record_type",
-    "provirus_coordinates", "original_length", "refined_length", "viral_decision",
+    "provirus_coordinates", "original_length", "refined_length", "discovery_status",
+    "viral_decision",
     "viral_confidence", "strong_tools", "qualified_tools", "cellular_conflict_tools",
     "plasmid_conflict_tools", "strict_taxonomy", "strict_taxonomy_rank",
     "analysis_taxonomy", "analysis_taxonomy_rank", "taxonomy_confidence",
@@ -54,6 +55,57 @@ METADATA_COLUMNS = [
 ]
 
 STRENGTH_ORDER = {"": 0, "weak": 1, "qualified": 2, "strong": 3}
+
+PRIMARY_VIRAL_DECISIONS = {"retained_viral", "retained_provirus"}
+
+
+def parse_optional_interval(value: str) -> tuple[int, int] | None:
+    coordinate = value.strip()
+    if not coordinate or coordinate.upper() == "NA" or coordinate.count("-") != 1:
+        return None
+    left, right = coordinate.split("-", 1)
+    try:
+        start, end = int(left), int(right)
+    except ValueError:
+        return None
+    return (start, end) if start >= 1 and end >= start else None
+
+
+def intervals_overlap(
+    left: tuple[int, int] | None, right: tuple[int, int] | None
+) -> bool:
+    return bool(
+        left and right and left[0] <= right[1] and right[0] <= left[1]
+    )
+
+
+def adjudicate_viral_decision(
+    discovery_status: str,
+    record_type: str,
+    strong_tools: set[str],
+    qualified_tools: set[str],
+    cellular_tools: list[str],
+    plasmid_tools: list[str],
+    sequence_interpretation: str,
+) -> str:
+    """Convert gathered evidence into a conservative final disposition."""
+    if record_type in {"provirus", "viral_region"}:
+        return "retained_provirus"
+    if sequence_interpretation == "likely_retroelement":
+        return "likely_retroelement"
+    if sequence_interpretation in {
+        "viral_retroelement_conflict", "ambiguous_mobile_element"
+    }:
+        return "ambiguous_review"
+
+    conflicts = bool(cellular_tools or plasmid_tools)
+    if conflicts:
+        if discovery_status == "ambiguous" and not strong_tools and len(qualified_tools) <= 1:
+            return "likely_nonviral"
+        return "ambiguous_review"
+    if strong_tools or qualified_tools:
+        return "retained_viral"
+    return "ambiguous_review"
 
 
 def summarize_tesorter(
@@ -560,12 +612,23 @@ def run(args: argparse.Namespace) -> None:
     for row in evidence_rows:
         exact = row.get("sequence_id", "").strip()
         parent = row.get("parent_sequence_id", "").strip() or exact
+        row_record_type = row.get("record_type", "").strip().lower()
+        row_interval = parse_optional_interval(row.get("coordinates", ""))
+        region_specific = row_record_type in {"provirus", "viral_region"} and row_interval
         for final_id, final_parent in final_to_parent.items():
             # Region-specific refinement calls must never leak into a sibling
             # region from the same parent. Parent-contig discovery evidence is
             # inherited by every refined child from that parent.
             if exact in final_to_parent:
                 applies = exact == final_id
+            elif region_specific:
+                applies = (
+                    parent == final_parent
+                    and intervals_overlap(
+                        row_interval,
+                        parse_optional_interval(regions[final_id].get("coordinates", "")),
+                    )
+                )
             else:
                 applies = parent == final_parent or exact == final_parent
             if applies:
@@ -621,12 +684,12 @@ def run(args: argparse.Namespace) -> None:
             effective_strength = row.get("evidence_strength", "").strip().lower()
             if tool == "deep6" and classification == "virus" and not effective_strength:
                 effective_strength = "qualified"
-            if tool in ORIGIN_TOOLS:
+            if tool in ORIGIN_TOOLS and effective_strength in {"qualified", "strong"}:
                 tools_by_class[classification].add(tool)
                 if classification == "virus":
                     if effective_strength == "strong":
                         strong_tools.add(tool)
-                    else:
+                    elif effective_strength == "qualified":
                         qualified_tools.add(tool)
 
         qualified_tools.difference_update(strong_tools)
@@ -662,6 +725,7 @@ def run(args: argparse.Namespace) -> None:
 
         coords = region["coordinates"].strip() or "NA"
         record_type = region["record_type"].strip()
+        discovery_status = gate[parent_id]["discovery_status"].strip()
         strict_taxonomy = taxonomy_string(strict)
         analysis_taxonomy = taxonomy_string(analysis)
         original_name = header["original_id"]
@@ -695,6 +759,15 @@ def run(args: argparse.Namespace) -> None:
             vicat_provirus_status = "potential_provirus"
         else:
             vicat_provirus_status = "none"
+        viral_decision = adjudicate_viral_decision(
+            discovery_status,
+            record_type,
+            strong_tools,
+            qualified_tools,
+            cellular,
+            plasmid,
+            tesorter_summary["sequence_interpretation"],
+        )
         metadata = {
             "original_contig_name": original_name,
             "normalized_name": parent_id,
@@ -703,11 +776,8 @@ def run(args: argparse.Namespace) -> None:
             "provirus_coordinates": coords,
             "original_length": region["original_length"],
             "refined_length": len(sequence),
-            "viral_decision": (
-                "retained_likely_retroelement"
-                if tesorter_summary["sequence_interpretation"] == "likely_retroelement"
-                else "retained_viral_candidate"
-            ),
+            "discovery_status": discovery_status,
+            "viral_decision": viral_decision,
             "viral_confidence": viral_confidence,
             "strong_tools": ",".join(sorted(strong_tools)) or "NA",
             "qualified_tools": ",".join(sorted(qualified_tools)) or "NA",
@@ -772,12 +842,14 @@ def run(args: argparse.Namespace) -> None:
         if reasons:
             review_rows.append({"final_sequence_id": final_id, "review_reasons": ",".join(reasons), **metadata})
 
-        normalized_fasta_rows.append((final_id, sequence))
+        if viral_decision in PRIMARY_VIRAL_DECISIONS:
+            normalized_fasta_rows.append((final_id, sequence))
         original_output = original_output_id(original_name, record_type, coords)
         if original_output in used_original_output_ids:
             original_output = f"{original_output}|visum_{parent_id}"
         used_original_output_ids.add(original_output)
-        original_fasta_rows.append((original_output, sequence))
+        if viral_decision in PRIMARY_VIRAL_DECISIONS:
+            original_fasta_rows.append((original_output, sequence))
         map_rows.append({
             "original_contig_name": original_name, "original_header": header["original_header"],
             "normalized_parent_id": parent_id, "final_sequence_id": final_id,
@@ -795,6 +867,8 @@ def run(args: argparse.Namespace) -> None:
         "map": Path(f"{prefix}.sequence_map.tsv"),
         "database_fasta": Path(f"{prefix}.database_candidates.fasta"),
         "database_tsv": Path(f"{prefix}.database_candidates.tsv"),
+        "all_candidates_fasta": Path(f"{prefix}.all_candidates.fasta"),
+        "review_candidates_fasta": Path(f"{prefix}.review_candidates.fasta"),
     }
     write_fasta(outputs["normalized_fasta"], normalized_fasta_rows)
     write_fasta(outputs["original_fasta"], original_fasta_rows)
@@ -802,11 +876,31 @@ def run(args: argparse.Namespace) -> None:
     write_tsv(outputs["review"], ["review_reasons", *METADATA_COLUMNS], review_rows)
     write_tsv(outputs["map"], ["original_contig_name", "original_header", "normalized_parent_id", "final_sequence_id", "final_original_id", "record_type", "provirus_coordinates"], map_rows)
     write_fasta(outputs["database_fasta"], normalized_fasta_rows)
-    write_tsv(outputs["database_tsv"], METADATA_COLUMNS, metadata_rows)
+    primary_ids = {identifier for identifier, _ in normalized_fasta_rows}
+    primary_metadata = [
+        row for row in metadata_rows if row["final_sequence_id"] in primary_ids
+    ]
+    write_tsv(outputs["database_tsv"], METADATA_COLUMNS, primary_metadata)
+    write_fasta(outputs["all_candidates_fasta"], list(refined.items()))
+    review_ids = {str(row["final_sequence_id"]) for row in review_rows}
+    write_fasta(
+        outputs["review_candidates_fasta"],
+        [
+            (identifier, sequence)
+            for identifier, sequence in refined.items()
+            if identifier in review_ids
+        ],
+    )
 
     final_by_parent: dict[str, list[str]] = defaultdict(list)
+    decision_by_final = {
+        str(row["final_sequence_id"]): str(row["viral_decision"])
+        for row in metadata_rows
+    }
     for row in map_rows:
-        final_by_parent[str(row["normalized_parent_id"])].append(str(row["final_sequence_id"]))
+        final_id = str(row["final_sequence_id"])
+        if decision_by_final.get(final_id) in PRIMARY_VIRAL_DECISIONS:
+            final_by_parent[str(row["normalized_parent_id"])].append(final_id)
     disposition_rows = []
     for sequence_id in normalized:
         gate_row = gate[sequence_id]
@@ -814,7 +908,17 @@ def run(args: argparse.Namespace) -> None:
         if final_ids:
             disposition = "retained_as_provirus" if any("|viral_region_" in item for item in final_ids) else "retained_contig"
         elif gate_row["advance_to_refinement"].strip().lower() == "true":
-            disposition = "rejected_after_refinement"
+            candidate_decisions = [
+                decision_by_final.get(str(row["final_sequence_id"]), "")
+                for row in map_rows
+                if str(row["normalized_parent_id"]) == sequence_id
+            ]
+            if "likely_nonviral" in candidate_decisions:
+                disposition = "likely_nonviral_after_harmony"
+            elif "likely_retroelement" in candidate_decisions:
+                disposition = "likely_retroelement_after_harmony"
+            else:
+                disposition = "ambiguous_review_after_harmony"
         elif gate_row["discovery_status"] == "likely_nonviral":
             disposition = "discovery_noncandidate_conflicting_origin"
         else:
@@ -841,7 +945,7 @@ def run(args: argparse.Namespace) -> None:
 
     manifest_path = Path(f"{prefix}.harmonizer_manifest.json")
     manifest = {
-        "schema_version": "viharmony-0.3",
+        "schema_version": "viharmony-0.4",
         "sample_id": args.sample_id,
         "input_type": args.input_type,
         "ictv_msl": args.ictv_msl.name,
@@ -854,13 +958,17 @@ def run(args: argparse.Namespace) -> None:
             "vcontact3_min_taxonomy_length": minimum_vcontact3_length,
             "vcontact3_project_groups": "ancestry-compatible, unambiguous groups only",
             "vicat_scope": "refined-region evidence supersedes parent-discovery evidence",
+            "final_output": "primary viral/provirus calls only; all and review FASTAs preserve auditability",
         },
         "outputs": {},
     }
     for label, path in outputs.items():
         manifest["outputs"][label] = {"file": path.name, "sha256": sha256(path)}
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"viHARMONY sample={args.sample_id} retained={len(metadata_rows)} review={len(review_rows)}")
+    print(
+        f"viHARMONY sample={args.sample_id} candidates={len(metadata_rows)} "
+        f"retained={len(normalized_fasta_rows)} review={len(review_rows)}"
+    )
 
 
 def main() -> None:
