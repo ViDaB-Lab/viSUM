@@ -27,6 +27,7 @@ ORIGIN_TOOLS = {
     "genomad", "virsorter2", "cenotetaker3", "deep6", "deepmicroclass2",
     "virbot", "gianthunter", "vicat", "checkv",
 }
+GENERIC_ORIGIN_CLASSIFIERS = {"deep6", "deepmicroclass2"}
 TAXONOMY_TOOLS = {
     "genomad", "cenotetaker3", "virbot", "gianthunter", "vicat", "vitap", "vcontact3",
 }
@@ -44,7 +45,7 @@ METADATA_COLUMNS = [
     "viral_decision",
     "viral_confidence", "strong_tools", "qualified_tools", "cellular_conflict_tools",
     "parent_cellular_context_tools", "parent_plasmid_context_tools",
-    "checkv_complete_viral_contig_support",
+    "checkv_complete_viral_contig_support", "generic_cellular_conflict_overridden",
     "plasmid_conflict_tools", "strict_taxonomy", "strict_taxonomy_rank",
     "analysis_taxonomy", "analysis_taxonomy_rank", "taxonomy_confidence",
     "taxonomy_supporting_tools", "taxonomy_conflict", "vcontact3_groups",
@@ -137,8 +138,16 @@ def adjudicate_viral_decision(
     }:
         return "ambiguous_review"
 
+    generic_cellular_override = (
+        len(strong_tools) >= 2
+        and bool(cellular_tools)
+        and set(cellular_tools).issubset(GENERIC_ORIGIN_CLASSIFIERS)
+        and not plasmid_tools
+    )
     conflicts = bool(cellular_tools or plasmid_tools)
     if conflicts:
+        if generic_cellular_override:
+            return "retained_provirus" if refined_region else "retained_viral"
         if discovery_status == "ambiguous" and not strong_tools and len(qualified_tools) <= 1:
             return "likely_nonviral"
         return "ambiguous_review"
@@ -905,6 +914,13 @@ def run(args: argparse.Namespace) -> None:
             plasmid,
             tesorter_summary["sequence_interpretation"],
         )
+        generic_cellular_conflict_overridden = (
+            viral_decision in PRIMARY_VIRAL_DECISIONS
+            and len(strong_tools) >= 2
+            and bool(cellular)
+            and set(cellular).issubset(GENERIC_ORIGIN_CLASSIFIERS)
+            and not plasmid
+        )
         metadata = {
             "original_contig_name": original_name,
             "normalized_name": parent_id,
@@ -927,6 +943,9 @@ def run(args: argparse.Namespace) -> None:
             ),
             "checkv_complete_viral_contig_support": str(
                 checkv_complete_support
+            ).lower(),
+            "generic_cellular_conflict_overridden": str(
+                generic_cellular_conflict_overridden
             ).lower(),
             "plasmid_conflict_tools": ",".join(plasmid) or "NA",
             "strict_taxonomy": strict_taxonomy,
@@ -973,7 +992,10 @@ def run(args: argparse.Namespace) -> None:
             reasons.append("provirus_boundary_vicat_discordance")
             metadata["vicat_provirus_status"] = "boundary_vicat_discordance"
         if viral_confidence == "provisional": reasons.append("single_qualified_viral_tool")
-        if cellular: reasons.append("cellular_conflict")
+        if generic_cellular_conflict_overridden:
+            reasons.append("generic_cellular_conflict_overridden")
+        elif cellular:
+            reasons.append("cellular_conflict")
         if plasmid: reasons.append("plasmid_conflict")
         if metadata["taxonomy_conflict"] == "true": reasons.append("taxonomy_conflict")
         if "ambiguous_vcontact3_groups" in group_statuses: reasons.append("vcontact3_group_ambiguity")
@@ -1123,7 +1145,7 @@ def run(args: argparse.Namespace) -> None:
 
     manifest_path = Path(f"{prefix}.harmonizer_manifest.json")
     manifest = {
-        "schema_version": "viharmony-0.7",
+        "schema_version": "viharmony-0.8",
         "sample_id": args.sample_id,
         "input_type": args.input_type,
         "ictv_msl": args.ictv_msl.name,
@@ -1133,6 +1155,7 @@ def run(args: argparse.Namespace) -> None:
         "policy": {
             "viral_confidence": "high=2+ strong; supported=1 strong or 2+ qualified; provisional=1 qualified",
             "checkv_complete_contig": "complete/high-quality, provirus=No, viral genes present, and zero host genes is strong intact-contig viral support",
+            "generic_cellular_override": "2+ strong independent viral tools override Deep6/DeepMicroClass2-only cellular conflict; the conflict remains annotated",
             "taxonomy": "configured-ICTV-MSL-validated method-aware rank voting",
             "vcontact3_min_taxonomy_length": minimum_vcontact3_length,
             "vcontact3_project_groups": "ancestry-compatible, unambiguous groups only",

@@ -266,6 +266,8 @@ viCAT OPTIONS
   --vicat_cluster_min_viral_loci auto|INT
                                     Clean-sequence threshold [auto: DNA=2, RNA=1].
                                     Cellular context always requires >=2 loci.
+  --vicat_dna_single_locus_rescue off|strict
+                                    Guarded clean single-locus DNA discovery [strict].
   --vicat_cluster_max_neutral_gap INT
                                     Ambiguous/uninformative loci bridged in a cluster [1].
   --vicat_orf_taxonomy_support FLOAT
@@ -1210,6 +1212,10 @@ workflow {
         def vicatClusterMaxNeutralGap = params.vicat_cluster_max_neutral_gap as Integer
         if( vicatClusterMaxNeutralGap < 0 ) {
             error '--vicat_cluster_max_neutral_gap must be zero or greater.'
+        }
+        def vicatDnaSingleLocusRescue = params.vicat_dna_single_locus_rescue.toString().trim()
+        if( !(vicatDnaSingleLocusRescue in ['off', 'strict']) ) {
+            error "--vicat_dna_single_locus_rescue must be 'off' or 'strict'."
         }
         def vicatMinimumQueryCover = params.vicat_min_query_cover as Integer
         if( vicatMinimumQueryCover < 0 || vicatMinimumQueryCover > 100 ) {

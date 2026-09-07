@@ -247,6 +247,7 @@ class ViharmonyTests(unittest.TestCase):
                 ("sample__c000001", "genomad", "strong"),
                 ("sample__c000001", "virsorter2", "strong"),
                 ("sample__c000001", "deep6", ""),
+                ("sample__c000001", "deepmicroclass2", "qualified"),
                 ("sample__c000002", "genomad", "qualified"),
                 ("sample__c000002", "deepmicroclass2", "qualified"),
                 ("sample__c000002|viral_region_11_80", "vitap", ""),
@@ -294,6 +295,9 @@ class ViharmonyTests(unittest.TestCase):
             metadata = read_tsv(directory / "sample.final_metadata.tsv")
             self.assertEqual(len(metadata), 2)
             self.assertEqual(metadata[0]["viral_confidence"], "high")
+            self.assertEqual(metadata[0]["viral_decision"], "retained_viral")
+            self.assertEqual(metadata[0]["cellular_conflict_tools"], "deepmicroclass2")
+            self.assertEqual(metadata[0]["generic_cellular_conflict_overridden"], "true")
             self.assertEqual(metadata[0]["sequence_interpretation"], "viral_with_mobile_element_features")
             self.assertEqual(metadata[0]["tesorter_status"], "mobile_element_annotation_overridden_by_high_viral_consensus")
             self.assertEqual(metadata[0]["strict_taxonomy_rank"], "family")
@@ -340,7 +344,7 @@ class ViharmonyTests(unittest.TestCase):
                 parent_cellular["evidence_application"], "parent_context_only"
             )
             manifest = json.loads((directory / "sample.harmonizer_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], "viharmony-0.7")
+            self.assertEqual(manifest["schema_version"], "viharmony-0.8")
             self.assertIn(
                 "parent-only cellular/plasmid calls are retained as context",
                 manifest["policy"]["provirus_adjudication"],
@@ -394,6 +398,27 @@ class ViharmonyTests(unittest.TestCase):
                 "likely_retroelement",
             ),
             "likely_retroelement",
+        )
+        self.assertEqual(
+            run_viharmony.adjudicate_viral_decision(
+                "ambiguous", "input_contig", {"genomad", "virsorter2"}, set(),
+                ["deepmicroclass2"], [], "viral_candidate",
+            ),
+            "retained_viral",
+        )
+        self.assertEqual(
+            run_viharmony.adjudicate_viral_decision(
+                "ambiguous", "input_contig", {"genomad", "virsorter2"}, set(),
+                ["deepmicroclass2", "checkv"], [], "viral_candidate",
+            ),
+            "ambiguous_review",
+        )
+        self.assertEqual(
+            run_viharmony.adjudicate_viral_decision(
+                "ambiguous", "input_contig", {"genomad", "virsorter2"}, set(),
+                ["deepmicroclass2"], ["genomad"], "viral_candidate",
+            ),
+            "ambiguous_review",
         )
 
     def test_vcontact3_groups_require_length_context_and_unique_rank(self) -> None:

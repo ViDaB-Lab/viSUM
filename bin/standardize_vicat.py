@@ -16,6 +16,14 @@ from evidence_schema import CORE_EVIDENCE_COLUMNS, TAXONOMY_COLUMNS, unclassifie
 
 
 RANK_NAMES = ("domain", "realm", "kingdom", "phylum", "class", "order", "family", "genus", "species")
+
+# A single DNA ORF is allowed to enter discovery only when the viral alignment
+# is both extensive and decisively better than any nonviral competitor. These
+# values are deliberately stricter than the ordinary multi-locus filters.
+STRICT_SINGLE_LOCUS_MIN_BITSCORE = 100.0
+STRICT_SINGLE_LOCUS_MIN_QUERY_COVERAGE = 70.0
+STRICT_SINGLE_LOCUS_MIN_SUBJECT_COVERAGE = 70.0
+STRICT_SINGLE_LOCUS_MIN_COMPETITIVE_MARGIN = 0.30
 EXTRA_COLUMNS = [
     "orf_loci", "hit_loci", "hit_locus_fraction", "orf_callers",
     "best_reference_id", "best_bitscore", "best_evalue", "best_identity",
@@ -102,6 +110,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--competitive-min-margin", type=float, default=0.05)
     parser.add_argument("--cluster-min-viral-loci", type=int, default=2)
     parser.add_argument("--cluster-max-neutral-gap", type=int, default=1)
+    parser.add_argument(
+        "--dna-single-locus-rescue",
+        choices=("off", "strict"),
+        default="off",
+    )
     parser.add_argument("--output-loci", required=True, type=Path)
     parser.add_argument("--output-clusters", type=Path)
     parser.add_argument("--output-context", type=Path)
@@ -527,6 +540,24 @@ def classify_locus(
     }
 
 
+def qualifies_strict_single_locus_rescue(entry: dict) -> bool:
+    """Return whether one viral-supported DNA locus merits guarded discovery."""
+    row = entry["row"]
+    try:
+        bitscore = float(row.get("best_viral_bitscore", ""))
+        query_coverage = float(row.get("best_query_coverage", ""))
+        subject_coverage = float(row.get("best_subject_coverage", ""))
+        margin = float(row.get("competitive_score_margin", ""))
+    except (TypeError, ValueError):
+        return False
+    return (
+        bitscore >= STRICT_SINGLE_LOCUS_MIN_BITSCORE
+        and query_coverage >= STRICT_SINGLE_LOCUS_MIN_QUERY_COVERAGE
+        and subject_coverage >= STRICT_SINGLE_LOCUS_MIN_SUBJECT_COVERAGE
+        and margin >= STRICT_SINGLE_LOCUS_MIN_COMPETITIVE_MARGIN
+    )
+
+
 def viral_clusters(entries: list[dict], minimum_loci: int, maximum_neutral_gap: int) -> list[list[dict]]:
     """Return viral-locus clusters; cellular-supported loci always break a cluster."""
     clusters: list[list[dict]] = []
@@ -911,10 +942,25 @@ def main() -> None:
         else:
             dominant_nonviral_class = ""
 
+        strict_single_locus_rescue = (
+            args.input_type == "dna"
+            and args.dna_single_locus_rescue == "strict"
+            and viral_count == 1
+            and cellular_count == 0
+            and qualifies_strict_single_locus_rescue(viral_entries[0])
+        )
+
         if viral_count >= args.cluster_min_viral_loci and cellular_count == 0:
             pattern = "predominantly_viral"
             classification = "virus"
             decision_reason = "viral_locus_threshold_met_without_cellular_supported_loci"
+        elif strict_single_locus_rescue:
+            pattern = "single_locus_viral_rescue"
+            classification = "virus"
+            decision_reason = (
+                "strict_single_locus_alignment_thresholds_met_without_"
+                "vicat_cellular_supported_loci"
+            )
         elif embedded_clusters and cellular_count:
             pattern = (
                 "localized_viral_cluster"
@@ -988,7 +1034,11 @@ def main() -> None:
             })
             continue
 
-        taxonomy_entries = viral_entries if pattern == "predominantly_viral" else []
+        taxonomy_entries = (
+            viral_entries
+            if pattern in {"predominantly_viral", "single_locus_viral_rescue"}
+            else []
+        )
         taxonomy_result = aggregate_taxonomy(
             taxonomy_entries, args.contig_taxonomy_support
         ) if taxonomy_entries else {
@@ -1122,9 +1172,13 @@ def main() -> None:
                 "n_hallmarks": "",
                 "evidence_strength": "qualified",
                 "strength_basis": (
-                    "vicat_viral_protein_homology"
-                    if not competitive_mode
-                    else f"vicat_competitive_{pattern}"
+                    "vicat_strict_single_locus_rescue"
+                    if pattern == "single_locus_viral_rescue"
+                    else (
+                        "vicat_viral_protein_homology"
+                        if not competitive_mode
+                        else f"vicat_competitive_{pattern}"
+                    )
                 ),
                 **taxonomy_result["taxonomy"],
                 "orf_loci": total_loci,

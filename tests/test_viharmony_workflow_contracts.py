@@ -38,7 +38,7 @@ class ViharmonyWorkflowContractTests(unittest.TestCase):
         self.assertIn("--audit-mode", module)
         self.assertIn("--vcontact3-min-taxonomy-length", module)
         self.assertIn('path("${prefix}.*_audit.tsv.gz"),\n          optional: true', module)
-        self.assertIn("viHARMONY decision policy v0.6", module)
+        self.assertIn("viHARMONY decision policy v0.8", module)
 
     def test_config_uses_one_canonical_msl_parameter(self) -> None:
         config = (ROOT / "visum.config").read_text(encoding="utf-8")

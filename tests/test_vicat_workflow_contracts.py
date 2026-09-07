@@ -119,6 +119,19 @@ def test_vicat_uses_separate_orf_and_contig_taxonomy_thresholds() -> None:
     assert "vicat_taxonomy_support" not in workflow
 
 
+def test_vicat_guarded_dna_single_locus_rescue_is_wired_through_workflow() -> None:
+    module = (ROOT / "modules" / "local" / "standardize_vicat.nf").read_text(
+        encoding="utf-8"
+    )
+    config = (ROOT / "visum.config").read_text(encoding="utf-8")
+    workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+
+    assert 'vicat_dna_single_locus_rescue = \'strict\'' in config
+    assert '--dna-single-locus-rescue "${params.vicat_dna_single_locus_rescue}"' in module
+    assert "--vicat_dna_single_locus_rescue off|strict" in workflow
+    assert "vicatDnaSingleLocusRescue in ['off', 'strict']" in workflow
+
+
 def test_legacy_combined_database_builder_is_not_exposed_by_runtime_config() -> None:
     config = (ROOT / "visum.config").read_text(encoding="utf-8")
     workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")

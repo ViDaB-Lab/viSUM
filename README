@@ -44,12 +44,27 @@ An isolated viral-supported locus in cellular context is treated as cellular,
 not as an extracted viral candidate. A spatial cluster of at least
 `--vicat_cluster_min_viral_loci` viral-supported loci can flag a potential
 provirus and pass the parent contig through the discovery gate for refinement.
+For a DNA contig without viCAT cellular-supported loci, the default
+`--vicat_dna_single_locus_rescue strict` preset also permits one viral locus to
+enter discovery when its bitscore is at least 100, query and subject coverage
+are both at least 70%, and its normalized viral-versus-nonviral bitscore margin
+is at least 0.30. This evidence remains qualified rather than strong: it cannot
+initiate provirus trimming and requires independent viral support before
+viHARMONY places the sequence in the primary viral FASTA. Set the preset to
+`off` to retain the ordinary two-locus DNA minimum without this rescue.
 Only `CELLULAR_CHROMOSOME` loci count as chromosome-flank support;
 `CELLULAR_UNPLACED` remains valid evidence against a viral ORF but cannot be
 used as a chromosome flank. viCAT cluster coordinates are advisory during
 provirus refinement: they are recorded and can corroborate geNomad or CheckV,
 but a viCAT-only boundary never trims a contig. Taxonomy for a refined provirus
 is recalculated from viral-supported ORFs contained within the selected region.
+
+In viHARMONY, a cellular prediction from Deep6 and/or DeepMicroClass2 remains a
+recorded conflict. It may be overridden only when at least two independent
+tools provide strong viral-origin evidence and neither a plasmid call nor
+another cellular-origin tool conflicts. This narrow exception prevents a
+generic classifier from vetoing strong multi-tool viral consensus without
+hiding the disagreement from final metadata and review outputs.
 
 CheckV database setup
 =====================

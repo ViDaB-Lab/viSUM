@@ -285,13 +285,14 @@ def test_conflicted_references_remain_viral_hits_and_abstain_below_safe_rank(tmp
     assert evidence_row["taxonomy_supporting_loci"] == "1"
 
 
-def test_competitive_loci_detect_localized_provirus_and_suppress_isolated_hit(tmp_path: Path) -> None:
+def test_competitive_loci_detect_provirus_and_guarded_single_locus_rescue(tmp_path: Path) -> None:
     orf_map = tmp_path / "orfs.tsv"
     orf_rows = []
     for contig, starts in {
         "sample_c000001": [1, 301, 601, 901],
         "sample_c000002": [1, 301, 601, 901],
         "sample_c000003": [1],
+        "sample_c000004": [1],
     }.items():
         for index, start in enumerate(starts, start=1):
             orf_rows.append([
@@ -306,7 +307,10 @@ def test_competitive_loci_detect_localized_provirus_and_suppress_isolated_hit(tm
     header_map = tmp_path / "headers.tsv"
     write_tsv(
         header_map, ["sequence_id", "length"],
-        [["sample_c000001", 1200], ["sample_c000002", 1200], ["sample_c000003", 300]],
+        [
+            ["sample_c000001", 1200], ["sample_c000002", 1200],
+            ["sample_c000003", 300], ["sample_c000004", 300],
+        ],
     )
     diamond = tmp_path / "diamond.tsv"
     columns = ["qseqid", "sseqid", "pident", "length", "qlen", "slen", "qstart", "qend", "sstart", "send", "evalue", "bitscore", "qcovhsp", "scovhsp"]
@@ -325,6 +329,7 @@ def test_competitive_loci_detect_localized_provirus_and_suppress_isolated_hit(tm
     add("sample_c000002_orf3", "VIRAL|repA", 120)
     add("sample_c000002_orf3", "CELLULAR|cellA", 80)
     add("sample_c000003_orf1", "VIRAL|repA", 120)
+    add("sample_c000004_orf1", "VIRAL|repA", 90)
     write_tsv(diamond, columns, hits)
     lookup, manifest = tmp_path / "lookup.parquet", tmp_path / "manifest.parquet"
     make_lookup(lookup)
@@ -342,6 +347,7 @@ def test_competitive_loci_detect_localized_provirus_and_suppress_isolated_hit(tm
         "--orf-taxonomy-support", "0.60", "--contig-taxonomy-support", "0.60",
         "--locus-overlap", "0.80", "--competitive-min-margin", "0.05",
         "--cluster-min-viral-loci", "2", "--cluster-max-neutral-gap", "1",
+        "--dna-single-locus-rescue", "strict",
         "--output-loci", str(loci), "--output-clusters", str(clusters),
         "--output-context", str(context),
         "--output-audit", str(audit),
@@ -363,10 +369,15 @@ def test_competitive_loci_detect_localized_provirus_and_suppress_isolated_hit(tm
     assert len(cluster_rows) == 1
     assert cluster_rows[0]["flank_status"] == "both_sides"
     assert cluster_rows[0]["classification_rank"] == "species"
+    assert rows["sample_c000003"]["classification"] == "virus"
+    assert rows["sample_c000003"]["origin_pattern"] == "single_locus_viral_rescue"
+    assert rows["sample_c000003"]["evidence_strength"] == "qualified"
+    assert rows["sample_c000003"]["strength_basis"] == "vicat_strict_single_locus_rescue"
+    assert rows["sample_c000003"]["potential_provirus"] == "false"
     with context.open(encoding="utf-8", newline="") as handle:
         context_rows = list(csv.DictReader(handle, delimiter="\t"))
     assert len(context_rows) == 1
-    assert context_rows[0]["sequence_id"] == "sample_c000003"
+    assert context_rows[0]["sequence_id"] == "sample_c000004"
     assert context_rows[0]["tool"] == "vicat_context"
     assert context_rows[0]["evidence_strength"] == "weak"
 
@@ -434,6 +445,7 @@ def test_competitive_loci_detect_localized_provirus_and_suppress_isolated_hit(tm
         "--orf-taxonomy-support", "0.60", "--contig-taxonomy-support", "0.60",
         "--locus-overlap", "0.80", "--competitive-min-margin", "0.05",
         "--cluster-min-viral-loci", "2", "--cluster-max-neutral-gap", "1",
+        "--dna-single-locus-rescue", "strict",
         "--output-loci", str(prepared_outputs["loci"]),
         "--output-clusters", str(prepared_outputs["clusters"]),
         "--output-context", str(prepared_outputs["context"]),

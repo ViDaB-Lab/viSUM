@@ -27,8 +27,8 @@ process STANDARDIZE_VICAT {
     def effectiveMinViralLoci = configuredMinViralLoci.equalsIgnoreCase('auto') ?
         (type == 'rna' ? 1 : 2) : configuredMinViralLoci.toInteger()
     """
-    # viCAT evidence policy v2: type-aware clean-locus threshold with a
-    # two-locus minimum whenever cellular context is present.
+    # viCAT evidence policy v3: type-aware clean-locus threshold, guarded DNA
+    # single-locus rescue, and a two-locus minimum in cellular context.
     set -euo pipefail
 
     python "${projectDir}/bin/standardize_vicat.py" \
@@ -45,6 +45,7 @@ process STANDARDIZE_VICAT {
         --competitive-min-margin "${params.vicat_competitive_min_margin}" \
         --cluster-min-viral-loci "${effectiveMinViralLoci}" \
         --cluster-max-neutral-gap "${params.vicat_cluster_max_neutral_gap}" \
+        --dna-single-locus-rescue "${params.vicat_dna_single_locus_rescue}" \
         --output-loci "${prefix}.vicat_orf_evidence.tsv" \
         --output-clusters "${prefix}.vicat_cluster_evidence.tsv" \
         --output-context "${prefix}.vicat_context.tsv" \
