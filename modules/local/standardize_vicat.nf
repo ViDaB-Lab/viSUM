@@ -13,6 +13,7 @@ process STANDARDIZE_VICAT {
     input:
     tuple val(prefix), val(type), path(orf_map), path(header_map),
           path(prepared_hits), path(prepared_metadata)
+    path standardizer_script
 
     output:
     tuple val(prefix), val('vicat'), path("${prefix}.vicat_evidence.tsv"), emit: evidence
@@ -31,7 +32,7 @@ process STANDARDIZE_VICAT {
     # single-locus rescue, and a two-locus minimum in cellular context.
     set -euo pipefail
 
-    python "${projectDir}/bin/standardize_vicat.py" \
+    python "${standardizer_script}" \
         --sample-id "${prefix}" \
         --input-type "${type}" \
         --orf-map "${orf_map}" \

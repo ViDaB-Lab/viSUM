@@ -91,7 +91,10 @@ def test_vicat_hit_preparation_is_cached_before_margin_classification() -> None:
     assert ".collect()" in workflow
     assert "PREPARE_VICAT_REFERENCE_SUBSET.out.subset.first()" in workflow
     assert "PREPARE_VICAT_HITS(" in workflow
-    assert "STANDARDIZE_VICAT(PREPARE_VICAT_HITS.out.results)" in workflow
+    assert "ch_vicat_standardizer_script = Channel.value(" in workflow
+    assert "PREPARE_VICAT_HITS.out.results,\n            ch_vicat_standardizer_script" in workflow
+    assert "path standardizer_script" in standardizer
+    assert 'python "${standardizer_script}"' in standardizer
     assert "vicat_competitive_min_margin" not in subset_module
     assert "vicat_competitive_min_margin" not in preparation
     assert "--prepared-hits" in standardizer

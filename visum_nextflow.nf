@@ -1384,7 +1384,16 @@ workflow {
                 "VICAT_HITS_PREPARED sample=${prefix} hits=${preparedHits.name}"
         }
 
-        STANDARDIZE_VICAT(PREPARE_VICAT_HITS.out.results)
+        // Treat the policy implementation as a task input. This makes a
+        // decision-rule edit invalidate STANDARDIZE_VICAT under `-resume`
+        // while preserving the expensive DIAMOND and hit-preparation cache.
+        ch_vicat_standardizer_script = Channel.value(
+            file("${projectDir}/bin/standardize_vicat.py")
+        )
+        STANDARDIZE_VICAT(
+            PREPARE_VICAT_HITS.out.results,
+            ch_vicat_standardizer_script
+        )
 
         viewChannel(showChannelMessages, STANDARDIZE_VICAT.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
