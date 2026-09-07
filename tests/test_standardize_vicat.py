@@ -8,6 +8,9 @@ import duckdb
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "bin"))
+import standardize_vicat
+
 TAXONOMY = [
     "d__Domain", "r__Realm", "k__Kingdom", "p__Phylum", "c__Class",
     "o__Order", "f__Family", "g__Genus", "s__Species",
@@ -283,6 +286,19 @@ def test_conflicted_references_remain_viral_hits_and_abstain_below_safe_rank(tmp
     assert evidence_row["f__Family"] == "f__A"
     assert evidence_row["taxonomy_eligible_loci"] == "1"
     assert evidence_row["taxonomy_supporting_loci"] == "1"
+
+
+def test_strict_single_locus_rescue_requires_sixty_percent_competitive_margin() -> None:
+    row = {
+        "best_viral_bitscore": "200",
+        "best_query_coverage": "70",
+        "best_subject_coverage": "70",
+        "competitive_score_margin": "0.60",
+    }
+    assert standardize_vicat.qualifies_strict_single_locus_rescue({"row": row})
+
+    row["competitive_score_margin"] = "0.599999"
+    assert not standardize_vicat.qualifies_strict_single_locus_rescue({"row": row})
 
 
 def test_competitive_loci_detect_provirus_and_guarded_single_locus_rescue(tmp_path: Path) -> None:

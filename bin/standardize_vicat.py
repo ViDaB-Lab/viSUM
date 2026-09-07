@@ -23,7 +23,7 @@ RANK_NAMES = ("domain", "realm", "kingdom", "phylum", "class", "order", "family"
 STRICT_SINGLE_LOCUS_MIN_BITSCORE = 100.0
 STRICT_SINGLE_LOCUS_MIN_QUERY_COVERAGE = 70.0
 STRICT_SINGLE_LOCUS_MIN_SUBJECT_COVERAGE = 70.0
-STRICT_SINGLE_LOCUS_MIN_COMPETITIVE_MARGIN = 0.30
+STRICT_SINGLE_LOCUS_MIN_COMPETITIVE_MARGIN = 0.60
 EXTRA_COLUMNS = [
     "orf_loci", "hit_loci", "hit_locus_fraction", "orf_callers",
     "best_reference_id", "best_bitscore", "best_evalue", "best_identity",

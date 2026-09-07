@@ -48,7 +48,7 @@ For a DNA contig without viCAT cellular-supported loci, the default
 `--vicat_dna_single_locus_rescue strict` preset also permits one viral locus to
 enter discovery when its bitscore is at least 100, query and subject coverage
 are both at least 70%, and its normalized viral-versus-nonviral bitscore margin
-is at least 0.30. This evidence remains qualified rather than strong: it cannot
+is at least 0.60. This evidence remains qualified rather than strong: it cannot
 initiate provirus trimming and requires independent viral support before
 viHARMONY places the sequence in the primary viral FASTA. Set the preset to
 `off` to retain the ordinary two-locus DNA minimum without this rescue.
