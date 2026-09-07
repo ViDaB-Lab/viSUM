@@ -55,6 +55,9 @@ METADATA_COLUMNS = [
     "vicat_origin_pattern", "vicat_provirus_status", "vicat_evidence_scope",
     "vicat_viral_supported_loci", "vicat_cellular_supported_loci",
     "vicat_nonviral_supported_classes", "vicat_dominant_nonviral_class",
+    "provirus_boundary_source", "provirus_boundary_status",
+    "provirus_boundary_supporting_tools", "provirus_retention_basis",
+    "viral_entity_interpretation",
 ]
 
 STRENGTH_ORDER = {"": 0, "weak": 1, "qualified": 2, "strong": 3}
@@ -148,6 +151,15 @@ def adjudicate_viral_decision(
     if conflicts:
         if generic_cellular_override:
             return "retained_provirus" if refined_region else "retained_viral"
+        if (
+            not refined_region
+            and plasmid_tools
+            and not cellular_tools
+            and len(strong_tools) >= 2
+        ):
+            # Strong, independent viral support can coexist with an explicit
+            # plasmid call for phage-plasmids and related hybrid replicons.
+            return "retained_viral"
         if discovery_status == "ambiguous" and not strong_tools and len(qualified_tools) <= 1:
             return "likely_nonviral"
         return "ambiguous_review"
@@ -156,6 +168,97 @@ def adjudicate_viral_decision(
     if qualified_tools:
         return "provisional_provirus" if refined_region else "provisional_viral"
     return "ambiguous_review"
+
+
+def adjudicate_disputed_ct3_boundary(
+    region: dict[str, str],
+    rows: list[dict[str, str]],
+    vicat_rows: list[dict[str, str]],
+) -> tuple[bool, str]:
+    """Decide whether a conflicting CT3/viCAT region remains primary.
+
+    CT3-only boundaries remain governed by the ordinary evidence policy. This
+    safeguard applies only when refinement explicitly records disagreement
+    between a CT3-selected boundary and viCAT's projected region.
+    """
+    record_type = region.get("record_type", "").strip().lower()
+    boundary_source = region.get("boundary_source", "").strip().lower()
+    boundary_status = region.get("boundary_status", "").strip().lower()
+    supporting_tools = {
+        tool.strip().lower()
+        for tool in region.get("supporting_boundary_tools", "").split(",")
+        if tool.strip()
+    }
+    disputed_ct3_vicat = (
+        record_type in {"provirus", "viral_region"}
+        and boundary_source == "cenotetaker3"
+        and boundary_status == "selected_boundary_conflict"
+        and "vicat" in supporting_tools
+    )
+    if not disputed_ct3_vicat:
+        return True, "not_disputed_ct3_vicat_boundary"
+
+    ct3_strong = any(
+        row.get("tool", "").strip().lower() == "cenotetaker3"
+        and row.get("classification", "").strip().lower() == "virus"
+        and row.get("evidence_strength", "").strip().lower() == "strong"
+        and row.get("record_type", "").strip().lower()
+            in {"provirus", "viral_region"}
+        for row in rows
+    )
+    if ct3_strong:
+        return True, "ct3_strong_multi_hallmark_rescue"
+
+    viral_loci = sum(
+        int(float(row.get("viral_supported_loci", "0") or 0))
+        for row in vicat_rows
+    )
+    cellular_loci = sum(
+        int(float(row.get("cellular_supported_loci", "0") or 0))
+        for row in vicat_rows
+    )
+    informative_loci = viral_loci + cellular_loci
+    viral_fraction = viral_loci / informative_loci if informative_loci else 0.0
+    if viral_loci >= 2 and viral_fraction >= 0.60:
+        return True, "vicat_regional_support_2_loci_fraction_ge_0.60"
+    return False, "provisional_disputed_ct3_vicat_boundary"
+
+
+def viral_entity_interpretation(
+    viral_decision: str,
+    record_type: str,
+    parent_plasmid_tools: list[str],
+    exact_plasmid_tools: list[str],
+    has_vicat_plasmid_loci: bool,
+    strong_tools: set[str],
+) -> str:
+    """Describe the retained entity without conflating context and origin."""
+    refined_region = record_type in {"provirus", "viral_region"}
+    primary = viral_decision in PRIMARY_VIRAL_DECISIONS
+    provisional = viral_decision in PROVISIONAL_VIRAL_DECISIONS
+    if refined_region and (parent_plasmid_tools or exact_plasmid_tools):
+        if primary:
+            return "plasmid_associated_provirus"
+        if provisional:
+            return "provisional_plasmid_associated_provirus"
+        return "nonprimary_plasmid_associated_region"
+    if (
+        not refined_region
+        and primary
+        and len(strong_tools) >= 2
+        and (exact_plasmid_tools or has_vicat_plasmid_loci)
+    ):
+        return "virus_plasmid_hybrid_candidate"
+    if refined_region:
+        if primary:
+            return "provirus"
+        if provisional:
+            return "provisional_provirus"
+    elif primary:
+        return "viral_contig"
+    elif provisional:
+        return "provisional_viral_contig"
+    return "nonprimary_or_review"
 
 
 def checkv_supports_complete_viral_contig(
@@ -899,6 +1002,13 @@ def run(args: argparse.Namespace) -> None:
             for row in selected_vicat_rows
             if row.get("dominant_nonviral_class", "").strip()
         })
+        has_vicat_plasmid_loci = any(
+            item.upper().split(":", 1)[0] == "PLASMID"
+            for item in vicat_nonviral_classes
+        )
+        reported_plasmid_conflicts = sorted(
+            set(plasmid) | ({"vicat"} if has_vicat_plasmid_loci else set())
+        )
         if "resolved_provirus_with_vicat_support" in vicat_patterns:
             vicat_provirus_status = "resolved_with_vicat_support"
         elif "localized_viral_cluster" in vicat_patterns:
@@ -913,6 +1023,24 @@ def run(args: argparse.Namespace) -> None:
             cellular,
             plasmid,
             tesorter_summary["sequence_interpretation"],
+        )
+        boundary_primary_eligible, provirus_retention_basis = (
+            adjudicate_disputed_ct3_boundary(
+                region, rows, selected_vicat_rows
+            )
+        )
+        if (
+            viral_decision == "retained_provirus"
+            and not boundary_primary_eligible
+        ):
+            viral_decision = "provisional_provirus"
+        entity_interpretation = viral_entity_interpretation(
+            viral_decision,
+            record_type,
+            parent_plasmid_context,
+            reported_plasmid_conflicts,
+            has_vicat_plasmid_loci,
+            strong_tools,
         )
         generic_cellular_conflict_overridden = (
             viral_decision in PRIMARY_VIRAL_DECISIONS
@@ -947,7 +1075,9 @@ def run(args: argparse.Namespace) -> None:
             "generic_cellular_conflict_overridden": str(
                 generic_cellular_conflict_overridden
             ).lower(),
-            "plasmid_conflict_tools": ",".join(plasmid) or "NA",
+            "plasmid_conflict_tools": (
+                ",".join(reported_plasmid_conflicts) or "NA"
+            ),
             "strict_taxonomy": strict_taxonomy,
             "strict_taxonomy_rank": strict_rank,
             "analysis_taxonomy": analysis_taxonomy,
@@ -974,6 +1104,17 @@ def run(args: argparse.Namespace) -> None:
             "vicat_dominant_nonviral_class": (
                 ",".join(vicat_dominant_nonviral_classes) or "NA"
             ),
+            "provirus_boundary_source": (
+                region.get("boundary_source", "").strip() or "NA"
+            ),
+            "provirus_boundary_status": (
+                region.get("boundary_status", "").strip() or "NA"
+            ),
+            "provirus_boundary_supporting_tools": (
+                region.get("supporting_boundary_tools", "").strip() or "NA"
+            ),
+            "provirus_retention_basis": provirus_retention_basis,
+            "viral_entity_interpretation": entity_interpretation,
             **tesorter_summary,
         }
         metadata_rows.append(metadata)
@@ -991,6 +1132,8 @@ def run(args: argparse.Namespace) -> None:
         if final_id != parent_id and parent_vicat_viral and not region_vicat_viral:
             reasons.append("provirus_boundary_vicat_discordance")
             metadata["vicat_provirus_status"] = "boundary_vicat_discordance"
+        if not boundary_primary_eligible:
+            reasons.append("disputed_ct3_vicat_boundary_provisional")
         if viral_confidence == "provisional": reasons.append("single_qualified_viral_tool")
         if generic_cellular_conflict_overridden:
             reasons.append("generic_cellular_conflict_overridden")
@@ -1145,7 +1288,7 @@ def run(args: argparse.Namespace) -> None:
 
     manifest_path = Path(f"{prefix}.harmonizer_manifest.json")
     manifest = {
-        "schema_version": "viharmony-0.8",
+        "schema_version": "viharmony-0.9",
         "sample_id": args.sample_id,
         "input_type": args.input_type,
         "ictv_msl": args.ictv_msl.name,
@@ -1160,7 +1303,8 @@ def run(args: argparse.Namespace) -> None:
             "vcontact3_min_taxonomy_length": minimum_vcontact3_length,
             "vcontact3_project_groups": "ancestry-compatible, unambiguous groups only",
             "vicat_scope": "refined-region evidence supersedes parent-discovery evidence",
-            "provirus_adjudication": "refinement selects coordinates; region-specific conflicts control retention while parent-only cellular/plasmid calls are retained as context",
+            "provirus_adjudication": "refinement selects coordinates; disputed CT3/viCAT boundaries require strong multi-hallmark CT3 evidence or at least 2 viCAT viral loci with regional viral fraction >=0.60; parent-only cellular/plasmid calls are retained as context",
+            "plasmid_viral_entities": "parent plasmid evidence annotates extracted proviruses without vetoing them; strong intact-contig viral consensus plus exact plasmid evidence is retained as a hybrid candidate",
             "tesorter_retrovirus": "explicit viral-like labels remain compatible; high-confidence multi-tool viral consensus overrides generic mobile-element conflict while retaining annotation",
             "final_output": "primary requires strong or multi-tool qualified viral support; single-tool qualified calls are emitted separately as provisional",
         },

@@ -57,9 +57,9 @@ process VIHARMONY {
         ? groupList.collect { groups -> "'${groups}'" }.join(' ')
         : ''
     """
-    # viHARMONY decision policy v0.8: region-specific conflicts remain active;
-    # parent-only cellular/plasmid evidence is retained as context, while two
-    # independent strong viral tools may override a generic classifier alone.
+    # viHARMONY decision policy v0.9: disputed CT3/viCAT boundaries require
+    # regional support; parent-only cellular/plasmid evidence remains context,
+    # and strongly supported virus/plasmid hybrids retain both interpretations.
     python3 "${projectDir}/bin/run_viharmony.py" \
         --sample-id "${prefix}" \
         --input-type "${type}" \

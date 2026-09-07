@@ -80,6 +80,194 @@ def test_parent_nonviral_evidence_becomes_context_only_for_refined_region() -> N
 
 
 class ViharmonyTests(unittest.TestCase):
+    def test_disputed_ct3_vicat_boundary_requires_regional_support(self) -> None:
+        region = {
+            "record_type": "provirus",
+            "boundary_source": "cenotetaker3",
+            "boundary_status": "selected_boundary_conflict",
+            "supporting_boundary_tools": "cenotetaker3,vicat",
+        }
+        qualified_ct3 = [{
+            "tool": "cenotetaker3", "classification": "virus",
+            "evidence_strength": "qualified", "record_type": "provirus",
+        }]
+        passes, basis = run_viharmony.adjudicate_disputed_ct3_boundary(
+            region,
+            qualified_ct3,
+            [{"viral_supported_loci": "3", "cellular_supported_loci": "2"}],
+        )
+        self.assertTrue(passes)
+        self.assertEqual(
+            basis, "vicat_regional_support_2_loci_fraction_ge_0.60"
+        )
+
+        passes, basis = run_viharmony.adjudicate_disputed_ct3_boundary(
+            region,
+            qualified_ct3,
+            [{"viral_supported_loci": "2", "cellular_supported_loci": "2"}],
+        )
+        self.assertFalse(passes)
+        self.assertEqual(basis, "provisional_disputed_ct3_vicat_boundary")
+
+    def test_strong_ct3_rescues_disputed_boundary(self) -> None:
+        region = {
+            "record_type": "provirus",
+            "boundary_source": "cenotetaker3",
+            "boundary_status": "selected_boundary_conflict",
+            "supporting_boundary_tools": "cenotetaker3,vicat",
+        }
+        passes, basis = run_viharmony.adjudicate_disputed_ct3_boundary(
+            region,
+            [{
+                "tool": "cenotetaker3", "classification": "virus",
+                "evidence_strength": "strong", "record_type": "provirus",
+            }],
+            [{"viral_supported_loci": "1", "cellular_supported_loci": "9"}],
+        )
+        self.assertTrue(passes)
+        self.assertEqual(basis, "ct3_strong_multi_hallmark_rescue")
+
+    def test_ct3_single_tool_boundary_is_not_changed_by_conflict_safeguard(self) -> None:
+        passes, basis = run_viharmony.adjudicate_disputed_ct3_boundary(
+            {
+                "record_type": "provirus",
+                "boundary_source": "cenotetaker3",
+                "boundary_status": "selected_single_tool",
+                "supporting_boundary_tools": "cenotetaker3",
+            },
+            [],
+            [],
+        )
+        self.assertTrue(passes)
+        self.assertEqual(basis, "not_disputed_ct3_vicat_boundary")
+
+    def test_viral_entity_interpretations_preserve_plasmid_context(self) -> None:
+        self.assertEqual(
+            run_viharmony.viral_entity_interpretation(
+                "retained_provirus", "provirus", ["genomad"], [], False,
+                {"cenotetaker3"},
+            ),
+            "plasmid_associated_provirus",
+        )
+        self.assertEqual(
+            run_viharmony.viral_entity_interpretation(
+                "retained_viral", "input_contig", [], ["genomad"], False,
+                {"genomad", "virsorter2"},
+            ),
+            "virus_plasmid_hybrid_candidate",
+        )
+        self.assertEqual(
+            run_viharmony.viral_entity_interpretation(
+                "retained_viral", "input_contig", [], [], False,
+                {"genomad", "virsorter2"},
+            ),
+            "viral_contig",
+        )
+
+    def test_disputed_boundary_is_routed_to_provisional_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            normalized = directory / "sample.normalized.fasta"
+            refined = directory / "sample.refined.fasta"
+            normalized.write_text(
+                ">sample__c000001\n" + "A" * 100 + "\n", encoding="utf-8"
+            )
+            final_id = "sample__c000001|viral_region_11_80"
+            refined.write_text(
+                f">{final_id}\n" + "A" * 70 + "\n", encoding="utf-8"
+            )
+            header = directory / "header.tsv"
+            write_tsv(
+                header,
+                ["sample_id", "sequence_id", "original_id", "original_header", "length"],
+                [{
+                    "sample_id": "sample", "sequence_id": "sample__c000001",
+                    "original_id": "original-one", "original_header": "original-one",
+                    "length": "100",
+                }],
+            )
+            gate = directory / "gate.tsv"
+            write_tsv(
+                gate,
+                ["sequence_id", "advance_to_refinement", "discovery_status"],
+                [{
+                    "sequence_id": "sample__c000001",
+                    "advance_to_refinement": "true", "discovery_status": "likely_viral",
+                }],
+            )
+            regions = directory / "regions.tsv"
+            write_tsv(
+                regions,
+                [
+                    "sequence_id", "parent_sequence_id", "record_type", "coordinates",
+                    "original_length", "refined_length", "boundary_source",
+                    "supporting_boundary_tools", "boundary_status",
+                ],
+                [{
+                    "sequence_id": final_id, "parent_sequence_id": "sample__c000001",
+                    "record_type": "provirus", "coordinates": "11-80",
+                    "original_length": "100", "refined_length": "70",
+                    "boundary_source": "cenotetaker3",
+                    "supporting_boundary_tools": "cenotetaker3,vicat",
+                    "boundary_status": "selected_boundary_conflict",
+                }],
+            )
+            evidence = directory / "evidence.tsv"
+            evidence_columns = [
+                "sample_id", "sequence_id", "parent_sequence_id", "record_type",
+                "coordinates", "tool", "classification", "evidence_strength",
+                "viral_supported_loci", "cellular_supported_loci",
+            ]
+            write_tsv(evidence, evidence_columns, [
+                {
+                    "sample_id": "sample", "sequence_id": final_id,
+                    "parent_sequence_id": "sample__c000001", "record_type": "provirus",
+                    "coordinates": "11-80", "tool": "cenotetaker3",
+                    "classification": "virus", "evidence_strength": "qualified",
+                    "viral_supported_loci": "", "cellular_supported_loci": "",
+                },
+                {
+                    "sample_id": "sample", "sequence_id": final_id,
+                    "parent_sequence_id": "sample__c000001", "record_type": "provirus",
+                    "coordinates": "11-80", "tool": "vicat",
+                    "classification": "virus", "evidence_strength": "qualified",
+                    "viral_supported_loci": "2", "cellular_supported_loci": "2",
+                },
+            ])
+            msl = directory / "MSL41.csv"
+            msl.write_text(
+                "Realm,Kingdom,Phylum,Class,Order,Family,Genus,Species\n"
+                "Adnaviria,Zilligvirae,Taleaviricota,Tokiviricetes,"
+                "Ligamenvirales,Chiyouviridae,Wargodvirus,Wargodvirus xiongnu\n",
+                encoding="utf-8",
+            )
+            args = Namespace(
+                sample_id="sample", input_type="dna", normalized_fasta=normalized,
+                header_map=header, discovery_gate=gate, refined_fasta=refined,
+                region_map=regions, ictv_msl=msl, evidence=[evidence],
+                vcontact3_groups=[], audit_mode="full",
+                vcontact3_min_taxonomy_length=1,
+                output_prefix=directory / "sample",
+            )
+            run_viharmony.run(args)
+
+            metadata = read_tsv(directory / "sample.final_metadata.tsv")
+            self.assertEqual(metadata[0]["viral_decision"], "provisional_provirus")
+            self.assertEqual(
+                metadata[0]["provirus_retention_basis"],
+                "provisional_disputed_ct3_vicat_boundary",
+            )
+            self.assertEqual(
+                (directory / "sample.final.normalized.fasta").read_text(encoding="utf-8"),
+                "",
+            )
+            self.assertIn(
+                final_id,
+                (directory / "sample.provisional.normalized.fasta").read_text(
+                    encoding="utf-8"
+                ),
+            )
+
     def test_only_exact_full_span_region_evidence_follows_preserved_contig(self) -> None:
         common = {
             "exact_id": "sample__c000001|provirus_1_100",
@@ -344,7 +532,7 @@ class ViharmonyTests(unittest.TestCase):
                 parent_cellular["evidence_application"], "parent_context_only"
             )
             manifest = json.loads((directory / "sample.harmonizer_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], "viharmony-0.8")
+            self.assertEqual(manifest["schema_version"], "viharmony-0.9")
             self.assertIn(
                 "parent-only cellular/plasmid calls are retained as context",
                 manifest["policy"]["provirus_adjudication"],
@@ -370,6 +558,13 @@ class ViharmonyTests(unittest.TestCase):
                 "viral_candidate",
             ),
             "ambiguous_review",
+        )
+        self.assertEqual(
+            run_viharmony.adjudicate_viral_decision(
+                "viral", "input_contig", {"genomad", "virsorter2"}, set(),
+                [], ["genomad"], "viral_candidate",
+            ),
+            "retained_viral",
         )
         self.assertEqual(
             run_viharmony.adjudicate_viral_decision(
