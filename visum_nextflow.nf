@@ -1357,7 +1357,9 @@ workflow {
                 "VICAT_REFERENCE_SUBSET references=${referenceSubset.name}"
         }
 
-        ch_vicat_reference_subset = PREPARE_VICAT_REFERENCE_SUBSET.out.subset.first()
+        // Both process inputs are value channels (`collect()` plus the
+        // prepared database value), so this output is already reusable.
+        ch_vicat_reference_subset = PREPARE_VICAT_REFERENCE_SUBSET.out.subset
 
         ch_vicat_dual_alignments = RUN_VICAT_DIAMOND.out.results
             .map { prefix, type, orfMap, headerMap, viralDiamond ->
