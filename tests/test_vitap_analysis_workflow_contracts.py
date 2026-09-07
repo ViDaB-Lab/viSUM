@@ -15,7 +15,7 @@ class VitapAnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn("include { STANDARDIZE_VITAP }", workflow)
         self.assertIn("RUN_VITAP(\n            ch_refined_for_taxonomy", workflow)
         self.assertLess(
-            workflow.index("REFINE_PROVIRAL_REGIONS(ch_provirus_refinement_inputs)"),
+            workflow.index("REFINE_PROVIRAL_REGIONS(\n        ch_provirus_refinement_inputs,"),
             workflow.index("RUN_VITAP(\n            ch_refined_for_taxonomy"),
         )
         self.assertNotIn("run_vitap_assignment.py", workflow)

@@ -524,8 +524,12 @@ workflow {
 
     def sharedProvirusTools = []
     if( runGenomad ) sharedProvirusTools << 'genomad'
+    if( runVirsorter2 ) sharedProvirusTools << 'virsorter2'
     if( runCenotetaker3 ) sharedProvirusTools << 'cenotetaker3'
-    if( runVicat ) sharedProvirusTools << 'vicat'
+    if( runVicat ) {
+        sharedProvirusTools << 'vicat'
+        sharedProvirusTools << 'vicat_boundary'
+    }
     if( runCheckv ) sharedProvirusTools << 'checkv'
 
     def harmonyOnlyTools = []
@@ -723,6 +727,9 @@ workflow {
             STANDARDIZE_VIRSORTER2.out.evidence
         )
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VIRSORTER2.out.evidence)
+        ch_provirus_evidence = ch_provirus_evidence.mix(
+            STANDARDIZE_VIRSORTER2.out.evidence
+        )
     }
 
     if( runCenotetaker3 ) {
@@ -1405,7 +1412,12 @@ workflow {
         )
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VICAT.out.evidence)
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VICAT.out.context)
-        ch_provirus_evidence = ch_provirus_evidence.mix(STANDARDIZE_VICAT.out.provirus)
+        ch_provirus_evidence = ch_provirus_evidence.mix(STANDARDIZE_VICAT.out.evidence)
+        ch_provirus_evidence = ch_provirus_evidence.mix(
+            STANDARDIZE_VICAT.out.provirus.map { prefix, tool, evidence ->
+                tuple(prefix, 'vicat_boundary', evidence)
+            }
+        )
     }
 
     // Prepare or validate the persistent VITAP database now. Taxonomic
@@ -1695,7 +1707,13 @@ workflow {
             )
         }
 
-    REFINE_PROVIRAL_REGIONS(ch_provirus_refinement_inputs)
+    ch_provirus_refiner_script = Channel.value(
+        file("${projectDir}/bin/refine_proviral_regions.py")
+    )
+    REFINE_PROVIRAL_REGIONS(
+        ch_provirus_refinement_inputs,
+        ch_provirus_refiner_script
+    )
 
     viewChannel(showChannelMessages, REFINE_PROVIRAL_REGIONS.out.refined) {
         prefix, type, refinedFasta, regionMap, boundaryAudit, summary ->

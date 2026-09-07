@@ -15,7 +15,7 @@ class Vcontact3AnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn("include { STANDARDIZE_VCONTACT3 }", workflow)
         self.assertIn("RUN_VCONTACT3(\n            ch_refined_for_taxonomy", workflow)
         self.assertLess(
-            workflow.index("REFINE_PROVIRAL_REGIONS(ch_provirus_refinement_inputs)"),
+            workflow.index("REFINE_PROVIRAL_REGIONS(\n        ch_provirus_refinement_inputs,"),
             workflow.index("RUN_VCONTACT3(\n            ch_refined_for_taxonomy"),
         )
         self.assertIn("vcontact3DbDomain", workflow)

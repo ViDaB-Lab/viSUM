@@ -61,6 +61,7 @@ SUMMARY_COLUMNS = [
     "refined_parent_count",
     "refined_region_count",
     "full_span_call_preserved_count",
+    "whole_contig_consensus_veto_count",
     "boundary_call_count",
     "boundary_conflict_count",
     "ct3_only_boundary_call_count",
@@ -73,6 +74,8 @@ SUMMARY_COLUMNS = [
     "allow_ct3_only_refinement",
     "evidence_file_count",
 ]
+
+WHOLE_CONTIG_VICAT_MIN_VIRAL_LOCI = 2
 
 
 @dataclass(frozen=True)
@@ -210,12 +213,11 @@ def parse_coordinates(value: str, sequence_id: str) -> tuple[int, int]:
     return start, end
 
 
-def load_boundary_calls(
-    paths: list[Path], sample_id: str, fasta_records: dict[str, str]
-) -> list[BoundaryCall]:
-    calls: list[BoundaryCall] = []
+def load_evidence_rows(
+    paths: list[Path], sample_id: str
+) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
     seen_paths: set[Path] = set()
-    seen_calls: set[tuple[str, str, int, int]] = set()
     for path in paths:
         resolved = path.resolve()
         if resolved in seen_paths:
@@ -227,34 +229,104 @@ def load_boundary_calls(
                     f"Evidence sample '{row['sample_id']}' in {path} does not match "
                     f"'{sample_id}'"
                 )
-            if row["classification"].strip() != "virus":
-                continue
-            if row["record_type"].strip() != "provirus":
-                continue
-            tool = row["tool"].strip().lower()
-            if tool not in TOOL_PRIORITY:
-                continue
-            parent_id = row["parent_sequence_id"].strip()
-            sequence_id = row["sequence_id"].strip()
-            if not parent_id or not sequence_id:
-                raise ValueError(f"Provirus evidence lacks parent/child identity in {path}")
-            if parent_id not in fasta_records:
-                raise ValueError(
-                    f"Provirus parent is absent from candidate FASTA: {parent_id}"
-                )
-            start, end = parse_coordinates(row["coordinates"], sequence_id)
-            if end > len(fasta_records[parent_id]):
-                raise ValueError(
-                    f"Provirus boundary exceeds parent {parent_id}: {start}-{end}"
-                )
-            key = (parent_id, tool, start, end)
-            if key in seen_calls:
-                raise ValueError(
-                    f"Duplicate {tool} provirus boundary for {parent_id}: {start}-{end}"
-                )
-            seen_calls.add(key)
-            calls.append(BoundaryCall(parent_id, tool, sequence_id, start, end))
+            rows.append(row)
+    return rows
+
+
+def load_boundary_calls(
+    evidence_rows: list[dict[str, str]], fasta_records: dict[str, str]
+) -> list[BoundaryCall]:
+    calls: list[BoundaryCall] = []
+    seen_calls: set[tuple[str, str, int, int]] = set()
+    for row in evidence_rows:
+        if row["classification"].strip() != "virus":
+            continue
+        if row["record_type"].strip() != "provirus":
+            continue
+        tool = row["tool"].strip().lower()
+        if tool not in TOOL_PRIORITY:
+            continue
+        parent_id = row["parent_sequence_id"].strip()
+        sequence_id = row["sequence_id"].strip()
+        if not parent_id or not sequence_id:
+            raise ValueError("Provirus evidence lacks parent/child identity")
+        if parent_id not in fasta_records:
+            raise ValueError(
+                f"Provirus parent is absent from candidate FASTA: {parent_id}"
+            )
+        start, end = parse_coordinates(row["coordinates"], sequence_id)
+        if end > len(fasta_records[parent_id]):
+            raise ValueError(
+                f"Provirus boundary exceeds parent {parent_id}: {start}-{end}"
+            )
+        key = (parent_id, tool, start, end)
+        if key in seen_calls:
+            raise ValueError(
+                f"Duplicate {tool} provirus boundary for {parent_id}: {start}-{end}"
+            )
+        seen_calls.add(key)
+        calls.append(BoundaryCall(parent_id, tool, sequence_id, start, end))
     return calls
+
+
+def evidence_parent_id(row: dict[str, str]) -> str:
+    return row.get("parent_sequence_id", "").strip() or row.get(
+        "sequence_id", ""
+    ).strip()
+
+
+def integer_field(row: dict[str, str], field: str) -> int:
+    try:
+        return int(float(row.get(field, "0") or 0))
+    except ValueError:
+        return 0
+
+
+def whole_contig_consensus_tools(
+    evidence_rows: list[dict[str, str]], parent_id: str
+) -> list[str]:
+    """Return the independent tools supporting an intact whole viral contig.
+
+    This deliberately requires agreement among three different method families:
+    geNomad marker evidence, a full-contig VirSorter2 call, and a predominantly
+    viral viCAT ORF profile without cellular-supported loci.  It is used only to
+    veto fragmentation into multiple CT3 regions, never to reject a single
+    candidate provirus region.
+    """
+    parent_rows = [
+        row
+        for row in evidence_rows
+        if evidence_parent_id(row) == parent_id
+        and row.get("classification", "").strip().lower() == "virus"
+        and row.get("record_type", "").strip() == "input_contig"
+    ]
+    genomad = any(
+        row.get("tool", "").strip().lower() == "genomad"
+        and row.get("evidence_strength", "").strip().lower() == "strong"
+        for row in parent_rows
+    )
+    virsorter2 = any(
+        row.get("tool", "").strip().lower() == "virsorter2"
+        and row.get("evidence_strength", "").strip().lower()
+        in {"strong", "qualified"}
+        for row in parent_rows
+    )
+    vicat = any(
+        row.get("tool", "").strip().lower() == "vicat"
+        and row.get("evidence_strength", "").strip().lower()
+        in {"strong", "qualified"}
+        and row.get("origin_pattern", "").strip().lower()
+        == "predominantly_viral"
+        and integer_field(row, "viral_supported_loci")
+        >= WHOLE_CONTIG_VICAT_MIN_VIRAL_LOCI
+        and integer_field(row, "cellular_supported_loci") == 0
+        for row in parent_rows
+    )
+    return (
+        ["genomad", "vicat", "virsorter2"]
+        if genomad and virsorter2 and vicat
+        else []
+    )
 
 
 def intervals_overlap(left: BoundaryCall, right: BoundaryCall) -> bool:
@@ -386,7 +458,8 @@ def run(args: argparse.Namespace) -> None:
     if not 0.0 <= args.vicat_support_min_overlap_fraction <= 1.0:
         raise ValueError("viCAT support overlap fraction must be between 0 and 1")
     fasta_records = load_fasta(args.candidate_fasta)
-    calls = load_boundary_calls(args.evidence, args.sample_id, fasta_records)
+    evidence_rows = load_evidence_rows(args.evidence, args.sample_id)
+    calls = load_boundary_calls(evidence_rows, fasta_records)
     calls_by_parent: dict[str, list[BoundaryCall]] = defaultdict(list)
     for call in calls:
         calls_by_parent[call.parent_id].append(call)
@@ -397,6 +470,7 @@ def run(args: argparse.Namespace) -> None:
     refined_parent_count = 0
     refined_region_count = 0
     full_span_call_preserved_count = 0
+    whole_contig_consensus_veto_count = 0
     conflict_count = 0
     unchanged_count = 0
     ct3_only_boundary_call_count = 0
@@ -519,6 +593,46 @@ def run(args: argparse.Namespace) -> None:
             )
             continue
 
+        consensus_tools = whole_contig_consensus_tools(evidence_rows, parent_id)
+        ct3_fragmentation = (
+            len(selected_loci) >= 2
+            and all(
+                selected.tool == "cenotetaker3"
+                for _, _, selected, _, _ in selected_loci
+            )
+        )
+        if ct3_fragmentation and consensus_tools:
+            whole_contig_consensus_veto_count += 1
+            unchanged_count += 1
+            refined_fasta.append((parent_id, sequence))
+            map_rows.append(
+                {
+                    "sample_id": args.sample_id,
+                    "input_type": args.input_type,
+                    "sequence_id": parent_id,
+                    "parent_sequence_id": "",
+                    "record_type": "input_contig",
+                    "coordinates": "",
+                    "original_length": len(sequence),
+                    "refined_length": len(sequence),
+                    "boundary_source": "",
+                    "supporting_boundary_tools": ",".join(consensus_tools),
+                    "boundary_status": (
+                        "preserved_whole_contig_consensus_over_multi_ct3_fragments"
+                    ),
+                }
+            )
+            for audit_row in audit_rows:
+                if audit_row["parent_sequence_id"] == parent_id:
+                    audit_row["selected"] = "false"
+                    audit_row["selected_tool"] = ""
+                    audit_row["selected_start"] = ""
+                    audit_row["selected_end"] = ""
+                    audit_row["boundary_status"] = (
+                        "not_selected_multi_ct3_whole_contig_consensus"
+                    )
+            continue
+
         # A boundary covering the exact input span does not define an embedded
         # provirus. Preserve the original sequence identity and record type so
         # downstream consumers do not misreport an intact viral contig as a
@@ -600,6 +714,7 @@ def run(args: argparse.Namespace) -> None:
                 "refined_parent_count": refined_parent_count,
                 "refined_region_count": refined_region_count,
                 "full_span_call_preserved_count": full_span_call_preserved_count,
+                "whole_contig_consensus_veto_count": whole_contig_consensus_veto_count,
                 "boundary_call_count": len(calls),
                 "boundary_conflict_count": conflict_count,
                 "ct3_only_boundary_call_count": ct3_only_boundary_call_count,

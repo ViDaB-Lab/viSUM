@@ -61,6 +61,11 @@ class CheckVDatabaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("tuple(database, metadata)", database_block)
         self.assertIn(".first()", database_block)
         self.assertIn("sharedProvirusTools << 'checkv'", workflow)
+        self.assertIn("sharedProvirusTools << 'virsorter2'", workflow)
+        self.assertIn("sharedProvirusTools << 'vicat_boundary'", workflow)
+        self.assertIn("STANDARDIZE_VIRSORTER2.out.evidence", workflow)
+        self.assertIn("STANDARDIZE_VICAT.out.evidence", workflow)
+        self.assertIn("ch_provirus_refiner_script", workflow)
 
     def test_checkv_standardization_and_provirus_refinement_are_wired(self) -> None:
         workflow = (REPOSITORY_ROOT / "visum_nextflow.nf").read_text(
@@ -70,7 +75,7 @@ class CheckVDatabaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("STANDARDIZE_CHECKV(ch_checkv_standardizer_input)", workflow)
         self.assertIn("STANDARDIZE_CHECKV.out.evidence", workflow)
         self.assertIn("include { REFINE_PROVIRAL_REGIONS }", workflow)
-        self.assertIn("REFINE_PROVIRAL_REGIONS(ch_provirus_refinement_inputs)", workflow)
+        self.assertIn("REFINE_PROVIRAL_REGIONS(\n        ch_provirus_refinement_inputs,", workflow)
         self.assertIn("STANDARDIZE_GENOMAD.out.evidence", workflow)
         self.assertIn("STANDARDIZE_CENOTETAKER3.out.evidence", workflow)
         self.assertIn("params.allow_ct3_only_refinement", workflow)

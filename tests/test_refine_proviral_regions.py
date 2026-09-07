@@ -14,13 +14,17 @@ from evidence_schema import CORE_EVIDENCE_COLUMNS
 
 
 def write_evidence(path: Path, rows: list[dict[str, str]]) -> None:
+    extra_columns = sorted(
+        {column for row in rows for column in row}.difference(CORE_EVIDENCE_COLUMNS)
+    )
+    columns = [*CORE_EVIDENCE_COLUMNS, *extra_columns]
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
-            handle, fieldnames=CORE_EVIDENCE_COLUMNS, delimiter="\t"
+            handle, fieldnames=columns, delimiter="\t"
         )
         writer.writeheader()
         for row in rows:
-            complete = {column: "" for column in CORE_EVIDENCE_COLUMNS}
+            complete = {column: "" for column in columns}
             complete.update(row)
             writer.writerow(complete)
 
@@ -334,6 +338,205 @@ class RefineProviralRegionsTests(unittest.TestCase):
             self.assertEqual(summary["refined_parent_count"], "1")
             self.assertEqual(summary["ct3_only_boundary_call_count"], "1")
             self.assertEqual(summary["allow_ct3_only_refinement"], "true")
+
+    def test_whole_contig_consensus_vetoes_six_observed_ct3_fragment_patterns(self) -> None:
+        observed_patterns = {
+            "sample__virus132": (159378, [(1, 133207), (136248, 159378)]),
+            "sample__virus212": (609674, [(1, 85464), (92550, 215229), (234967, 445756), (553739, 609674)]),
+            "sample__virus213": (127011, [(11025, 50008), (53941, 110648), (114386, 127011)]),
+            "sample__virus214": (437255, [(1, 32959), (39392, 152333), (156489, 247597), (252980, 279247), (301071, 406169)]),
+            "sample__virus215": (487887, [(1, 11878), (22673, 282991), (330845, 382072), (386308, 424928)]),
+            "sample__virus216": (617453, [(120834, 245138), (287071, 406485), (411139, 433498), (438859, 497873), (540843, 617453)]),
+        }
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            with (directory / "candidates.fasta").open("w", encoding="utf-8") as handle:
+                for parent_id, (length, _) in observed_patterns.items():
+                    handle.write(f">{parent_id}\n{'A' * length}\n")
+
+            common = {"sample_id": "sample", "classification": "virus"}
+            ct3_rows = []
+            genomad_rows = []
+            virsorter2_rows = []
+            vicat_rows = []
+            for parent_id, (_, regions) in observed_patterns.items():
+                for start, end in regions:
+                    ct3_rows.append({
+                        **common,
+                        "sequence_id": f"{parent_id}|provirus_{start}_{end}",
+                        "parent_sequence_id": parent_id,
+                        "record_type": "provirus",
+                        "coordinates": f"{start}-{end}",
+                        "tool": "cenotetaker3",
+                    })
+                genomad_rows.append({
+                    **common, "sequence_id": parent_id, "record_type": "input_contig",
+                    "tool": "genomad", "evidence_strength": "strong",
+                })
+                virsorter2_rows.append({
+                    **common, "sequence_id": f"{parent_id}||full",
+                    "parent_sequence_id": parent_id, "record_type": "input_contig",
+                    "tool": "virsorter2", "evidence_strength": "qualified",
+                })
+                vicat_rows.append({
+                    **common, "sequence_id": parent_id, "record_type": "input_contig",
+                    "tool": "vicat", "evidence_strength": "qualified",
+                    "origin_pattern": "predominantly_viral",
+                    "viral_supported_loci": "2", "cellular_supported_loci": "0",
+                })
+
+            evidence_paths = []
+            for name, rows in (
+                ("ct3", ct3_rows), ("genomad", genomad_rows),
+                ("virsorter2", virsorter2_rows), ("vicat", vicat_rows),
+            ):
+                path = directory / f"{name}.tsv"
+                write_evidence(path, rows)
+                evidence_paths.append(path)
+
+            paths = self.run_refiner(
+                directory, evidence_paths, allow_ct3_only_refinement=True
+            )
+            fasta = read_fasta(paths["output"])
+            self.assertEqual(set(fasta), set(observed_patterns))
+            self.assertEqual(
+                {identifier: len(sequence) for identifier, sequence in fasta.items()},
+                {identifier: values[0] for identifier, values in observed_patterns.items()},
+            )
+            mapping = read_tsv(paths["map"])
+            self.assertTrue(all(
+                row["record_type"] == "input_contig"
+                and row["boundary_status"]
+                == "preserved_whole_contig_consensus_over_multi_ct3_fragments"
+                for row in mapping
+            ))
+            audit = read_tsv(paths["audit"])
+            self.assertTrue(all(row["selected"] == "false" for row in audit))
+            self.assertTrue(all(
+                row["boundary_status"]
+                == "not_selected_multi_ct3_whole_contig_consensus"
+                for row in audit
+            ))
+            summary = read_tsv(paths["summary"])[0]
+            self.assertEqual(summary["whole_contig_consensus_veto_count"], "6")
+            self.assertEqual(summary["refined_parent_count"], "0")
+
+    def test_whole_contig_consensus_does_not_veto_one_ct3_provirus_region(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            (directory / "candidates.fasta").write_text(
+                ">sample__c000001\n" + "A" * 200 + "\n", encoding="utf-8"
+            )
+            common = {"sample_id": "sample", "classification": "virus"}
+            rows_by_name = {
+                "ct3": [{
+                    **common, "sequence_id": "sample__c000001|provirus_51_150",
+                    "parent_sequence_id": "sample__c000001", "record_type": "provirus",
+                    "coordinates": "51-150", "tool": "cenotetaker3",
+                }],
+                "genomad": [{
+                    **common, "sequence_id": "sample__c000001", "record_type": "input_contig",
+                    "tool": "genomad", "evidence_strength": "strong",
+                }],
+                "virsorter2": [{
+                    **common, "sequence_id": "sample__c000001||full",
+                    "parent_sequence_id": "sample__c000001", "record_type": "input_contig",
+                    "tool": "virsorter2", "evidence_strength": "qualified",
+                }],
+                "vicat": [{
+                    **common, "sequence_id": "sample__c000001", "record_type": "input_contig",
+                    "tool": "vicat", "evidence_strength": "qualified",
+                    "origin_pattern": "predominantly_viral", "viral_supported_loci": "5",
+                    "cellular_supported_loci": "0",
+                }],
+            }
+            evidence_paths = []
+            for name, rows in rows_by_name.items():
+                path = directory / f"{name}.tsv"
+                write_evidence(path, rows)
+                evidence_paths.append(path)
+            paths = self.run_refiner(
+                directory, evidence_paths, allow_ct3_only_refinement=True
+            )
+            self.assertEqual(
+                read_fasta(paths["output"]),
+                {"sample__c000001|viral_region_51_150": "A" * 100},
+            )
+            self.assertEqual(
+                read_tsv(paths["summary"])[0]["whole_contig_consensus_veto_count"],
+                "0",
+            )
+
+    def test_multi_ct3_regions_require_complete_clean_whole_contig_consensus(self) -> None:
+        for case, include_virsorter2, cellular_loci in (
+            ("missing_virsorter2", False, "0"),
+            ("vicat_cellular_conflict", True, "1"),
+        ):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary_directory:
+                directory = Path(temporary_directory)
+                (directory / "candidates.fasta").write_text(
+                    ">sample__c000001\n" + "A" * 200 + "\n", encoding="utf-8"
+                )
+                common = {"sample_id": "sample", "classification": "virus"}
+                rows_by_name = {
+                    "ct3": [
+                        {
+                            **common,
+                            "sequence_id": "sample__c000001|provirus_1_80",
+                            "parent_sequence_id": "sample__c000001",
+                            "record_type": "provirus", "coordinates": "1-80",
+                            "tool": "cenotetaker3",
+                        },
+                        {
+                            **common,
+                            "sequence_id": "sample__c000001|provirus_121_200",
+                            "parent_sequence_id": "sample__c000001",
+                            "record_type": "provirus", "coordinates": "121-200",
+                            "tool": "cenotetaker3",
+                        },
+                    ],
+                    "genomad": [{
+                        **common, "sequence_id": "sample__c000001",
+                        "record_type": "input_contig", "tool": "genomad",
+                        "evidence_strength": "strong",
+                    }],
+                    "vicat": [{
+                        **common, "sequence_id": "sample__c000001",
+                        "record_type": "input_contig", "tool": "vicat",
+                        "evidence_strength": "qualified",
+                        "origin_pattern": "predominantly_viral",
+                        "viral_supported_loci": "5",
+                        "cellular_supported_loci": cellular_loci,
+                    }],
+                }
+                if include_virsorter2:
+                    rows_by_name["virsorter2"] = [{
+                        **common, "sequence_id": "sample__c000001||full",
+                        "parent_sequence_id": "sample__c000001",
+                        "record_type": "input_contig", "tool": "virsorter2",
+                        "evidence_strength": "qualified",
+                    }]
+                evidence_paths = []
+                for name, rows in rows_by_name.items():
+                    path = directory / f"{name}.tsv"
+                    write_evidence(path, rows)
+                    evidence_paths.append(path)
+                paths = self.run_refiner(
+                    directory, evidence_paths, allow_ct3_only_refinement=True
+                )
+                self.assertEqual(
+                    set(read_fasta(paths["output"])),
+                    {
+                        "sample__c000001|viral_region_1_80",
+                        "sample__c000001|viral_region_121_200",
+                    },
+                )
+                self.assertEqual(
+                    read_tsv(paths["summary"])[0][
+                        "whole_contig_consensus_veto_count"
+                    ],
+                    "0",
+                )
 
     def test_vicat_advisory_region_does_not_merge_independent_ct3_loci(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

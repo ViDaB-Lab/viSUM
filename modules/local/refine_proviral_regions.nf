@@ -16,6 +16,7 @@ process REFINE_PROVIRAL_REGIONS {
           path(evidence_files),
           val(allow_ct3_only_refinement),
           val(vicat_provirus_min_overlap)
+    path refiner_script
 
     output:
     tuple val(prefix),
@@ -35,7 +36,7 @@ process REFINE_PROVIRAL_REGIONS {
         ? '--allow-ct3-only-refinement'
         : ''
     """
-    python3 "${projectDir}/bin/refine_proviral_regions.py" \
+    python3 "${refiner_script}" \
         --sample-id "${prefix}" \
         --input-type "${type}" \
         --candidate-fasta "${candidate_fasta}" \
