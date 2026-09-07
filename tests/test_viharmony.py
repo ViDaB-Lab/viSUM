@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bin"))
 
 import run_viharmony
+import reconcile_benchmark_truth
+import replay_viharmony_taxonomy
 
 
 def write_tsv(path: Path, columns: list[str], rows: list[dict[str, str]]) -> None:
@@ -482,6 +484,11 @@ class ViharmonyTests(unittest.TestCase):
 
             metadata = read_tsv(directory / "sample.final_metadata.tsv")
             self.assertEqual(len(metadata), 2)
+            self.assertIn("strict_taxonomy_confidence", metadata[0])
+            self.assertIn("exploratory_taxonomy", metadata[0])
+            self.assertIn("species_assignment_status", metadata[0])
+            self.assertNotIn("analysis_taxonomy", metadata[0])
+            self.assertNotIn("taxonomy_confidence", metadata[0])
             self.assertEqual(metadata[0]["viral_confidence"], "high")
             self.assertEqual(metadata[0]["viral_decision"], "retained_viral")
             self.assertEqual(metadata[0]["cellular_conflict_tools"], "deepmicroclass2")
@@ -497,7 +504,11 @@ class ViharmonyTests(unittest.TestCase):
                 "deepmicroclass2",
             )
             self.assertEqual(metadata[1]["strict_taxonomy_rank"], "family")
-            self.assertIn("g__viharmony_sample_novel_genus_7_of_Chiyouviridae", metadata[1]["analysis_taxonomy"])
+            self.assertNotIn("viharmony_sample", metadata[1]["exploratory_taxonomy"])
+            self.assertIn(
+                "genus:novel_genus_7_of_Chiyouviridae",
+                metadata[1]["vcontact3_groups"],
+            )
             primary_fasta = (directory / "sample.final.original_ids.fasta").read_text(
                 encoding="utf-8"
             )
@@ -532,7 +543,7 @@ class ViharmonyTests(unittest.TestCase):
                 parent_cellular["evidence_application"], "parent_context_only"
             )
             manifest = json.loads((directory / "sample.harmonizer_manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["schema_version"], "viharmony-0.9")
+            self.assertEqual(manifest["schema_version"], "viharmony-1.0")
             self.assertIn(
                 "parent-only cellular/plasmid calls are retained as context",
                 manifest["policy"]["provirus_adjudication"],
@@ -635,11 +646,8 @@ class ViharmonyTests(unittest.TestCase):
         compatible_analysis, _, statuses, _ = run_viharmony.apply_vcontact3_groups(
             short, strict, 1500, 1000, "sample"
         )
-        self.assertEqual(
-            compatible_analysis["genus"],
-            "viharmony_sample_novel_genus_1_of_Polyomaviridae",
-        )
-        self.assertIn("selected_compatible_project_group", statuses)
+        self.assertFalse(compatible_analysis["genus"])
+        self.assertIn("reported_compatible_project_group", statuses)
 
         incompatible = [{
             "realm_prediction": "Monodnaviria",
@@ -668,13 +676,171 @@ class ViharmonyTests(unittest.TestCase):
             "vcontact3_assignment_method": "realm_only",
             "d__Domain": "d__Viruses", "r__Realm": "r__Floreoviria",
         }
-        strict, rank, confidence, tools, votes = run_viharmony.decide_taxonomy(
+        decision = run_viharmony.decide_taxonomy(
             [row], msl, 1000
         )
-        self.assertEqual(rank, "domain")
-        self.assertEqual(confidence, "unclassified")
-        self.assertEqual(tools, [])
-        self.assertEqual(votes[0]["reason"], "below_vcontact3_minimum_length")
+        self.assertEqual(decision.strict_rank, "domain")
+        self.assertEqual(decision.strict_confidence, "unclassified")
+        self.assertEqual(decision.strict_tools, [])
+        self.assertEqual(
+            decision.votes[0]["reason"], "below_vcontact3_minimum_length"
+        )
+
+    def test_global_msl_path_preserves_missing_ancestors(self) -> None:
+        msl = {
+            ("", "", "", "Naldaviricetes", "Lefavirales", "Baculoviridae", "Alphabaculovirus", "Alphabaculovirus testensis"),
+        }
+        rows = [
+            {
+                "tool": "genomad", "classification": "virus",
+                "c__Class": "Naldaviricetes", "f__Family": "Baculoviridae",
+                "g__Genus": "Alphabaculovirus",
+                "s__Species": "Alphabaculovirus testensis",
+            },
+            {
+                "tool": "vicat", "classification": "virus",
+                "taxonomy_supporting_loci": "2",
+                "f__Family": "Baculoviridae",
+                "s__Species": "Alphabaculovirus testensis",
+            },
+        ]
+        decision = run_viharmony.decide_taxonomy(rows, msl)
+        self.assertEqual(decision.strict["realm"], "")
+        self.assertEqual(decision.strict["class"], "Naldaviricetes")
+        self.assertEqual(
+            decision.strict["species"], "Alphabaculovirus testensis"
+        )
+        self.assertEqual(decision.species_status, "strict_consensus")
+
+    def test_single_vicat_species_is_exploratory_only(self) -> None:
+        msl = {
+            ("Riboviria", "Orthornavirae", "Pisuviricota", "Pisoniviricetes", "Picornavirales", "Picornaviridae", "Enterovirus", "Enterovirus testensis"),
+        }
+        moderate = {
+            "tool": "vicat", "classification": "virus",
+            "taxonomy_supporting_loci": "3", "r__Realm": "Riboviria",
+            "s__Species": "Enterovirus testensis",
+        }
+        decision = run_viharmony.decide_taxonomy([moderate], msl)
+        self.assertEqual(decision.strict["species"], "")
+        self.assertEqual(
+            decision.exploratory["species"], "Enterovirus testensis"
+        )
+        self.assertEqual(
+            decision.species_status, "exploratory_single_moderate"
+        )
+
+        provisional = dict(moderate, taxonomy_supporting_loci="1")
+        decision = run_viharmony.decide_taxonomy([provisional], msl)
+        self.assertEqual(decision.strict["species"], "")
+        self.assertEqual(
+            decision.exploratory["species"], "Enterovirus testensis"
+        )
+        self.assertEqual(
+            decision.species_status, "exploratory_single_provisional"
+        )
+
+    def test_named_alternative_blocks_single_high_species(self) -> None:
+        msl = {
+            ("Riboviria", "Orthornavirae", "Pisuviricota", "Pisoniviricetes", "Picornavirales", "Picornaviridae", "Enterovirus", "Enterovirus alpha"),
+            ("Riboviria", "Orthornavirae", "Pisuviricota", "Pisoniviricetes", "Picornavirales", "Picornaviridae", "Enterovirus", "Enterovirus beta"),
+        }
+        rows = [
+            {
+                "tool": "vitap", "classification": "virus",
+                "vitap_confidence_level": "High-confidence",
+                "s__Species": "Enterovirus alpha",
+            },
+            {
+                "tool": "vicat", "classification": "virus",
+                "taxonomy_supporting_loci": "1",
+                "s__Species": "Enterovirus beta",
+            },
+        ]
+        decision = run_viharmony.decide_taxonomy(rows, msl)
+        self.assertEqual(decision.strict["species"], "")
+        self.assertEqual(decision.exploratory["species"], "Enterovirus alpha")
+        self.assertEqual(decision.species_status, "withheld_species_conflict")
+
+    def test_single_high_species_without_alternative_is_strict(self) -> None:
+        msl = {
+            ("Riboviria", "Orthornavirae", "Pisuviricota", "Pisoniviricetes", "Picornavirales", "Picornaviridae", "Enterovirus", "Enterovirus alpha"),
+        }
+        decision = run_viharmony.decide_taxonomy([{
+            "tool": "vitap", "classification": "virus",
+            "vitap_confidence_level": "High-confidence",
+            "s__Species": "Enterovirus alpha",
+        }], msl)
+        self.assertEqual(decision.strict["species"], "Enterovirus alpha")
+        self.assertEqual(decision.species_status, "strict_single_high")
+
+    def test_independent_method_conflict_stops_strict_lineage(self) -> None:
+        msl = {
+            ("Riboviria", "Orthornavirae", "Pisuviricota", "Pisoniviricetes", "Picornavirales", "Picornaviridae", "Enterovirus", "Enterovirus alpha"),
+            ("Monodnaviria", "Shotokuvirae", "Cossaviricota", "Quintoviricetes", "Piccovirales", "Parvoviridae", "Dependoparvovirus", "Dependoparvovirus beta"),
+        }
+        rows = [
+            {
+                "tool": "vitap", "classification": "virus",
+                "vitap_confidence_level": "High-confidence",
+                "r__Realm": "Riboviria", "s__Species": "Enterovirus alpha",
+            },
+            {
+                "tool": "genomad", "classification": "virus",
+                "r__Realm": "Monodnaviria",
+                "s__Species": "Dependoparvovirus beta",
+            },
+            {
+                "tool": "vicat", "classification": "virus",
+                "taxonomy_supporting_loci": "2",
+                "r__Realm": "Monodnaviria",
+                "s__Species": "Dependoparvovirus beta",
+            },
+        ]
+        decision = run_viharmony.decide_taxonomy(rows, msl)
+        self.assertEqual(decision.strict_rank, "domain")
+        self.assertEqual(decision.conflict_rank, "realm")
+        self.assertEqual(
+            decision.strict_stop_reason, "independent_method_conflict"
+        )
+        self.assertEqual(
+            decision.species_status, "withheld_lineage_conflict"
+        )
+
+    def test_truth_reconciliation_adds_only_required_matching_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            target = directory / "target.tsv"
+            source = directory / "source.tsv"
+            output = directory / "output.tsv"
+            columns = ["benchmark_sequence_id", "species", "sequence_sha256"]
+            write_tsv(target, columns, [{
+                "benchmark_sequence_id": "ICTV_RNA_874",
+                "species": "Species a", "sequence_sha256": "aaa",
+            }])
+            write_tsv(source, columns, [
+                {
+                    "benchmark_sequence_id": "ICTV_RNA_874",
+                    "species": "Species a", "sequence_sha256": "aaa",
+                },
+                {
+                    "benchmark_sequence_id": "ICTV_RNA_875",
+                    "species": "Species b", "sequence_sha256": "bbb",
+                },
+            ])
+            added = reconcile_benchmark_truth.reconcile(
+                target, source, output,
+                required_ids={"ICTV_RNA_875"},
+            )
+            self.assertEqual(added, ["ICTV_RNA_875"])
+            self.assertEqual(
+                [row["benchmark_sequence_id"] for row in read_tsv(output)],
+                ["ICTV_RNA_874", "ICTV_RNA_875"],
+            )
+
+    def test_taxonomy_replay_output_schema_has_unique_columns(self) -> None:
+        columns = replay_viharmony_taxonomy.OUTPUT_COLUMNS
+        self.assertEqual(len(columns), len(set(columns)))
 
     def test_zero_candidates_still_writes_disposition_and_all_final_headers(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

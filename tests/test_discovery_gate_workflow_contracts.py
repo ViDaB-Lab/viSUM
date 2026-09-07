@@ -20,7 +20,19 @@ class DiscoveryGateWorkflowContractTests(unittest.TestCase):
         ):
             self.assertIn(f"STANDARDIZE_{tool}.out.evidence", workflow)
         self.assertIn("DISCOVERY_GATE(ch_discovery_gate_inputs)", workflow)
-        self.assertIn("groupTuple()", workflow)
+        self.assertIn("groupKey(prefix, expectedDiscoveryToolsByType[type].size())", workflow)
+        self.assertIn("sampleKey.getGroupTarget()", workflow)
+
+    def test_evidence_groups_release_per_sample_at_the_expected_size(self) -> None:
+        workflow = (REPOSITORY_ROOT / "visum_nextflow.nf").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertEqual(workflow.count("groupKey("), 3)
+        self.assertEqual(workflow.count("sampleKey.getGroupTarget()"), 3)
+        self.assertGreaterEqual(workflow.count("by: 0"), 2)
+        self.assertIn("groupKey(prefix, sharedProvirusTools.size())", workflow)
+        self.assertIn("extraHarmonyEvidenceCount = runVicat ? 1 : 0", workflow)
 
     def test_module_publishes_candidate_and_audit_outputs(self) -> None:
         module = (
@@ -56,7 +68,7 @@ class DiscoveryGateWorkflowContractTests(unittest.TestCase):
         self.assertIn("def validateEvidenceArtifacts", workflow)
         self.assertIn("A valid zero-call run must still emit a header-only evidence file", workflow)
         self.assertIn("expectedDiscoveryToolsByType", workflow)
-        self.assertIn("tuple(prefix, tool, evidence)", workflow)
+        self.assertIn("actualTools.size() != evidenceFiles.size()", workflow)
 
 
 if __name__ == "__main__":

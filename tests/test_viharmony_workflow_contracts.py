@@ -19,6 +19,8 @@ class ViharmonyWorkflowContractTests(unittest.TestCase):
         workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
 
         self.assertIn("expectedHarmonyToolsByType", workflow)
+        self.assertIn("expectedHarmonyToolsByType[type].size() +", workflow)
+        self.assertIn("extraHarmonyEvidenceCount", workflow)
         self.assertIn("'viharmony', expectedTools, actualTools, evidenceFiles", workflow)
         self.assertIn("ch_harmony_inputs = ch_refined_for_harmony", workflow)
 
@@ -38,7 +40,7 @@ class ViharmonyWorkflowContractTests(unittest.TestCase):
         self.assertIn("--audit-mode", module)
         self.assertIn("--vcontact3-min-taxonomy-length", module)
         self.assertIn('path("${prefix}.*_audit.tsv.gz"),\n          optional: true', module)
-        self.assertIn("viHARMONY decision policy v0.9", module)
+        self.assertIn("viHARMONY decision policy v1.0", module)
 
     def test_config_uses_one_canonical_msl_parameter(self) -> None:
         config = (ROOT / "visum.config").read_text(encoding="utf-8")

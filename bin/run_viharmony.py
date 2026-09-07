@@ -10,6 +10,7 @@ import gzip
 import hashlib
 import json
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, TextIO
 
@@ -47,8 +48,15 @@ METADATA_COLUMNS = [
     "parent_cellular_context_tools", "parent_plasmid_context_tools",
     "checkv_complete_viral_contig_support", "generic_cellular_conflict_overridden",
     "plasmid_conflict_tools", "strict_taxonomy", "strict_taxonomy_rank",
-    "analysis_taxonomy", "analysis_taxonomy_rank", "taxonomy_confidence",
-    "taxonomy_supporting_tools", "taxonomy_conflict", "vcontact3_groups",
+    "strict_taxonomy_confidence", "strict_taxonomy_supporting_tools",
+    "strict_taxonomy_supporting_method_families", "strict_taxonomy_stop_reason",
+    "strict_taxonomy_conflict_rank", "strict_taxonomy_conflicting_taxa",
+    "exploratory_taxonomy", "exploratory_taxonomy_rank",
+    "exploratory_taxonomy_confidence", "exploratory_taxonomy_supporting_tools",
+    "exploratory_taxonomy_supporting_method_families",
+    "exploratory_taxonomy_status", "strict_species", "exploratory_species",
+    "species_assignment_status", "species_assignment_basis",
+    "species_conflicting_taxa", "taxonomy_conflict", "vcontact3_groups",
     "vcontact3_group_status", "sequence_interpretation", "tesorter_status",
     "tesorter_evidence_strength", "tesorter_categories", "tesorter_orders",
     "tesorter_superfamilies", "tesorter_assignment_methods",
@@ -64,6 +72,52 @@ STRENGTH_ORDER = {"": 0, "weak": 1, "qualified": 2, "strong": 3}
 
 PRIMARY_VIRAL_DECISIONS = {"retained_viral", "retained_provirus"}
 PROVISIONAL_VIRAL_DECISIONS = {"provisional_viral", "provisional_provirus"}
+
+
+@dataclass
+class MslCatalog:
+    """Indexed ICTV lineages used to validate and resolve partial predictions."""
+
+    lineages: tuple[tuple[str, ...], ...]
+    by_taxon: dict[tuple[str, str], frozenset[int]]
+
+    def matching(self, lineage: dict[str, str]) -> frozenset[int]:
+        named = [
+            (rank, lineage.get(rank, ""))
+            for rank in RANKS[1:]
+            if lineage.get(rank)
+        ]
+        if not named:
+            return frozenset()
+        matches: set[int] | None = None
+        for rank, taxon in named:
+            indexed = self.by_taxon.get((rank, taxon), frozenset())
+            matches = set(indexed) if matches is None else matches.intersection(indexed)
+            if not matches:
+                return frozenset()
+        return frozenset(matches or set())
+
+
+@dataclass
+class TaxonomyDecision:
+    strict: dict[str, str]
+    exploratory: dict[str, str]
+    strict_rank: str
+    exploratory_rank: str
+    strict_confidence: str
+    exploratory_confidence: str
+    strict_tools: list[str]
+    exploratory_tools: list[str]
+    strict_families: list[str]
+    exploratory_families: list[str]
+    strict_stop_reason: str
+    conflict_rank: str
+    conflicting_taxa: list[str]
+    exploratory_status: str
+    species_status: str
+    species_basis: str
+    species_conflicting_taxa: list[str]
+    votes: list[dict[str, object]]
 
 
 def parse_optional_interval(value: str) -> tuple[int, int] | None:
@@ -475,7 +529,20 @@ def clean_taxon(value: str, rank: str) -> str:
     return value
 
 
-def load_msl(path: Path) -> tuple[set[tuple[str, ...]], str]:
+def make_msl_catalog(lineages: Iterable[tuple[str, ...]]) -> MslCatalog:
+    ordered = tuple(sorted(set(lineages)))
+    by_taxon: dict[tuple[str, str], set[int]] = defaultdict(set)
+    for index, lineage in enumerate(ordered):
+        for rank, taxon in zip(RANKS[1:], lineage):
+            if taxon:
+                by_taxon[(rank, taxon)].add(index)
+    return MslCatalog(
+        ordered,
+        {key: frozenset(indices) for key, indices in by_taxon.items()},
+    )
+
+
+def load_msl(path: Path) -> tuple[MslCatalog, str]:
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         if reader.fieldnames is None:
@@ -492,15 +559,17 @@ def load_msl(path: Path) -> tuple[set[tuple[str, ...]], str]:
     if not lineages:
         raise ValueError(f"ICTV MSL contains no taxonomy rows: {path}")
     release = path.stem
-    return lineages, release
+    return make_msl_catalog(lineages), release
 
 
-def lineage_is_valid(lineage: dict[str, str], msl: set[tuple[str, ...]]) -> bool:
-    named = [(rank, lineage.get(rank, "")) for rank in RANKS[1:] if lineage.get(rank)]
-    if not named:
-        return False
-    rank_positions = {rank: index for index, rank in enumerate(RANKS[1:])}
-    return any(all(msl_row[rank_positions[rank]] == taxon for rank, taxon in named) for msl_row in msl)
+def as_msl_catalog(msl: MslCatalog | set[tuple[str, ...]]) -> MslCatalog:
+    return msl if isinstance(msl, MslCatalog) else make_msl_catalog(msl)
+
+
+def lineage_is_valid(
+    lineage: dict[str, str], msl: MslCatalog | set[tuple[str, ...]]
+) -> bool:
+    return bool(as_msl_catalog(msl).matching(lineage))
 
 
 def vote_tier(row: dict[str, str]) -> str:
@@ -626,8 +695,8 @@ def apply_vcontact3_groups(
     minimum_length: int,
     sample_id: str,
 ) -> tuple[dict[str, str], list[str], list[str], list[dict[str, object]]]:
-    """Add only unambiguous, ancestry-compatible project groups."""
-    analysis = dict(strict)
+    """Report project groups without inserting them into formal ICTV taxonomy."""
+    exploratory = dict(strict)
     labels: list[str] = []
     statuses: set[str] = set()
     audit_rows: list[dict[str, object]] = []
@@ -649,23 +718,22 @@ def apply_vcontact3_groups(
         elif len(unique_predictions) > 1:
             reason = "ambiguous_vcontact3_groups"
             statuses.add(reason)
-        elif analysis.get(rank):
+        elif exploratory.get(rank):
             reason = "strict_rank_already_classified"
             statuses.add(reason)
         elif any(
             group_parent_context_agrees(group, rank, strict)
             for _, group in candidates
         ):
-            reason = "selected_compatible_project_group"
+            reason = "reported_compatible_project_group"
             statuses.add(reason)
-            analysis[rank] = f"viharmony_{sample_id}_{unique_predictions[0]}"
         else:
             reason = "incompatible_or_unknown_parent_context"
             statuses.add(reason)
 
         accepted_prediction = (
             unique_predictions[0]
-            if reason == "selected_compatible_project_group"
+            if reason == "reported_compatible_project_group"
             else ""
         )
         for prediction in unique_predictions:
@@ -675,29 +743,38 @@ def apply_vcontact3_groups(
                 "rank": rank,
                 "taxon": prediction,
                 "tier": "auxiliary",
-                "valid": reason == "selected_compatible_project_group",
+                "valid": reason == "reported_compatible_project_group",
                 "accepted": prediction == accepted_prediction,
                 "reason": reason,
             })
 
     if not labels:
         statuses.add("no_project_group")
-    return analysis, sorted(set(labels)), sorted(statuses), audit_rows
+    return exploratory, sorted(set(labels)), sorted(statuses), audit_rows
 
 
 def decide_taxonomy(
     rows: list[dict[str, str]],
-    msl: set[tuple[str, ...]],
+    msl: MslCatalog | set[tuple[str, ...]],
     vcontact3_minimum_length: int = 1000,
-) -> tuple[dict[str, str], str, str, list[str], list[dict[str, object]]]:
+) -> TaxonomyDecision:
+    """Resolve taxonomy globally against complete ICTV MSL paths.
+
+    Strict species calls require either two independent method families or one
+    high-tier call without any named alternative. Single moderate/provisional
+    calls remain available only in the exploratory taxonomy.
+    """
+    catalog = as_msl_catalog(msl)
     votes: list[dict[str, object]] = []
+    claims: list[dict[str, object]] = []
     for row in rows:
         tool = row.get("tool", "").strip().lower()
         if tool not in TAXONOMY_TOOLS or row.get("classification") != "virus":
             continue
         lineage = {rank: clean_taxon(row.get(column, ""), rank) for rank, column in RANK_COLUMNS.items()}
         lineage["domain"] = "Viruses"
-        valid = lineage_is_valid(lineage, msl)
+        matching_paths = catalog.matching(lineage)
+        valid = bool(matching_paths)
         reason = "pending" if valid else "invalid_configured_ictv_msl"
         if tool == "vcontact3":
             try:
@@ -708,71 +785,235 @@ def decide_taxonomy(
                 valid = False
                 reason = "below_vcontact3_minimum_length"
         tier = vote_tier(row)
+        claims.append({
+            "tool": tool,
+            "method_family": METHOD_FAMILY[tool],
+            "tier": tier,
+            "lineage": lineage,
+            "matching_paths": matching_paths,
+            "valid": valid,
+        })
         for rank in RANKS[1:]:
             taxon = lineage.get(rank, "")
             if taxon:
-                votes.append({"tool": tool, "method_family": METHOD_FAMILY[tool], "rank": rank, "taxon": taxon, "tier": tier, "valid": valid, "accepted": False, "reason": reason, "_lineage": lineage})
+                votes.append({
+                    "tool": tool, "method_family": METHOD_FAMILY[tool],
+                    "rank": rank, "taxon": taxon, "tier": tier,
+                    "valid": valid, "accepted": False, "reason": reason,
+                })
 
-    accepted = {rank: "" for rank in RANKS}
-    accepted["domain"] = "Viruses"
-    supporting_tools: set[str] = set()
-    conflict = "false"
-    deepest = "domain"
-    for rank in RANKS[1:]:
-        earlier_ranks = RANKS[1:RANKS.index(rank)]
-        rank_votes = [
-            vote for vote in votes
-            if vote["rank"] == rank
-            and vote["valid"]
-            and all(
-                not accepted[ancestor]
-                or vote["_lineage"].get(ancestor) == accepted[ancestor]
-                for ancestor in earlier_ranks
-            )
+    valid_claims = [claim for claim in claims if claim["valid"]]
+    candidate_indices = sorted({
+        index for claim in valid_claims for index in claim["matching_paths"]
+    })
+    blank = {rank: "" for rank in RANKS}
+    blank["domain"] = "Viruses"
+    if not candidate_indices:
+        return TaxonomyDecision(
+            blank, dict(blank), "domain", "domain", "unclassified",
+            "ambiguous", [], [], [], [], "no_valid_taxonomy_evidence",
+            "NA", [], "unclassified", "no_taxonomy_evidence",
+            "no_valid_taxonomy_evidence", [], votes,
+        )
+
+    def deepest_claim_rank(claim: dict[str, object]) -> int:
+        lineage = claim["lineage"]
+        return max(
+            (RANKS.index(rank) for rank in RANKS[1:] if lineage.get(rank)),
+            default=0,
+        )
+
+    def path_score(index: int) -> tuple[int, int, int, int]:
+        supporters = [
+            claim for claim in valid_claims if index in claim["matching_paths"]
         ]
-        if not rank_votes:
-            break
-        grouped: dict[str, list[dict[str, object]]] = defaultdict(list)
-        for vote in rank_votes:
-            grouped[str(vote["taxon"])].append(vote)
-        scores = {
-            taxon: (
-                max(TIER_SCORE[str(vote["tier"])] for vote in taxon_votes),
-                len({str(vote["method_family"]) for vote in taxon_votes}),
-                len({str(vote["tool"]) for vote in taxon_votes}),
-            )
-            for taxon, taxon_votes in grouped.items()
-        }
-        best_score = max(scores.values())
-        winners = [taxon for taxon, score in scores.items() if score == best_score]
-        if len(winners) != 1:
-            conflict = "true"
-            for vote in rank_votes:
-                vote["reason"] = "rank_tie"
-            break
-        winner = winners[0]
-        accepted[rank] = winner
-        deepest = rank
-        for vote in rank_votes:
-            if vote["taxon"] == winner:
-                vote["accepted"] = True
-                vote["reason"] = "selected"
-                supporting_tools.add(str(vote["tool"]))
-            else:
-                vote["reason"] = "lower_method_aware_support"
+        return (
+            max(TIER_SCORE[str(claim["tier"])] for claim in supporters),
+            len({str(claim["method_family"]) for claim in supporters}),
+            sum(
+                TIER_SCORE[str(claim["tier"])] * deepest_claim_rank(claim)
+                for claim in supporters
+            ),
+            len({str(claim["tool"]) for claim in supporters}),
+        )
 
-    deepest_votes = [vote for vote in votes if vote["rank"] == deepest and vote["accepted"]]
-    families = {str(vote["method_family"]) for vote in deepest_votes}
-    max_tier = max((TIER_SCORE[str(vote["tier"])] for vote in deepest_votes), default=0)
-    if len(families) >= 2:
-        confidence = "multi_method_consensus"
-    elif max_tier == 3:
-        confidence = "single_method_high"
-    elif deepest == "domain":
-        confidence = "unclassified"
+    scores = {index: path_score(index) for index in candidate_indices}
+    best_score = max(scores.values())
+    best_indices = [index for index, score in scores.items() if score == best_score]
+    best_supporters = [
+        claim for claim in valid_claims
+        if any(index in claim["matching_paths"] for index in best_indices)
+    ]
+    deepest_supported_index = max(
+        (deepest_claim_rank(claim) for claim in best_supporters), default=0
+    )
+
+    common = dict(blank)
+    ambiguous_rank = ""
+    for offset, rank in enumerate(RANKS[1:]):
+        if RANKS.index(rank) > deepest_supported_index:
+            continue
+        values = {catalog.lineages[index][offset] for index in best_indices}
+        if len(values) == 1:
+            common[rank] = next(iter(values))
+        elif not ambiguous_rank:
+            ambiguous_rank = rank
+
+    strict = dict(common)
+    conflict_rank = ""
+    conflicting_taxa: list[str] = []
+    for rank in RANKS[1:]:
+        selected = strict.get(rank, "")
+        if not selected:
+            continue
+        alternatives: dict[str, set[str]] = defaultdict(set)
+        for claim in valid_claims:
+            taxon = str(claim["lineage"].get(rank, ""))
+            if taxon and taxon != selected:
+                alternatives[taxon].add(str(claim["method_family"]))
+        supported_alternatives = sorted(
+            taxon for taxon, families in alternatives.items()
+            if len(families) >= 2
+        )
+        if supported_alternatives:
+            conflict_rank = rank
+            conflicting_taxa = [selected, *supported_alternatives]
+            for later_rank in RANKS[RANKS.index(rank):]:
+                strict[later_rank] = ""
+            break
+
+    selected_species = common.get("species", "")
+    species_supporters = [
+        claim for claim in valid_claims
+        if selected_species and claim["lineage"].get("species") == selected_species
+    ]
+    species_families = {
+        str(claim["method_family"]) for claim in species_supporters
+    }
+    species_max_tier = max(
+        (TIER_SCORE[str(claim["tier"])] for claim in species_supporters),
+        default=0,
+    )
+    named_species = sorted({
+        str(claim["lineage"].get("species", ""))
+        for claim in valid_claims if claim["lineage"].get("species")
+    })
+    alternative_species = [
+        taxon for taxon in named_species if taxon != selected_species
+    ]
+    species_status = "unresolved"
+    species_basis = "insufficient_species_support"
+    if selected_species and len(species_families) >= 2 and not conflict_rank:
+        species_status = "strict_consensus"
+        species_basis = "two_or_more_independent_method_families"
+    elif (
+        selected_species and species_max_tier == TIER_SCORE["high"]
+        and not alternative_species and not conflict_rank
+    ):
+        species_status = "strict_single_high"
+        species_basis = "single_high_call_without_named_alternative"
     else:
-        confidence = "provisional"
-    return accepted, deepest, confidence, sorted(supporting_tools), votes
+        strict["species"] = ""
+        if conflict_rank and conflict_rank != "species":
+            species_status = "withheld_lineage_conflict"
+            species_basis = "ancestor_lineage_conflict"
+        elif not selected_species and ambiguous_rank == "species":
+            species_status = "ambiguous_msl_species"
+            species_basis = "equally_supported_msl_species"
+        elif not selected_species and ambiguous_rank:
+            species_status = "withheld_lineage_conflict"
+            species_basis = "ambiguous_ancestor_lineage"
+        elif alternative_species or conflict_rank == "species":
+            species_status = "withheld_species_conflict"
+            species_basis = "named_alternative_species"
+        elif selected_species and species_max_tier == TIER_SCORE["moderate"]:
+            species_status = "exploratory_single_moderate"
+            species_basis = "single_moderate_species_call"
+        elif selected_species:
+            species_status = "exploratory_single_provisional"
+            species_basis = "single_provisional_species_call"
+
+    strict_rank = next(
+        (rank for rank in reversed(RANKS) if strict.get(rank)), "domain"
+    )
+    exploratory = dict(common)
+    exploratory_rank = next(
+        (rank for rank in reversed(RANKS) if exploratory.get(rank)), "domain"
+    )
+
+    def support_at(
+        lineage: dict[str, str], rank: str
+    ) -> tuple[list[str], list[str], int]:
+        taxon = lineage.get(rank, "")
+        supporting = [
+            claim for claim in valid_claims
+            if taxon and claim["lineage"].get(rank) == taxon
+        ]
+        return (
+            sorted({str(claim["tool"]) for claim in supporting}),
+            sorted({str(claim["method_family"]) for claim in supporting}),
+            max(
+                (TIER_SCORE[str(claim["tier"])] for claim in supporting),
+                default=0,
+            ),
+        )
+
+    strict_tools, strict_families, strict_tier = support_at(strict, strict_rank)
+    exploratory_tools, exploratory_families, exploratory_tier = support_at(
+        exploratory, exploratory_rank
+    )
+    if len(strict_families) >= 2:
+        strict_confidence = "multi_method_consensus"
+    elif strict_tier == TIER_SCORE["high"]:
+        strict_confidence = "single_method_high"
+    elif strict_rank == "domain":
+        strict_confidence = "unclassified"
+    else:
+        strict_confidence = "moderate_supported"
+    exploratory_confidence = {
+        3: "high", 2: "moderate", 1: "provisional", 0: "ambiguous",
+    }[exploratory_tier]
+
+    if conflict_rank:
+        stop_reason = "independent_method_conflict"
+    elif strict_rank != exploratory_rank:
+        stop_reason = "insufficient_rank_support"
+    elif ambiguous_rank:
+        stop_reason = "ambiguous_msl_paths"
+    else:
+        stop_reason = "deepest_supported_rank"
+    if taxonomy_string(strict) == taxonomy_string(exploratory):
+        exploratory_status = "matches_strict"
+    elif conflict_rank:
+        exploratory_status = "alternative_at_conflict"
+    elif strict_rank == "domain":
+        exploratory_status = "exploratory_only"
+    else:
+        exploratory_status = "extends_strict"
+
+    for vote in votes:
+        if not vote["valid"]:
+            continue
+        rank = str(vote["rank"])
+        taxon = str(vote["taxon"])
+        if strict.get(rank) == taxon:
+            vote["accepted"] = True
+            vote["reason"] = "selected_strict"
+        elif exploratory.get(rank) == taxon:
+            vote["reason"] = "selected_exploratory"
+        elif rank == conflict_rank:
+            vote["reason"] = "independent_method_conflict"
+        else:
+            vote["reason"] = "lower_global_path_support"
+
+    return TaxonomyDecision(
+        strict, exploratory, strict_rank, exploratory_rank,
+        strict_confidence, exploratory_confidence, strict_tools,
+        exploratory_tools, strict_families, exploratory_families,
+        stop_reason, conflict_rank or "NA", conflicting_taxa,
+        exploratory_status, species_status, species_basis,
+        alternative_species, votes,
+    )
 
 
 def original_output_id(original_id: str, record_type: str, coordinates: str) -> str:
@@ -941,17 +1182,17 @@ def run(args: argparse.Namespace) -> None:
             viral_confidence == "high",
         )
 
-        strict, strict_rank, tax_confidence, tax_tools, vote_rows = decide_taxonomy(
+        taxonomy = decide_taxonomy(
             rows, msl, minimum_vcontact3_length
         )
-        for vote in vote_rows:
+        for vote in taxonomy.votes:
             vote["sample_id"] = args.sample_id
             vote["final_sequence_id"] = final_id
             taxonomy_audit_rows.append(vote)
 
-        analysis, group_labels, group_statuses, group_audit = apply_vcontact3_groups(
+        _, group_labels, group_statuses, group_audit = apply_vcontact3_groups(
             groups_by_sequence.get(final_id, []),
-            strict,
+            taxonomy.strict,
             len(sequence),
             minimum_vcontact3_length,
             args.sample_id,
@@ -963,8 +1204,8 @@ def run(args: argparse.Namespace) -> None:
 
         coords = region["coordinates"].strip() or "NA"
         discovery_status = gate[parent_id]["discovery_status"].strip()
-        strict_taxonomy = taxonomy_string(strict)
-        analysis_taxonomy = taxonomy_string(analysis)
+        strict_taxonomy = taxonomy_string(taxonomy.strict)
+        exploratory_taxonomy = taxonomy_string(taxonomy.exploratory)
         original_name = header["original_id"]
         cellular = sorted(tools_by_class.get("cellular", set()))
         plasmid = sorted(tools_by_class.get("plasmid", set()))
@@ -1079,12 +1320,39 @@ def run(args: argparse.Namespace) -> None:
                 ",".join(reported_plasmid_conflicts) or "NA"
             ),
             "strict_taxonomy": strict_taxonomy,
-            "strict_taxonomy_rank": strict_rank,
-            "analysis_taxonomy": analysis_taxonomy,
-            "analysis_taxonomy_rank": next((rank for rank in reversed(RANKS) if analysis.get(rank)), "domain"),
-            "taxonomy_confidence": tax_confidence,
-            "taxonomy_supporting_tools": ",".join(tax_tools) or "NA",
-            "taxonomy_conflict": "true" if any(vote["reason"] == "rank_tie" for vote in vote_rows) else "false",
+            "strict_taxonomy_rank": taxonomy.strict_rank,
+            "strict_taxonomy_confidence": taxonomy.strict_confidence,
+            "strict_taxonomy_supporting_tools": (
+                ",".join(taxonomy.strict_tools) or "NA"
+            ),
+            "strict_taxonomy_supporting_method_families": (
+                ",".join(taxonomy.strict_families) or "NA"
+            ),
+            "strict_taxonomy_stop_reason": taxonomy.strict_stop_reason,
+            "strict_taxonomy_conflict_rank": taxonomy.conflict_rank,
+            "strict_taxonomy_conflicting_taxa": (
+                ",".join(taxonomy.conflicting_taxa) or "NA"
+            ),
+            "exploratory_taxonomy": exploratory_taxonomy,
+            "exploratory_taxonomy_rank": taxonomy.exploratory_rank,
+            "exploratory_taxonomy_confidence": taxonomy.exploratory_confidence,
+            "exploratory_taxonomy_supporting_tools": (
+                ",".join(taxonomy.exploratory_tools) or "NA"
+            ),
+            "exploratory_taxonomy_supporting_method_families": (
+                ",".join(taxonomy.exploratory_families) or "NA"
+            ),
+            "exploratory_taxonomy_status": taxonomy.exploratory_status,
+            "strict_species": taxonomy.strict.get("species", "") or "NA",
+            "exploratory_species": (
+                taxonomy.exploratory.get("species", "") or "NA"
+            ),
+            "species_assignment_status": taxonomy.species_status,
+            "species_assignment_basis": taxonomy.species_basis,
+            "species_conflicting_taxa": (
+                ",".join(taxonomy.species_conflicting_taxa) or "NA"
+            ),
+            "taxonomy_conflict": str(taxonomy.conflict_rank != "NA").lower(),
             "vcontact3_groups": ",".join(sorted(set(group_labels))) or "NA",
             "vcontact3_group_status": ",".join(group_statuses),
             "vicat_origin_pattern": ",".join(vicat_patterns) or "NA",
@@ -1151,7 +1419,7 @@ def run(args: argparse.Namespace) -> None:
             reasons.append("likely_retroelement")
         elif tesorter_summary["sequence_interpretation"] == "ambiguous_mobile_element":
             reasons.append("ambiguous_mobile_element")
-        if strict_rank == "domain": reasons.append("taxonomy_unclassified")
+        if taxonomy.strict_rank == "domain": reasons.append("taxonomy_unclassified")
         if reasons:
             review_rows.append({"final_sequence_id": final_id, "review_reasons": ",".join(reasons), **metadata})
 
@@ -1288,7 +1556,7 @@ def run(args: argparse.Namespace) -> None:
 
     manifest_path = Path(f"{prefix}.harmonizer_manifest.json")
     manifest = {
-        "schema_version": "viharmony-0.9",
+        "schema_version": "viharmony-1.0",
         "sample_id": args.sample_id,
         "input_type": args.input_type,
         "ictv_msl": args.ictv_msl.name,
@@ -1299,7 +1567,9 @@ def run(args: argparse.Namespace) -> None:
             "viral_confidence": "high=2+ strong; supported=1 strong or 2+ qualified; provisional=1 qualified",
             "checkv_complete_contig": "complete/high-quality, provirus=No, viral genes present, and zero host genes is strong intact-contig viral support",
             "generic_cellular_override": "2+ strong independent viral tools override Deep6/DeepMicroClass2-only cellular conflict; the conflict remains annotated",
-            "taxonomy": "configured-ICTV-MSL-validated method-aware rank voting",
+            "taxonomy": "global configured-ICTV-MSL path resolution with conservative strict and explicit exploratory outputs",
+            "strict_species": "2+ independent method families, or one high-tier species call with no named alternative",
+            "exploratory_species": "single moderate/provisional calls remain exploratory and never populate strict species",
             "vcontact3_min_taxonomy_length": minimum_vcontact3_length,
             "vcontact3_project_groups": "ancestry-compatible, unambiguous groups only",
             "vicat_scope": "refined-region evidence supersedes parent-discovery evidence",

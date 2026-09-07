@@ -1511,9 +1511,28 @@ workflow {
             .first()
     }
 
+    // A sized group key releases each sample as soon as all evidence expected
+    // for that molecule type arrives. An unbounded groupTuple() would wait for
+    // the entire mixed channel to close and let one slow sample delay all
+    // otherwise-complete samples.
     ch_discovery_evidence_by_sample = ch_discovery_evidence
-        .map { prefix, tool, evidence -> tuple(prefix, tool, evidence) }
+        .combine(
+            NORMALIZE_FASTA.out.normalized_records.map {
+                prefix, type, fasta, headerMap -> tuple(prefix, type)
+            },
+            by: 0
+        )
+        .map { prefix, tool, evidence, type ->
+            tuple(
+                groupKey(prefix, expectedDiscoveryToolsByType[type].size()),
+                tool,
+                evidence
+            )
+        }
         .groupTuple()
+        .map { sampleKey, tools, evidenceFiles ->
+            tuple(sampleKey.getGroupTarget(), tools, evidenceFiles)
+        }
 
     ch_discovery_gate_inputs = NORMALIZE_FASTA.out.normalized_records
         .map { prefix, type, fasta, headerMap ->
@@ -1632,8 +1651,13 @@ workflow {
     }
 
     ch_provirus_evidence_by_sample = ch_provirus_evidence
-        .map { prefix, tool, evidence -> tuple(prefix, tool, evidence) }
+        .map { prefix, tool, evidence ->
+            tuple(groupKey(prefix, sharedProvirusTools.size()), tool, evidence)
+        }
         .groupTuple()
+        .map { sampleKey, tools, evidenceFiles ->
+            tuple(sampleKey.getGroupTarget(), tools, evidenceFiles)
+        }
 
     ch_provirus_refinement_inputs = DISCOVERY_GATE.out.candidates
         .join(ch_provirus_evidence_by_sample, remainder: true)
@@ -1800,9 +1824,32 @@ workflow {
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VCONTACT3.out.evidence)
     }
 
+    // viCAT contributes both parent-contig and post-refinement evidence, so
+    // its second artifact is included in the expected emission count even
+    // though both artifacts deliberately retain the canonical `vicat` label.
+    def extraHarmonyEvidenceCount = runVicat ? 1 : 0
     ch_harmony_evidence_by_sample = ch_harmony_evidence
-        .map { prefix, tool, evidence -> tuple(prefix, tool, evidence) }
+        .combine(
+            NORMALIZE_FASTA.out.normalized_records.map {
+                prefix, type, fasta, headerMap -> tuple(prefix, type)
+            },
+            by: 0
+        )
+        .map { prefix, tool, evidence, type ->
+            tuple(
+                groupKey(
+                    prefix,
+                    expectedHarmonyToolsByType[type].size() +
+                        extraHarmonyEvidenceCount
+                ),
+                tool,
+                evidence
+            )
+        }
         .groupTuple()
+        .map { sampleKey, tools, evidenceFiles ->
+            tuple(sampleKey.getGroupTarget(), tools, evidenceFiles)
+        }
 
     ch_harmony_evidence_for_sample = NORMALIZE_FASTA.out.normalized_records
         .map { prefix, type, fasta, headerMap ->

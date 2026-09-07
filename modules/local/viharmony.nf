@@ -57,7 +57,8 @@ process VIHARMONY {
         ? groupList.collect { groups -> "'${groups}'" }.join(' ')
         : ''
     """
-    # viHARMONY decision policy v0.9: disputed CT3/viCAT boundaries require
+    # viHARMONY decision policy v1.0: global MSL taxonomy resolution and
+    # conservative strict species reporting; disputed CT3/viCAT boundaries require
     # regional support; parent-only cellular/plasmid evidence remains context,
     # and strongly supported virus/plasmid hybrids retain both interpretations.
     python3 "${projectDir}/bin/run_viharmony.py" \
