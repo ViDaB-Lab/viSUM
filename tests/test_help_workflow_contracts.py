@@ -26,7 +26,7 @@ class HelpWorkflowContractTests(unittest.TestCase):
         for option in (
             "--help", "--input", "--prefix", "--type", "--prefix_many",
             "--indir", "--outdir", "--max_cpus", "--max_memory",
-            "--harmonizer_audit", "--ictv_csv",
+            "--harmonizer_audit", "--show_channel_messages", "--ictv_csv",
         ):
             self.assertIn(option, help_text)
 
@@ -36,6 +36,18 @@ class HelpWorkflowContractTests(unittest.TestCase):
             "run_checkv", "run_tesorter", "run_vitap", "run_vcontact3",
         ):
             self.assertIn(f"--{switch}", help_text)
+
+    def test_channel_messages_are_quiet_by_default_and_opt_in(self) -> None:
+        self.assertIn("show_channel_messages = false", self.config)
+        self.assertIn(
+            "params.show_channel_messages,\n        '--show_channel_messages'",
+            self.workflow,
+        )
+        self.assertNotIn(".out.normalized_records.view", self.workflow)
+        self.assertIn(
+            "viewChannel(showChannelMessages, VIHARMONY.out.results)",
+            self.workflow,
+        )
 
 
 if __name__ == "__main__":

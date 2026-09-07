@@ -149,6 +149,13 @@ def parseNonnegativeIntegerParameter(rawValue, parameterName) {
 }
 
 
+def viewChannel(enabled, channel, formatter) {
+    if( enabled ) {
+        channel.view(formatter)
+    }
+}
+
+
 def validateEvidenceArtifacts(prefix, stage, expectedTools, actualTools, evidenceFiles) {
     def expected = expectedTools.collect { it.toString() }.toSet()
     def actual = actualTools.collect { it.toString() }.toSet()
@@ -209,6 +216,7 @@ OUTPUT AND RESOURCES
                                ./visum; per-task ceiling otherwise [8].
   --max_memory MEMORY          Per-task memory ceiling [48 GB].
   --harmonizer_audit MODE      none, compact, or full [compact].
+  --show_channel_messages BOOL Print detailed channel emissions [false].
   --ictv_csv PATH              Canonical ICTV rank table
                                [assets/ICTV_VMR_MSL41.csv].
 
@@ -487,6 +495,10 @@ workflow {
         params.run_vcontact3,
         '--run_vcontact3'
     )
+    def showChannelMessages = parseBooleanParameter(
+        params.show_channel_messages,
+        '--show_channel_messages'
+    )
 
     // These contracts distinguish a successful zero-call result (a
     // header-only evidence table) from a missing process result. Tool sets
@@ -587,7 +599,7 @@ workflow {
 
     NORMALIZE_FASTA(ch_samples)
 
-    NORMALIZE_FASTA.out.normalized_records.view { prefix, type, fasta, headerMap ->
+    viewChannel(showChannelMessages, NORMALIZE_FASTA.out.normalized_records) { prefix, type, fasta, headerMap ->
         "NORMALIZED sample=${prefix} type=${type} fasta=${fasta.name} map=${headerMap.name}"
     }
 
@@ -610,7 +622,7 @@ workflow {
 
         PREPARE_GENOMAD_DATABASE(ch_genomad_database_request)
 
-        PREPARE_GENOMAD_DATABASE.out.database.view { database, metadata ->
+        viewChannel(showChannelMessages, PREPARE_GENOMAD_DATABASE.out.database) { database, metadata ->
             "GENOMAD_DB database=${database} metadata=${metadata.name}"
         }
 
@@ -623,7 +635,7 @@ workflow {
             ch_genomad_database
         )
 
-        RUN_GENOMAD.out.results.view { prefix, type, review, virusSummary, virusFasta, virusGenes, virusProteins, plasmidSummary, metadata ->
+        viewChannel(showChannelMessages, RUN_GENOMAD.out.results) { prefix, type, review, virusSummary, virusFasta, virusGenes, virusProteins, plasmidSummary, metadata ->
             "GENOMAD sample=${prefix} type=${type} virus_summary=${virusSummary.name} output=${review.name}"
         }
 
@@ -641,7 +653,7 @@ workflow {
 
         STANDARDIZE_GENOMAD(ch_genomad_standardizer_input)
 
-        STANDARDIZE_GENOMAD.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, STANDARDIZE_GENOMAD.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_discovery_evidence = ch_discovery_evidence.mix(
@@ -672,7 +684,7 @@ workflow {
 
         PREPARE_VIRSORTER2_DATABASE(ch_virsorter2_database_request)
 
-        PREPARE_VIRSORTER2_DATABASE.out.database.view { database, metadata ->
+        viewChannel(showChannelMessages, PREPARE_VIRSORTER2_DATABASE.out.database) { database, metadata ->
             "VIRSORTER2_DB database=${database} metadata=${metadata.name}"
         }
 
@@ -685,7 +697,7 @@ workflow {
             ch_virsorter2_database
         )
 
-        RUN_VIRSORTER2.out.results.view {
+        viewChannel(showChannelMessages, RUN_VIRSORTER2.out.results) {
             prefix, type, review, score, boundary, viralFasta, metadata ->
                 "VIRSORTER2 sample=${prefix} type=${type} score=${score.name} output=${review.name}"
         }
@@ -704,7 +716,7 @@ workflow {
 
         STANDARDIZE_VIRSORTER2(ch_virsorter2_standardizer_input)
 
-        STANDARDIZE_VIRSORTER2.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, STANDARDIZE_VIRSORTER2.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_discovery_evidence = ch_discovery_evidence.mix(
@@ -733,7 +745,7 @@ workflow {
 
         PREPARE_CENOTETAKER3_DATABASE(ch_cenotetaker3_database_request)
 
-        PREPARE_CENOTETAKER3_DATABASE.out.database.view { database, metadata ->
+        viewChannel(showChannelMessages, PREPARE_CENOTETAKER3_DATABASE.out.database) { database, metadata ->
             "CENOTETAKER3_DB database=${database} metadata=${metadata.name}"
         }
 
@@ -746,7 +758,7 @@ workflow {
             ch_cenotetaker3_database
         )
 
-        RUN_CENOTETAKER3.out.results.view {
+        viewChannel(showChannelMessages, RUN_CENOTETAKER3.out.results) {
             prefix, type, summary, virusFasta, virusProteins, pruneSummary,
             geneAnnotations, runArguments, log, metadata ->
                 "CENOTETAKER3 sample=${prefix} type=${type} summary=${summary.name}"
@@ -775,7 +787,7 @@ workflow {
 
         STANDARDIZE_CENOTETAKER3(ch_cenotetaker3_standardizer_input)
 
-        STANDARDIZE_CENOTETAKER3.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, STANDARDIZE_CENOTETAKER3.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_discovery_evidence = ch_discovery_evidence.mix(
@@ -858,7 +870,7 @@ workflow {
 
         PREPARE_DEEP6_DATABASE(ch_deep6_database_request)
 
-        PREPARE_DEEP6_DATABASE.out.database.view {
+        viewChannel(showChannelMessages, PREPARE_DEEP6_DATABASE.out.database) {
             installation, models, metadata ->
                 "DEEP6_DB installation=${installation} models=${models} metadata=${metadata.name}"
         }
@@ -871,7 +883,7 @@ workflow {
 
         RUN_DEEP6(ch_deep6_samples, ch_deep6_bundle)
 
-        RUN_DEEP6.out.results.view { prefix, type, scores, logFile, metadata ->
+        viewChannel(showChannelMessages, RUN_DEEP6.out.results) { prefix, type, scores, logFile, metadata ->
             "DEEP6 sample=${prefix} type=${type} scores=${scores.name}"
         }
 
@@ -889,7 +901,7 @@ workflow {
 
         STANDARDIZE_DEEP6(ch_deep6_standardizer_input)
 
-        STANDARDIZE_DEEP6.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, STANDARDIZE_DEEP6.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_discovery_evidence = ch_discovery_evidence.mix(
@@ -941,7 +953,7 @@ workflow {
 
         PREPARE_DEEPMICROCLASS2(ch_deepmicroclass2_installation_request)
 
-        PREPARE_DEEPMICROCLASS2.out.installation.view {
+        viewChannel(showChannelMessages, PREPARE_DEEPMICROCLASS2.out.installation) {
             installation, metadata ->
                 "DEEPMICROCLASS2_INSTALL installation=${installation} metadata=${metadata.name}"
         }
@@ -955,7 +967,7 @@ workflow {
             ch_deepmicroclass2_bundle
         )
 
-        RUN_DEEPMICROCLASS2.out.results.view {
+        viewChannel(showChannelMessages, RUN_DEEPMICROCLASS2.out.results) {
             prefix, type, scores, logFile, metadata ->
                 "DEEPMICROCLASS2 sample=${prefix} type=${type} scores=${scores.name}"
         }
@@ -974,7 +986,7 @@ workflow {
 
         STANDARDIZE_DEEPMICROCLASS2(ch_deepmicroclass2_standardizer_input)
 
-        STANDARDIZE_DEEPMICROCLASS2.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, STANDARDIZE_DEEPMICROCLASS2.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_discovery_evidence = ch_discovery_evidence.mix(
@@ -1019,7 +1031,7 @@ workflow {
 
         PREPARE_VIRBOT_DATABASE(ch_virbot_installation_request)
 
-        PREPARE_VIRBOT_DATABASE.out.installation.view {
+        viewChannel(showChannelMessages, PREPARE_VIRBOT_DATABASE.out.installation) {
             installation, database, metadata ->
                 "VIRBOT_INSTALL installation=${installation} database=${database} metadata=${metadata.name}"
         }
@@ -1038,7 +1050,7 @@ workflow {
 
         RUN_VIRBOT(ch_virbot_samples, ch_virbot_bundle)
 
-        RUN_VIRBOT.out.results.view {
+        viewChannel(showChannelMessages, RUN_VIRBOT.out.results) {
             prefix, type, scores, virusFasta, logFile, metadata ->
                 "VIRBOT sample=${prefix} type=${type} scores=${scores.name} virus_fasta=${virusFasta.name}"
         }
@@ -1060,7 +1072,7 @@ workflow {
             ictvCsv
         )
 
-        STANDARDIZE_VIRBOT.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, STANDARDIZE_VIRBOT.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_discovery_evidence = ch_discovery_evidence.mix(
@@ -1131,7 +1143,7 @@ workflow {
 
         PREPARE_GIANTHUNTER_DATABASE(ch_gianthunter_database_request)
 
-        PREPARE_GIANTHUNTER_DATABASE.out.database.view { database, metadata ->
+        viewChannel(showChannelMessages, PREPARE_GIANTHUNTER_DATABASE.out.database) { database, metadata ->
             "GIANTHUNTER_DB database=${database} metadata=${metadata.name}"
         }
 
@@ -1144,7 +1156,7 @@ workflow {
             ch_gianthunter_bundle
         )
 
-        RUN_GIANTHUNTER.out.results.view {
+        viewChannel(showChannelMessages, RUN_GIANTHUNTER.out.results) {
             prefix, type, prediction, annotations, logFile, metadata ->
                 "GIANTHUNTER sample=${prefix} type=${type} prediction=${prediction.name}"
         }
@@ -1166,7 +1178,7 @@ workflow {
             ictvCsv
         )
 
-        STANDARDIZE_GIANTHUNTER.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, STANDARDIZE_GIANTHUNTER.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_discovery_evidence = ch_discovery_evidence.mix(
@@ -1284,7 +1296,7 @@ workflow {
 
         PREPARE_VICAT_DATABASE(ch_vicat_database_request)
 
-        PREPARE_VICAT_DATABASE.out.database.view { database, metadata ->
+        viewChannel(showChannelMessages, PREPARE_VICAT_DATABASE.out.database) { database, metadata ->
             "VICAT_DB database=${database} metadata=${metadata.name}"
         }
 
@@ -1301,7 +1313,7 @@ workflow {
 
         PREPARE_VICAT_NONVIRAL_DATABASE(ch_vicat_nonviral_database_request)
 
-        PREPARE_VICAT_NONVIRAL_DATABASE.out.database.view { database, metadata ->
+        viewChannel(showChannelMessages, PREPARE_VICAT_NONVIRAL_DATABASE.out.database) { database, metadata ->
             "VICAT_NONVIRAL_DB database=${database} metadata=${metadata.name}"
         }
 
@@ -1311,7 +1323,7 @@ workflow {
 
         PREDICT_VICAT_ORFS(NORMALIZE_FASTA.out.normalized_records)
 
-        PREDICT_VICAT_ORFS.out.orfs.view {
+        viewChannel(showChannelMessages, PREDICT_VICAT_ORFS.out.orfs) {
             prefix, type, proteins, orfMap, headerMap ->
                 "VICAT_ORFS sample=${prefix} type=${type} proteins=${proteins.name}"
         }
@@ -1326,7 +1338,7 @@ workflow {
             ch_vicat_nonviral_database
         )
 
-        RUN_VICAT_DIAMOND.out.results.view {
+        viewChannel(showChannelMessages, RUN_VICAT_DIAMOND.out.results) {
             prefix, type, orfMap, headerMap, diamond ->
                 "VICAT_DIAMOND sample=${prefix} type=${type} alignments=${diamond.name}"
         }
@@ -1340,7 +1352,7 @@ workflow {
             ch_vicat_database
         )
 
-        PREPARE_VICAT_REFERENCE_SUBSET.out.subset.view {
+        viewChannel(showChannelMessages, PREPARE_VICAT_REFERENCE_SUBSET.out.subset) {
             referenceSubset, referenceSubsetMetadata ->
                 "VICAT_REFERENCE_SUBSET references=${referenceSubset.name}"
         }
@@ -1367,14 +1379,14 @@ workflow {
             ch_vicat_nonviral_database
         )
 
-        PREPARE_VICAT_HITS.out.results.view {
+        viewChannel(showChannelMessages, PREPARE_VICAT_HITS.out.results) {
             prefix, type, orfMap, headerMap, preparedHits, preparedMetadata ->
                 "VICAT_HITS_PREPARED sample=${prefix} hits=${preparedHits.name}"
         }
 
         STANDARDIZE_VICAT(PREPARE_VICAT_HITS.out.results)
 
-        STANDARDIZE_VICAT.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, STANDARDIZE_VICAT.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_discovery_evidence = ch_discovery_evidence.mix(
@@ -1434,7 +1446,7 @@ workflow {
 
         PREPARE_VITAP_DATABASE(ch_vitap_database_request)
 
-        PREPARE_VITAP_DATABASE.out.database.view { database, metadata ->
+        viewChannel(showChannelMessages, PREPARE_VITAP_DATABASE.out.database) { database, metadata ->
             "VITAP_DB database=${database} metadata=${metadata.name}"
         }
 
@@ -1479,7 +1491,7 @@ workflow {
 
         PREPARE_VCONTACT3_DATABASE(ch_vcontact3_database_request)
 
-        PREPARE_VCONTACT3_DATABASE.out.database.view { database, metadata ->
+        viewChannel(showChannelMessages, PREPARE_VCONTACT3_DATABASE.out.database) { database, metadata ->
             "VCONTACT3_DB database=${database} metadata=${metadata.name}"
         }
 
@@ -1530,7 +1542,7 @@ workflow {
 
     DISCOVERY_GATE(ch_discovery_gate_inputs)
 
-    DISCOVERY_GATE.out.candidates.view {
+    viewChannel(showChannelMessages, DISCOVERY_GATE.out.candidates) {
         prefix, type, candidates, audit, summary ->
             "DISCOVERY_GATE sample=${prefix} type=${type} candidates=${candidates.name} audit=${audit.name}"
     }
@@ -1558,7 +1570,7 @@ workflow {
 
         PREPARE_CHECKV_DATABASE(ch_checkv_database_request)
 
-        PREPARE_CHECKV_DATABASE.out.database.view { database, metadata ->
+        viewChannel(showChannelMessages, PREPARE_CHECKV_DATABASE.out.database) { database, metadata ->
             "CHECKV_DB database=${database} metadata=${metadata.name}"
         }
 
@@ -1571,7 +1583,7 @@ workflow {
             ch_checkv_database
         )
 
-        RUN_CHECKV.out.results.view {
+        viewChannel(showChannelMessages, RUN_CHECKV.out.results) {
             prefix, type, quality, completeness, contamination, completeGenomes,
             proviruses, log, metadata ->
                 "CHECKV sample=${prefix} type=${type} quality=${quality.name} metadata=${metadata.name}"
@@ -1599,7 +1611,7 @@ workflow {
 
         STANDARDIZE_CHECKV(ch_checkv_standardizer_input)
 
-        STANDARDIZE_CHECKV.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, STANDARDIZE_CHECKV.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_provirus_evidence = ch_provirus_evidence.mix(
@@ -1650,7 +1662,7 @@ workflow {
 
     REFINE_PROVIRAL_REGIONS(ch_provirus_refinement_inputs)
 
-    REFINE_PROVIRAL_REGIONS.out.refined.view {
+    viewChannel(showChannelMessages, REFINE_PROVIRAL_REGIONS.out.refined) {
         prefix, type, refinedFasta, regionMap, boundaryAudit, summary ->
             "REFINED sample=${prefix} type=${type} fasta=${refinedFasta.name} map=${regionMap.name}"
     }
@@ -1669,7 +1681,7 @@ workflow {
 
         PROJECT_VICAT_REFINED(ch_vicat_refinement_projection)
 
-        PROJECT_VICAT_REFINED.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, PROJECT_VICAT_REFINED.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} scope=refined_region evidence=${evidence.name}"
         }
         ch_harmony_evidence = ch_harmony_evidence.mix(
@@ -1680,14 +1692,14 @@ workflow {
     if( runTesorter ) {
         RUN_TESORTER(REFINE_PROVIRAL_REGIONS.out.refined)
 
-        RUN_TESORTER.out.results.view {
+        viewChannel(showChannelMessages, RUN_TESORTER.out.results) {
             prefix, type, regionMap, sequenceMap, classifications, domains, domainGff, log, metadata ->
                 "TESORTER sample=${prefix} type=${type} classifications=${classifications.name}"
         }
 
         STANDARDIZE_TESORTER(RUN_TESORTER.out.results)
 
-        STANDARDIZE_TESORTER.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, STANDARDIZE_TESORTER.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
 
@@ -1741,7 +1753,7 @@ workflow {
             vitapIncludeLowConfidence
         )
 
-        RUN_VITAP.out.results.view {
+        viewChannel(showChannelMessages, RUN_VITAP.out.results) {
             prefix, type, regionMap, best, allLineages, fallback, log, metadata ->
                 "VITAP sample=${prefix} type=${type} best=${best.name} all=${allLineages.name}"
         }
@@ -1751,7 +1763,7 @@ workflow {
             ch_vitap_database
         )
 
-        STANDARDIZE_VITAP.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, STANDARDIZE_VITAP.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VITAP.out.evidence)
@@ -1764,14 +1776,14 @@ workflow {
             vcontact3DbDomain
         )
 
-        RUN_VCONTACT3.out.results.view {
+        viewChannel(showChannelMessages, RUN_VCONTACT3.out.results) {
             prefix, type, regionMap, assignments, metrics, logs, metadata ->
                 "VCONTACT3 sample=${prefix} type=${type} domain_mode=${vcontact3DbDomain} assignments=${assignments}"
         }
 
         STANDARDIZE_VCONTACT3(RUN_VCONTACT3.out.results)
 
-        STANDARDIZE_VCONTACT3.out.evidence.view { prefix, tool, evidence ->
+        viewChannel(showChannelMessages, STANDARDIZE_VCONTACT3.out.evidence) { prefix, tool, evidence ->
             "STANDARDIZED sample=${prefix} tool=${tool} evidence=${evidence.name}"
         }
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VCONTACT3.out.evidence)
@@ -1841,7 +1853,7 @@ workflow {
 
     VIHARMONY(ch_harmony_inputs)
 
-    VIHARMONY.out.results.view { prefix, normalizedFasta, originalFasta, metadata,
+    viewChannel(showChannelMessages, VIHARMONY.out.results) { prefix, normalizedFasta, originalFasta, metadata,
                                 reviewQueue, disposition, sequenceMap, manifest,
                                 databaseFasta, databaseMetadata, allCandidatesFasta,
                                 reviewCandidatesFasta, provisionalNormalizedFasta,
