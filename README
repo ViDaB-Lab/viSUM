@@ -373,3 +373,23 @@ database lineages from manufacturing support.
 
 
 
+# Experimental RNA consensus option
+
+`--rna_pair_homology_floor true` adds a primary-retention requirement only for
+RNA records supported by exactly qualified Deep6 and viCAT, without a strong
+tool. At least one viCAT viral-supported locus must have predicted protein
+length >=100 aa, bitscore >=100, and both query and subject coverage >=50%.
+Calls failing this requirement become provisional, not nonviral or discarded.
+DNA and other tool combinations retain their existing decision rules. For an
+extracted region, the qualifying locus must be contained within its boundaries.
+The option defaults to false. Thresholds are exploratory, not independently
+validated. The harmonizer manifest records activation and demoted sequence IDs.
+
+For the established local benchmark layout, run
+`bash bin/benchmark_rna_pair.sh MANIFEST INDIR NEW_OUTDIR` to resume cached
+evidence under this option. The helper preserves the previous benchmark resource
+and database settings and refuses an existing output directory. Inspect those
+settings before using it on another installation. Validate the resulting RNA
+counts and unchanged DNA outputs with `python bin/verify_rna_pair_benchmark.py
+--help`. Changes to scripts or configuration can invalidate Nextflow caches;
+check the process display rather than assuming all upstream tasks are cached.

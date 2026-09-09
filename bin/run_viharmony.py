@@ -171,6 +171,26 @@ def evidence_applies_to_final(
     return parent_id == final_parent or exact_id == final_parent
 
 
+def apply_rna_pair_homology_floor(decision, enabled, input_type, strong_tools,
+                                 qualified_tools, loci, parent_id, coordinates=""):
+    """Restrict only primary RNA Deep6/viCAT-only calls; preserve other decisions."""
+    if not enabled or input_type != "rna" or strong_tools or qualified_tools != {"deep6", "vicat"} or decision not in PRIMARY_VIRAL_DECISIONS:
+        return decision, "not_applicable"
+    interval = tuple(map(int, coordinates.split("-"))) if coordinates else None
+    for row in loci:
+        if row["sequence_id"] != parent_id or row["locus_classification"] != "viral_supported":
+            continue
+        if interval:
+            start, stop = map(int, row["coordinates"].split("-"))
+            if not (interval[0] <= start <= stop <= interval[1]):
+                continue
+        if (float(row["protein_length"]) >= 100 and float(row["best_bitscore"]) >= 100
+                and float(row["best_query_coverage"]) >= 50
+                and float(row["best_subject_coverage"]) >= 50):
+            return decision, "passed"
+    return ("provisional_provirus" if decision == "retained_provirus" else "provisional_viral"), "demoted"
+
+
 def adjudicate_viral_decision(
     discovery_status: str,
     record_type: str,
@@ -459,6 +479,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vcontact3-groups", nargs="*", default=[], type=Path)
     parser.add_argument("--vcontact3-min-taxonomy-length", type=int, default=1000)
     parser.add_argument("--audit-mode", choices=("none", "compact", "full"), default="compact")
+    parser.add_argument("--rna-pair-homology-floor", action="store_true",
+                        help="Experimental RNA-only Deep6/viCAT primary-retention requirement")
     parser.add_argument("--output-prefix", required=True, type=Path)
     return parser.parse_args()
 
@@ -1052,8 +1074,17 @@ def run(args: argparse.Namespace) -> None:
     known_final_ids = set(final_to_parent)
     evidence_rows: list[dict[str, str]] = []
     evidence_columns: list[str] = []
+    pair_loci = []
+    pair_floor = getattr(args, "rna_pair_homology_floor", False)
     for path in args.evidence:
         columns, rows = read_tsv(path)
+        if path.name.endswith(".vicat_orf_evidence.tsv"):
+            require(columns, {"sample_id", "sequence_id", "coordinates", "locus_classification",
+                              "protein_length", "best_bitscore", "best_query_coverage", "best_subject_coverage"}, path)
+            if any(row["sample_id"] != args.sample_id for row in rows):
+                raise ValueError(f"Locus sample mismatch in {path}")
+            pair_loci.extend(rows)
+            continue
         require(columns, {"sample_id", "sequence_id", "parent_sequence_id", "tool", "classification"}, path)
         evidence_columns.extend(column for column in columns if column not in evidence_columns)
         for row in rows:
@@ -1097,6 +1128,7 @@ def run(args: argparse.Namespace) -> None:
                 rows_by_final[final_id].append(row)
 
     metadata_rows: list[dict[str, object]] = []
+    pair_floor_demoted_ids = []
     review_rows: list[dict[str, object]] = []
     evidence_audit_rows: list[dict[str, object]] = []
     taxonomy_audit_rows: list[dict[str, object]] = []
@@ -1275,6 +1307,17 @@ def run(args: argparse.Namespace) -> None:
             and not boundary_primary_eligible
         ):
             viral_decision = "provisional_provirus"
+        if pair_floor and args.input_type == "rna" and not any(
+            path.name.endswith(".vicat_orf_evidence.tsv") for path in args.evidence
+        ) and not strong_tools and qualified_tools == {"deep6", "vicat"}:
+            raise ValueError("RNA pair homology floor requires viCAT locus evidence")
+        viral_decision, pair_floor_status = apply_rna_pair_homology_floor(
+            viral_decision, pair_floor, args.input_type, strong_tools, qualified_tools,
+            pair_loci, parent_id, coords if record_type != "input_contig" else "",
+        )
+        if pair_floor_status == "demoted":
+            viral_confidence = "provisional"
+            pair_floor_demoted_ids.append(final_id)
         entity_interpretation = viral_entity_interpretation(
             viral_decision,
             record_type,
@@ -1564,6 +1607,9 @@ def run(args: argparse.Namespace) -> None:
         "audit_mode": args.audit_mode,
         "tools_present": sorted({row.get("tool", "") for row in evidence_rows if row.get("tool")}),
         "policy": {
+            "rna_pair_homology_floor": bool(pair_floor and args.input_type == "rna"),
+            "rna_pair_homology_floor_demoted_ids": sorted(pair_floor_demoted_ids),
+            "rna_pair_homology_floor_thresholds": "protein_length>=100; bitscore>=100; query_coverage>=50; subject_coverage>=50; one viral-supported locus; only qualified Deep6+viCAT without strong support",
             "viral_confidence": "high=2+ strong; supported=1 strong or 2+ qualified; provisional=1 qualified",
             "checkv_complete_contig": "complete/high-quality, provirus=No, viral genes present, and zero host genes is strong intact-contig viral support",
             "generic_cellular_override": "2+ strong independent viral tools override Deep6/DeepMicroClass2-only cellular conflict; the conflict remains annotated",

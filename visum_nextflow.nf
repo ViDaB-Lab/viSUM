@@ -216,6 +216,7 @@ OUTPUT AND RESOURCES
                                ./visum; per-task ceiling otherwise [8].
   --max_memory MEMORY          Per-task memory ceiling [48 GB].
   --harmonizer_audit MODE      none, compact, or full [compact].
+  --rna_pair_homology_floor BOOL  Experimental RNA Deep6/viCAT-only homology floor [false].
   --show_channel_messages BOOL Print detailed channel emissions [false].
   --ictv_csv PATH              Canonical ICTV rank table
                                [assets/ICTV_VMR_MSL41.csv].
@@ -532,6 +533,7 @@ workflow {
     }
     if( runCheckv ) sharedProvirusTools << 'checkv'
 
+    def rnaPairHomologyFloor = parseBooleanParameter(params.rna_pair_homology_floor, '--rna_pair_homology_floor')
     def harmonyOnlyTools = []
     if( runVicat ) harmonyOnlyTools << 'vicat_context'
     if( runCheckv ) harmonyOnlyTools << 'checkv'
@@ -541,7 +543,8 @@ workflow {
 
     def expectedHarmonyToolsByType = [
         dna: (expectedDiscoveryToolsByType.dna + harmonyOnlyTools).unique().sort(),
-        rna: (expectedDiscoveryToolsByType.rna + harmonyOnlyTools).unique().sort(),
+        rna: (expectedDiscoveryToolsByType.rna + harmonyOnlyTools +
+            (runVicat && rnaPairHomologyFloor ? ['vicat_loci'] : [])).unique().sort(),
     ]
     def vcontact3DbDomain = params.vcontact3_db_domain
         ?.toString()
@@ -1412,6 +1415,15 @@ workflow {
         )
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VICAT.out.evidence)
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VICAT.out.context)
+        if( rnaPairHomologyFloor ) {
+            ch_harmony_evidence = ch_harmony_evidence.mix(
+                STANDARDIZE_VICAT.out.loci.combine(
+                    NORMALIZE_FASTA.out.normalized_records
+                        .filter { prefix, type, fasta, headerMap -> type == 'rna' }
+                        .map { prefix, type, fasta, headerMap -> tuple(prefix, type) }, by: 0
+                ).map { prefix, loci, type -> tuple(prefix, 'vicat_loci', loci) }
+            )
+        }
         ch_provirus_evidence = ch_provirus_evidence.mix(STANDARDIZE_VICAT.out.evidence)
         ch_provirus_evidence = ch_provirus_evidence.mix(
             STANDARDIZE_VICAT.out.provirus.map { prefix, tool, evidence ->

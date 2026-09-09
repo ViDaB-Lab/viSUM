@@ -49,6 +49,8 @@ process VIHARMONY {
 
     script:
     def evidenceList = evidence_files instanceof List ? evidence_files : [evidence_files]
+    def pairFlag = type == 'rna' && params.rna_pair_homology_floor.toString().equalsIgnoreCase('true')
+        ? '--rna-pair-homology-floor' : ''
     def evidenceArguments = evidence_file_count > 0
         ? evidenceList.collect { evidence -> "'${evidence}'" }.join(' ')
         : ''
@@ -74,6 +76,7 @@ process VIHARMONY {
         --vcontact3-groups ${groupArguments} \
         --vcontact3-min-taxonomy-length "${vcontact3_min_taxonomy_length}" \
         --audit-mode "${audit_mode}" \
+        ${pairFlag} \
         --output-prefix "${prefix}"
     """
 }
