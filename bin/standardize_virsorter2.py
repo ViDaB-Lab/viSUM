@@ -176,6 +176,25 @@ def classify_evidence_strength(score: float) -> tuple[str, str] | None:
     return None
 
 
+def hallmark_only_evidence(row, sample_id, parent_id, parent_length):
+    """Preserve native unscored calls without inventing scores or boundaries."""
+    hallmarks = parse_nonnegative_int(row['hallmark'], 'hallmark count', row['seqname'])
+    if hallmarks < 1:
+        raise ValueError(f"Unscored lt2gene call lacks a hallmark: {row['seqname']}")
+    result = dict(sample_id=sample_id, sequence_id=row['seqname'],
+        parent_sequence_id=parent_id, record_type='short_hallmark_region',
+        coordinates='', tool='virsorter2', classification='virus', score='NA',
+        score_type='virsorter2_hallmark_only', length=row['length'], topology='',
+        n_genes='', n_hallmarks=str(hallmarks), call_type='lt2gene',
+        parent_length=str(parent_length),
+        viral_gene_percent=parse_percentage(row.get('viral', ''), 'viral gene percentage', row['seqname']),
+        cellular_gene_percent=parse_percentage(row.get('cellular', ''), 'cellular gene percentage', row['seqname']),
+        max_score_group='NA',
+        evidence_strength='review', strength_basis='virsorter2_hallmark_only')
+    result.update(unclassified_taxonomy('virus'))
+    return result
+
+
 def parse_positive_int(value: str, label: str, sequence_id: str) -> int:
     cleaned = clean_missing(value)
     if not cleaned:
@@ -329,10 +348,11 @@ def main() -> None:
         if region_length > parent_length:
             raise ValueError(f"VirSorter2 region exceeds its parent for {sequence_id}")
 
-        # VirSorter2 keeps ``lt2gene`` entries for short regions that could not
-        # be assigned a classifier score. They are native diagnostic rows, not
-        # viral calls, so they should not enter viSUM evidence.
+        # Native hallmark-only predictions are preserved for review/comparison,
+        # but do not supply routing or primary-consensus votes.
         if call_type == "lt2gene" and not clean_missing(row["max_score"]):
+            evidence_rows.append(hallmark_only_evidence(
+                row, args.sample_id, parent_id, parent_length))
             continue
 
         score, score_text = parse_score(row["max_score"], "maximum score", sequence_id)

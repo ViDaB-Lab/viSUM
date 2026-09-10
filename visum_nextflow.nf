@@ -199,7 +199,12 @@ USAGE
   Help only:
     ./visum -c visum.config --help
 
+  Database preparation only (enabled --run_* tools, no samples):
+    ./visum -c visum.config --setup
+
 INPUT
+  --setup                     Prepare enabled tools only, without analysis inputs.
+                               Selection uses the same --run_* flags as analysis.
   --input PATH                 Input FASTA for a single sample.
   --prefix TEXT                Sample identifier for single-sample mode.
                                Allowed: letters, numbers, ., _, and -.
@@ -295,7 +300,11 @@ DATABASE AND INSTALLATION OVERRIDES
   --gianthunter_db PATH        Existing GiantHunter database.
   --checkv_db PATH             Existing CheckV database.
   --vicat_db PATH              Existing viCAT database.
-  --vicat_nonviral_db PATH     Existing class-aware nonviral viCAT database.
+  --vicat_nonviral_db PATH     Existing nonviral database or local build destination.
+  --vicat_nonviral_classified_dir PATH  Classified inputs for a local nonviral build.
+  --vicat_nonviral_manifest PATH       NCBI source assembly manifest (alternative to classified inputs).
+  --vicat_nonviral_package_root PATH   Extracted NCBI protein package root.
+  --vicat_nonviral_metadata_root PATH  NCBI feature-table root.
   --vicat_metavr_proteins PATH MetaVR proteins for a local viCAT build.
   --vicat_metavr_metadata PATH MetaVR metadata for a local viCAT build.
   --vitap_db PATH              Existing VITAP database.
@@ -325,6 +334,8 @@ NOTES
 '''.stripIndent().trim()
 }
 
+
+include { DATABASE_SETUP } from './workflows/database_setup'
 
 workflow {
 
@@ -396,6 +407,14 @@ workflow {
             "${name.substring(2)}=${value}"
         }.join(', ')
     )
+
+    if( parseBooleanParameter(params.setup, '--setup') ) {
+        if( params.input != null || params.prefix_many != null || params.indir != null || params.prefix != null || params.type != null ) {
+            error '--setup does not accept analysis input parameters. Remove input/prefix/type/prefix_many/indir.'
+        }
+        DATABASE_SETUP()
+        return
+    }
 
     def singleMode = params.input != null
     def multiMode  = params.prefix_many != null
@@ -1273,6 +1292,9 @@ workflow {
         }
 
         def userSuppliedDatabase = params.vicat_db != null
+        if( userSuppliedDatabase && vicatSourceProteins ) {
+            error 'Choose --vicat_db OR the two MetaVR source files, not both.'
+        }
         def vicatBaseDatabase = userSuppliedDatabase
             ? file(params.vicat_db).toString()
             : file(params.vicat_managed_db).toString()
@@ -1280,6 +1302,29 @@ workflow {
         def vicatDatabaseSource = userSuppliedDatabase
             ? 'user-supplied'
             : 'viSUM-managed'
+
+        // Resolve both sides before starting a potentially expensive viral build.
+        def vicatNonviralDatabasePath = file(params.vicat_nonviral_db).toString()
+        def nonviralRaw = [params.vicat_nonviral_manifest, params.vicat_nonviral_package_root, params.vicat_nonviral_metadata_root]
+        if( nonviralRaw.any { it != null } && !nonviralRaw.every { it != null } ) {
+            error 'A raw nonviral build requires manifest, package_root, and metadata_root together.'
+        }
+        if( params.vicat_nonviral_classified_dir != null && nonviralRaw.any { it != null } ) {
+            error 'Choose --vicat_nonviral_classified_dir OR the three raw NCBI source inputs, not both.'
+        }
+        def nonviralSources = ([params.vicat_nonviral_classified_dir] + nonviralRaw).collect {
+            it == null ? '' : file(it).toString()
+        }
+        nonviralSources.findAll { it }.each { source ->
+            if( !file(source).exists() ) { error "Nonviral source input does not exist: ${source}" }
+        }
+        if( !file(vicatNonviralDatabasePath).exists() && !nonviralSources.any { it } ) {
+            error 'No viCAT nonviral database or build inputs supplied. Set --vicat_nonviral_db to a completed database, or supply classified/raw NCBI inputs.'
+        }
+        parsePositiveIntegerParameter(params.vicat_nonviral_build_cpus, '--vicat_nonviral_build_cpus')
+        def nonviralHelpers = ['prepare_vicat_nonviral_build.py', 'classify_vicat_nonviral_references.py',
+            'build_vicat_nonviral_database.sh', 'prepare_vicat_nonviral_cluster_metadata.py',
+            'parse_diamond_dbinfo.py'].collect { file("${projectDir}/bin/${it}") }
 
         ch_vicat_database_request = NORMALIZE_FASTA.out.normalized_records
             .take(1)
@@ -1314,11 +1359,12 @@ workflow {
             .map { database, metadata -> tuple(database, metadata) }
             .first()
 
-        def vicatNonviralDatabasePath = file(params.vicat_nonviral_db).toString()
-        ch_vicat_nonviral_database_request = NORMALIZE_FASTA.out.normalized_records
+        // Serialize the two heavyweight builds; their memory requests add up.
+        ch_vicat_nonviral_database_request = PREPARE_VICAT_DATABASE.out.database
             .take(1)
-            .map { prefix, type, fasta, headerMap ->
-                tuple(vicatNonviralDatabasePath, 'class-aware-nonviral')
+            .map { viralDatabase, viralSetupMetadata ->
+                tuple(vicatNonviralDatabasePath, 'class-aware-nonviral',
+                    nonviralSources[0], nonviralSources[1], nonviralSources[2], nonviralSources[3], nonviralHelpers)
             }
 
         PREPARE_VICAT_NONVIRAL_DATABASE(ch_vicat_nonviral_database_request)

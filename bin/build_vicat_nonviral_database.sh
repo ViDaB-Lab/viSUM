@@ -105,6 +105,7 @@ rm -f "$CURRENT_CONFIG"
     printf 'metadata_helper_sha256\t%s\n' \
         "$(sha256sum "$SCRIPT_DIR/prepare_vicat_nonviral_cluster_metadata.py" | awk '{print $1}')"
     printf 'metadata_sha256\t%s\n' "$(sha256sum "$METADATA" | awk '{print $1}')"
+    printf 'classification_summary_sha256\t%s\n' "$(sha256sum "$CLASSIFICATION_SUMMARY" | awk '{print $1}')"
     for reference_class in "${CLASSES[@]}"; do
         source_fasta="$CLASSIFIED_DIR/${reference_class}.faa.gz"
         printf '%s_sha256\t%s\n' "$reference_class" \
@@ -246,7 +247,7 @@ if ! checkpoint_done diamond_database; then
 fi
 
 representative_count="$(gzip -cd "$COMBINED_FASTA" | grep -c '^>')"
-diamond_count="$(diamond dbinfo --db "$NONVIRAL_DIAMOND" | awk '$1 == "Sequences" {print $2}')"
+diamond_count="$(diamond dbinfo --db "$NONVIRAL_DIAMOND" | python "$SCRIPT_DIR/parse_diamond_dbinfo.py")"
 metadata_count="$(python - "$REPRESENTATIVE_METADATA_PARQUET" <<'PY'
 import duckdb
 import sys
@@ -288,6 +289,13 @@ source_protein_count="$(awk -F '\t' 'NR > 1 {total += $2} END {print total + 0}'
 } > "$BUILD_METADATA"
 
 cp "$SAVED_CONFIG" "$WORK_DIR/package/vicat_nonviral_build_config.tsv"
+provenance_files=()
+for name in vicat_nonviral_source_manifest.tsv vicat_nonviral_source_provenance.json; do
+    if [[ -s "$CLASSIFIED_DIR/$name" ]]; then
+        cp "$CLASSIFIED_DIR/$name" "$WORK_DIR/package/$name"
+        provenance_files+=("$name")
+    fi
+done
 (
     cd "$WORK_DIR/package"
     sha256sum \
@@ -301,7 +309,7 @@ cp "$SAVED_CONFIG" "$WORK_DIR/package/vicat_nonviral_build_config.tsv"
         vicat_nonviral_cluster_summary.tsv \
         vicat_nonviral_database_metadata.tsv \
         vicat_nonviral_build_config.tsv \
-        classes/*.representatives.faa.gz > SHA256SUMS
+        classes/*.representatives.faa.gz "${provenance_files[@]}" > SHA256SUMS
     sha256sum --check SHA256SUMS
     date -Iseconds > .visum_db_complete
 )

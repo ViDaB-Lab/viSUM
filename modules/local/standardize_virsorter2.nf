@@ -23,6 +23,7 @@ process STANDARDIZE_VIRSORTER2 {
 
     script:
     """
+    # Adapter policy v1.2: preserve unscored lt2gene calls as review-only evidence.
     python3 "${projectDir}/bin/standardize_virsorter2.py" \
         --sample-id "${prefix}" \
         --input-type "${type}" \

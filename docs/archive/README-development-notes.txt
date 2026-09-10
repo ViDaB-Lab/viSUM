@@ -1,3 +1,7 @@
+HISTORICAL DEVELOPMENT NOTES — NOT CURRENT USAGE INSTRUCTIONS
+Preserved from the former root README during the September 2026 documentation review.
+These notes include obsolete/proposed behavior. Use the root README.md instead.
+
 vHARMONY
 
 Discovery evidence gate

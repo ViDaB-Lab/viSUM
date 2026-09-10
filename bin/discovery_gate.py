@@ -8,6 +8,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Iterator, TextIO
 
+from evidence_schema import is_review_only_evidence
+
 
 AUDIT_COLUMNS = [
     "sample_id",
@@ -232,6 +234,8 @@ def load_evidence(
                     f"Unsupported evidence classification in {path}: {classification}"
                 )
             root_id = root_sequence_id(row, header_records, path)
+            if is_review_only_evidence(row):
+                continue  # Preserved in the standardized source table, not a routing vote.
             evidence[root_id][classification].append(tool)
             # Competitive viCAT emits one coherent assessment row. A qualified
             # localized viral cluster may still contain cellular-supported

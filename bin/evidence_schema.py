@@ -42,3 +42,9 @@ def unclassified_taxonomy(classification: str) -> dict[str, str]:
         column: f"{prefix}{rank}"
         for column, prefix, rank in zip(TAXONOMY_COLUMNS, RANK_PREFIXES, ranks)
     }
+
+
+def is_review_only_evidence(row: dict[str, str]) -> bool:
+    """Native unscored VS2 hallmark calls are auditable, not consensus votes."""
+    return (row.get('tool', '').strip().lower() == 'virsorter2'
+            and row.get('strength_basis', '').strip() == 'virsorter2_hallmark_only')

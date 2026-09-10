@@ -16,7 +16,7 @@ if [[ -e "$OUTDIR" ]]; then
 fi
 mkdir -p -- "$OUTDIR"
 cd -- "$PROJECT"
-nextflow run "$PROJECT/visum_nextflow.nf" -ansi-log true \
+bash "$PROJECT/visum" -ansi-log true \
     -c "$PROJECT/visum.config" -profile local_full \
     -work-dir "$PROJECT/benchmark/part1/work/vicat_nonviral_release_candidate_v1" -resume \
     --prefix_many "$MANIFEST" --indir "$INDIR" --outdir "$OUTDIR" \

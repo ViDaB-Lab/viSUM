@@ -154,7 +154,7 @@ process PREPARE_VITAP_DATABASE {
     exec 9>"\$DB_ROOT/vitap_db.install.lock"
     flock 9
 
-    if [[ "\$UPDATE_DATABASE" != 'true' && -L "\$DB_ROOT/current" ]]; then
+    if [[ "\$UPDATE_DATABASE" != 'true' && -z "\$VMR_SOURCE" && -z "\$REQUESTED_LABEL" && -L "\$DB_ROOT/current" ]]; then
         RESOLVED_DATABASE=\$(readlink -f "\$DB_ROOT/current")
         if validate_database "\$RESOLVED_DATABASE"; then
             emit_existing_managed_database "\$RESOLVED_DATABASE" \
@@ -171,7 +171,9 @@ process PREPARE_VITAP_DATABASE {
             echo "ERROR: User-supplied VMR not found: \$VMR_SOURCE" >&2
             exit 1
         }
-        SOURCE_FILE="\$DB_ROOT/sources/\$(basename "\$VMR_SOURCE")"
+        SOURCE_SHA=\$(sha256sum "\$VMR_SOURCE" | cut -d ' ' -f 1)
+        mkdir -p "\$DB_ROOT/sources/\$SOURCE_SHA"
+        SOURCE_FILE="\$DB_ROOT/sources/\$SOURCE_SHA/\$(basename "\$VMR_SOURCE")"
         if [[ "\$(readlink -f "\$VMR_SOURCE")" != "\$(readlink -m "\$SOURCE_FILE")" ]]; then
             cp -f "\$VMR_SOURCE" "\$SOURCE_FILE"
         fi
@@ -192,18 +194,16 @@ process PREPARE_VITAP_DATABASE {
             echo "ERROR: ICTV current-VMR URL resolved to an unexpected file: \$SOURCE_URL" >&2
             exit 1
         }
-        SOURCE_FILE="\$DB_ROOT/sources/\$SOURCE_NAME"
-        if [[ -s "\$SOURCE_FILE" ]]; then
-            rm -f "\$DOWNLOAD_TMP"
-        else
-            mv "\$DOWNLOAD_TMP" "\$SOURCE_FILE"
-        fi
+        SOURCE_SHA=\$(sha256sum "\$DOWNLOAD_TMP" | cut -d ' ' -f 1)
+        mkdir -p "\$DB_ROOT/sources/\$SOURCE_SHA"
+        SOURCE_FILE="\$DB_ROOT/sources/\$SOURCE_SHA/\$SOURCE_NAME"
+        mv "\$DOWNLOAD_TMP" "\$SOURCE_FILE"
     fi
 
     SOURCE_STEM=\$(basename "\$SOURCE_FILE")
     SOURCE_STEM="\${SOURCE_STEM%.*}"
-    PREPARED_CSV="\$DB_ROOT/sources/\${SOURCE_STEM}.vitap.csv"
-    PREPARED_METADATA="\$DB_ROOT/sources/\${SOURCE_STEM}.vitap_vmr_metadata.tsv"
+    PREPARED_CSV="\$(dirname "\$SOURCE_FILE")/\${SOURCE_STEM}.vitap.csv"
+    PREPARED_METADATA="\$(dirname "\$SOURCE_FILE")/\${SOURCE_STEM}.vitap_vmr_metadata.tsv"
 
     PREPARE_ARGS=(
         --input "\$SOURCE_FILE"
@@ -229,9 +229,18 @@ process PREPARE_VITAP_DATABASE {
     TARGET_DATABASE="\$DB_ROOT/DB_\$RELEASE"
 
     if validate_database "\$TARGET_DATABASE"; then
+        RECORDED_SHA=''
+        if [[ -s "\$TARGET_DATABASE/.visum_vmr_metadata.tsv" ]]; then
+            RECORDED_SHA=\$(awk -F '\t' 'NR == 2 {print \$4}' "\$TARGET_DATABASE/.visum_vmr_metadata.tsv")
+        fi
+        if [[ -z "\$RECORDED_SHA" || "\$RECORDED_SHA" != "\$VMR_SHA" ]]; then
+            echo 'ERROR: Installed VITAP release has a different or unknown VMR fingerprint.' >&2
+            echo 'Existing database and current link were preserved. Use a distinct --vitap_db_label' >&2
+            echo 'to build separately, or --vitap_db to explicitly use the existing database.' >&2
+            exit 1
+        fi
         ln -sfn "DB_\$RELEASE" "\$DB_ROOT/current"
-        emit_database "\$TARGET_DATABASE" 'skipped-current-release-already-installed' \
-            "\$(basename "\$SOURCE_FILE")" "\$SOURCE_URL" "\$VMR_SHA" "\$RELEASE"
+        emit_existing_managed_database "\$TARGET_DATABASE" 'skipped-current-release-already-installed'
         exit 0
     fi
     if [[ -e "\$TARGET_DATABASE" ]]; then
@@ -242,7 +251,19 @@ process PREPARE_VITAP_DATABASE {
     fi
 
     BUILD_ROOT="\$DB_ROOT/.build-\$RELEASE"
+    if [[ -d "\$BUILD_ROOT" ]]; then
+        BUILD_SHA=''
+        if [[ -s "\$BUILD_ROOT/.visum_build_vmr.sha256" ]]; then
+            BUILD_SHA=\$(head -n 1 "\$BUILD_ROOT/.visum_build_vmr.sha256")
+        fi
+        if [[ "\$BUILD_SHA" != "\$VMR_SHA" ]]; then
+            echo 'ERROR: Existing VITAP build work has a different or unknown VMR fingerprint.' >&2
+            echo 'Build work was preserved. Use a distinct --vitap_db_label for a separate build.' >&2
+            exit 1
+        fi
+    fi
     mkdir -p "\$BUILD_ROOT"
+    printf '%s\n' "\$VMR_SHA" > "\$BUILD_ROOT/.visum_build_vmr.sha256"
     if [[ ! -e "\$BUILD_ROOT/VMR_Genome" ]]; then
         mkdir -p "\$DB_ROOT/VMR_Genome"
         ln -s "\$DB_ROOT/VMR_Genome" "\$BUILD_ROOT/VMR_Genome"

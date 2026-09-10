@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, TextIO
 
+from evidence_schema import is_review_only_evidence
+
 
 RANKS = ("domain", "realm", "kingdom", "phylum", "class", "order", "family", "genus", "species")
 RANK_COLUMNS = {
@@ -155,6 +157,9 @@ def evidence_applies_to_final(
     """Determine whether one evidence row applies to one final sequence."""
     if exact_id in known_final_ids:
         return exact_id == final_id
+    if row_record_type == "short_hallmark_region" and row_interval is None:
+        # An unlocalized hallmark cannot corroborate arbitrary refined children.
+        return final_record_type == "input_contig" and parent_id == final_parent
     region_specific = (
         row_record_type in {"provirus", "viral_region"}
         and row_interval is not None
@@ -169,6 +174,16 @@ def evidence_applies_to_final(
             return row_interval == (1, final_length)
         return intervals_overlap(row_interval, final_interval)
     return parent_id == final_parent or exact_id == final_parent
+
+
+def rna_floor_qualified_tools(rows, qualified_tools):
+    """Hallmark-only VS2 support must not exempt a Deep6/viCAT pair."""
+    viral_vs2 = [row for row in rows if row.get('tool', '').lower() == 'virsorter2'
+                 and row.get('classification', '').lower() == 'virus']
+    if viral_vs2 and all(row.get('strength_basis') == 'virsorter2_hallmark_only'
+                         for row in viral_vs2):
+        return qualified_tools - {'virsorter2'}
+    return set(qualified_tools)
 
 
 def apply_rna_pair_homology_floor(decision, enabled, input_type, strong_tools,
@@ -1177,6 +1192,8 @@ def run(args: argparse.Namespace) -> None:
             )
             if id(source_row) in parent_context_ids:
                 audit["evidence_application"] = "parent_context_only"
+            if is_review_only_evidence(source_row):
+                audit["evidence_application"] = "review_only_no_consensus_vote"
             evidence_audit_rows.append(audit)
         tools_by_class: dict[str, set[str]] = defaultdict(set)
         strong_tools: set[str] = set()
@@ -1186,6 +1203,8 @@ def run(args: argparse.Namespace) -> None:
         )
         for row in rows:
             tool = row.get("tool", "").strip().lower()
+            if is_review_only_evidence(row):
+                continue
             classification = row.get("classification", "").strip().lower()
             effective_strength = row.get("evidence_strength", "").strip().lower()
             if tool == "deep6" and classification == "virus" and not effective_strength:
@@ -1307,12 +1326,13 @@ def run(args: argparse.Namespace) -> None:
             and not boundary_primary_eligible
         ):
             viral_decision = "provisional_provirus"
+        floor_qualified_tools = rna_floor_qualified_tools(rows, qualified_tools)
         if pair_floor and args.input_type == "rna" and not any(
             path.name.endswith(".vicat_orf_evidence.tsv") for path in args.evidence
-        ) and not strong_tools and qualified_tools == {"deep6", "vicat"}:
+        ) and not strong_tools and floor_qualified_tools == {"deep6", "vicat"}:
             raise ValueError("RNA pair homology floor requires viCAT locus evidence")
         viral_decision, pair_floor_status = apply_rna_pair_homology_floor(
-            viral_decision, pair_floor, args.input_type, strong_tools, qualified_tools,
+            viral_decision, pair_floor, args.input_type, strong_tools, floor_qualified_tools,
             pair_loci, parent_id, coords if record_type != "input_contig" else "",
         )
         if pair_floor_status == "demoted":
@@ -1608,8 +1628,9 @@ def run(args: argparse.Namespace) -> None:
         "tools_present": sorted({row.get("tool", "") for row in evidence_rows if row.get("tool")}),
         "policy": {
             "rna_pair_homology_floor": bool(pair_floor and args.input_type == "rna"),
+            "virsorter2_hallmark_only_policy": "review-only; no discovery routing or primary-consensus votes; no invented scores/boundaries; does not exempt RNA homology floor",
             "rna_pair_homology_floor_demoted_ids": sorted(pair_floor_demoted_ids),
-            "rna_pair_homology_floor_thresholds": "protein_length>=100; bitscore>=100; query_coverage>=50; subject_coverage>=50; one viral-supported locus; only qualified Deep6+viCAT without strong support",
+            "rna_pair_homology_floor_thresholds": "protein_length>=100; bitscore>=100; query_coverage>=50; subject_coverage>=50; one viral-supported locus; qualified Deep6+viCAT without strong support after ignoring hallmark-only VirSorter2 for exemption eligibility",
             "viral_confidence": "high=2+ strong; supported=1 strong or 2+ qualified; provisional=1 qualified",
             "checkv_complete_contig": "complete/high-quality, provirus=No, viral genes present, and zero host genes is strong intact-contig viral support",
             "generic_cellular_override": "2+ strong independent viral tools override Deep6/DeepMicroClass2-only cellular conflict; the conflict remains annotated",

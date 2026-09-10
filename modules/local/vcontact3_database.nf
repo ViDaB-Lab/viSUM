@@ -3,6 +3,7 @@ process PREPARE_VCONTACT3_DATABASE {
     tag 'vcontact3_database'
 
     conda "${projectDir}/envs/vcontact3.yml"
+    cache false
 
     cpus { Math.min(params.vcontact3_cpus as int, params.max_cpus as int) }
     memory { params.vcontact3_memory }
@@ -78,7 +79,8 @@ process PREPARE_VCONTACT3_DATABASE {
         python -m json.tool "$manifest" >/dev/null 2>&1 || return 1
         release_dir="$(dirname "$manifest")/v$version"
         [[ -d "$release_dir" ]] || return 1
-        find "$release_dir" -type f -size +0c -print -quit | grep -q .
+        python "!{projectDir}/bin/validate_reference_database.py" vcontact3 \
+            "$manifest" --domain "!{params.vcontact3_db_domain}" --check-mmseqs
     }
 
     archive_status() {

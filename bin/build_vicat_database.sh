@@ -95,9 +95,39 @@ if [[ -n "$CELLULAR_PROTEINS" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Every invocation verifies the pinned sources, including checkpoint resumes.
+printf '%s  %s\n' "$PROTEIN_SHA256" "$PROTEINS" | sha256sum --check -
+printf '%s  %s\n' "$METADATA_SHA256" "$METADATA" | sha256sum --check -
+if [[ -d "$WORK_DIR/checkpoints" && ! -s "$WORK_DIR/build_config.tsv" ]]; then
+    echo 'ERROR: Legacy viCAT build work lacks a provenance stamp; use a new work directory.' >&2
+    exit 1
+fi
 mkdir -p "$WORK_DIR" "$WORK_DIR/checkpoints" "$WORK_DIR/mmseqs" \
     "$WORK_DIR/dedup" "$WORK_DIR/taxonomy" "$WORK_DIR/taxonomy_work" \
     "$WORK_DIR/runtime"
+
+{
+    printf 'parameter\tvalue\n'
+    printf 'protein_sha256\t%s\nmetadata_sha256\t%s\n' "$PROTEIN_SHA256" "$METADATA_SHA256"
+    printf 'uvigs\t%s\nproteins\t%s\nrepresentatives\t%s\n' "$EXPECTED_UVIGS" "$EXPECTED_PROTEINS" "$EXPECTED_REPRESENTATIVES"
+    printf 'cellular_identity\t%s\ncellular_coverage\t%s\ncellular_min_length\t%s\n' "$CELLULAR_MIN_SEQ_ID" "$CELLULAR_COVERAGE" "$CELLULAR_MIN_PROTEIN_LENGTH"
+    for helper in build_vicat_database.sh prepare_vicat_metadata.py build_vicat_taxonomy_lookup.py prepare_vicat_competitive_references.py; do
+        printf '%s\t%s\n' "$helper" "$(sha256sum "$SCRIPT_DIR/$helper" | awk '{print $1}')"
+    done
+    if [[ -n "$CELLULAR_PROTEINS" ]]; then
+        printf 'cellular_proteins\t%s\ncellular_metadata\t%s\n' \
+            "$(sha256sum "$CELLULAR_PROTEINS" | awk '{print $1}')" \
+            "$(sha256sum "$CELLULAR_METADATA" | awk '{print $1}')"
+    fi
+} > "$WORK_DIR/build_config.current.tsv"
+if [[ -s "$WORK_DIR/build_config.tsv" ]]; then
+    cmp -s "$WORK_DIR/build_config.current.tsv" "$WORK_DIR/build_config.tsv" || {
+        echo 'ERROR: viCAT build inputs, parameters or code changed; use a new work directory.' >&2
+        exit 1
+    }
+else
+    mv "$WORK_DIR/build_config.current.tsv" "$WORK_DIR/build_config.tsv"
+fi
 
 checkpoint_done() { [[ -f "$WORK_DIR/checkpoints/$1.complete" ]]; }
 mark_complete() { date -Iseconds > "$WORK_DIR/checkpoints/$1.complete"; }
@@ -105,8 +135,6 @@ mark_complete() { date -Iseconds > "$WORK_DIR/checkpoints/$1.complete"; }
 if ! checkpoint_done source_validation; then
     gzip -t "$PROTEINS"
     gzip -t "$METADATA"
-    printf '%s  %s\n' "$PROTEIN_SHA256" "$PROTEINS" | sha256sum --check -
-    printf '%s  %s\n' "$METADATA_SHA256" "$METADATA" | sha256sum --check -
     mark_complete source_validation
 fi
 
@@ -328,7 +356,8 @@ PY
 
 (
     cd "$WORK_DIR/runtime"
-    checksum_files=(IMGVR5_UViG_representatives.dmnd \
+    cp "$WORK_DIR/build_config.tsv" vicat_build_config.tsv
+    checksum_files=(vicat_build_config.tsv IMGVR5_UViG_representatives.dmnd \
         IMGVR5_UViG.vicat_taxonomy_lookup.parquet \
         vicat_taxonomy_build_summary.tsv \
         vicat_database_metadata.tsv)

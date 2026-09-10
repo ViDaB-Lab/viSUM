@@ -1,0 +1,16 @@
+sample	tool	field	retained_supported_records	minimum	median	maximum
+BMARK_RNA_VIRAL	deep6	score	722	0.7007606625556946	0.9998617768287659	1.0
+BMARK_RNA_VIRAL	vicat	best_bitscore	786	61.6	1364.5	9289.0
+BMARK_RNA_VIRAL	vicat	best_query_coverage	786	34.4	99.8	100.0
+BMARK_RNA_VIRAL	vicat	best_subject_coverage	786	35.6	100.0	100.0
+BMARK_RNA_VIRAL	vicat	viral_supported_loci	786	1.0	1.0	11.0
+RNANEG_CLEAN_BROAD	deep6	score	6	0.7070176601409912	0.9459793865680695	0.9998530149459839
+RNANEG_CLEAN_BROAD	vicat	best_bitscore	5	101.0	836.0	2162.0
+RNANEG_CLEAN_BROAD	vicat	best_query_coverage	5	74.3	91.7	99.2
+RNANEG_CLEAN_BROAD	vicat	best_subject_coverage	5	81.5	91.5	98.1
+RNANEG_CLEAN_BROAD	vicat	viral_supported_loci	5	1.0	1.0	2.0
+RNANEG_CLEAN_CONFIRMED	deep6	score	16	0.7111542820930481	0.8742826581001282	0.9994724988937378
+RNANEG_CLEAN_CONFIRMED	vicat	best_bitscore	18	139.0	586.5	4715.0
+RNANEG_CLEAN_CONFIRMED	vicat	best_query_coverage	18	48.6	88.44999999999999	100.0
+RNANEG_CLEAN_CONFIRMED	vicat	best_subject_coverage	18	35.1	90.6	100.0
+RNANEG_CLEAN_CONFIRMED	vicat	viral_supported_loci	18	1.0	1.0	1.0

@@ -59,7 +59,9 @@ process VIHARMONY {
         ? groupList.collect { groups -> "'${groups}'" }.join(' ')
         : ''
     """
-    # viHARMONY decision policy v1.0: global MSL taxonomy resolution and
+    # viHARMONY decision policy v1.2: VS2 hallmark-only calls are review-only;
+    # do not bypass the RNA pair floor or project unlocalized calls onto children.
+    # Global MSL taxonomy resolution and
     # conservative strict species reporting; disputed CT3/viCAT boundaries require
     # regional support; parent-only cellular/plasmid evidence remains context,
     # and strongly supported virus/plasmid hybrids retain both interpretations.

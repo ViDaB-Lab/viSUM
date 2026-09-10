@@ -32,6 +32,7 @@ process DISCOVERY_GATE {
         ? evidenceList.collect { evidence -> "'${evidence}'" }.join(' ')
         : ''
     """
+    # Routing policy v1.2: hallmark-only VS2 predictions are review-only.
     python3 "${projectDir}/bin/discovery_gate.py" \
         --sample-id "${prefix}" \
         --input-type "${type}" \

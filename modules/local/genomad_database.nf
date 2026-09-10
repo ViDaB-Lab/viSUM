@@ -3,6 +3,7 @@ process PREPARE_GENOMAD_DATABASE {
     tag 'genomad_database'
 
     conda "bioconda::genomad=${params.genomad_version}"
+    cache false
 
     publishDir "${params.outdir}/database_setup",
         mode: 'copy',
@@ -30,10 +31,8 @@ process PREPARE_GENOMAD_DATABASE {
         [[ -d "\$candidate" ]] || return 1
         [[ -r "\$candidate" ]] || return 1
 
-        # geNomad databases contain non-empty metadata files and MMseqs2
-        # database components identified by .dbtype files.
-        find "\$candidate" -type f -size +0c -print -quit | grep -q . || return 1
-        find "\$candidate" -type f -name '*.dbtype' -print -quit | grep -q . || return 1
+        python "${projectDir}/bin/validate_reference_database.py" genomad \
+            "\$candidate" --check-mmseqs
     }
 
     write_metadata() {

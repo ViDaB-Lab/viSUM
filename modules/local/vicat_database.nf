@@ -3,6 +3,7 @@ process PREPARE_VICAT_DATABASE {
     tag 'vicat_database'
 
     conda "${projectDir}/envs/vicat_db_build.yml"
+    cache false
 
     // Validation of an existing database is lightweight. Reserve the large
     // build resources only when raw MetaVR inputs were supplied.

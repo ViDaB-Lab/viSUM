@@ -462,7 +462,7 @@ class ZeroCallStandardizerTests(unittest.TestCase):
 
             self.assertEqual(read_tsv(output), [])
 
-    def test_virsorter2_ignores_unscored_lt2gene_diagnostic_rows(self) -> None:
+    def test_virsorter2_preserves_unscored_lt2gene_hallmark_calls(self) -> None:
         with tempfile.TemporaryDirectory() as temp_directory:
             directory = Path(temp_directory)
             header_map = directory / "header_map.tsv"
@@ -522,7 +522,12 @@ class ZeroCallStandardizerTests(unittest.TestCase):
             with patch.object(sys, "argv", argv):
                 standardize_virsorter2.main()
 
-            self.assertEqual(read_tsv(output), [])
+            rows = read_tsv(output)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]['score'], 'NA')
+            self.assertEqual(rows[0]['evidence_strength'], 'review')
+            self.assertEqual(rows[0]['strength_basis'], 'virsorter2_hallmark_only')
+            self.assertEqual(rows[0]['coordinates'], '')
 
 
 if __name__ == "__main__":
