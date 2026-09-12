@@ -237,8 +237,8 @@ PROGRAM SELECTION
   --run_vicat BOOL             viCAT discovery/taxonomy [false].
   --run_checkv BOOL            CheckV candidate quality/refinement [true].
   --run_tesorter BOOL          TEsorter retroelement evidence [true].
-  --run_vitap BOOL             VITAP taxonomy refinement [false].
-  --run_vcontact3 BOOL         vConTACT3 taxonomy refinement [false].
+  --run_vitap BOOL             VITAP taxonomy refinement [true].
+  --run_vcontact3 BOOL         vConTACT3 taxonomy refinement [true].
 
 COMMON ANALYSIS OPTIONS
   --genomad_score_calibration BOOL  Calibrate geNomad scores when supported

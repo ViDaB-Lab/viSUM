@@ -16,13 +16,11 @@ refinement or harmonization. Supplying input/prefix/type/prefix_many/indir is
 rejected. It does not run viCAT's sample-specific reference-subset/hit preparation.
 At least one database-bearing tool must be enabled.
 
-Defaults are the existing config defaults: optional viCAT, VITAP and vConTACT3
-are not implicitly enabled. DNA-only and RNA-only preparations both run if their
+VITAP and vConTACT3 are enabled by default; viCAT remains opt-in. DNA-only and RNA-only preparations both run if their
 tool flags are enabled, since setup has no sample type. Disable unwanted tools
 with the same `--run_<tool> false` settings used in analysis.
 
-For a full-profile setup add `--run_vicat true --run_vitap true
---run_vcontact3 true` and supply both viCAT databases or their build inputs as
+For a full-profile setup add `--run_vicat true` and supply both viCAT databases or their build inputs as
 described in [viCAT preparation](vicat-database-preparation.md). Large local
 builds require explicitly adequate `--max_memory`, disk and time limits; the
 default 48 GB ceiling is not sufficient for the configured 350 GB viral build.

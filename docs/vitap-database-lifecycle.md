@@ -38,7 +38,7 @@ UniRef90, taxonomy downloads, software environments or every generated file.
 
 ## Separate setup/update workflow
 
-Use `--setup` with `--run_vitap true` to run preparation without analysis inputs.
+Use `--setup` to run preparation without analysis inputs. VITAP is enabled by default; `--run_vitap true` can explicitly override a custom configuration that disables it.
 The same existing prepare process handles both modes. To explicitly check for an
 update, also set `--vitap_update_database true`; setup alone does not enable updates.
 Other enabled tools are also prepared; use the usual `--run_*` flags to select

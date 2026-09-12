@@ -1,5 +1,7 @@
 # Preliminary consolidated benchmark review — 9 September 2026
 
+Later follow-up: the [coordinate-local retained-negative review](retained-negative-context.md) adds biological context to these unchanged-label statistics. Recommendations below describe the historical review; use the follow-up documents for resolved findings and current interpretation.
+
 Implementation follow-up: the [VirSorter2 hallmark policy and saved-evidence replay](virsorter2-hallmark-followup.md) documents a rejected qualified-vote trial and the finalized **review-only** policy. The finalized policy preserves native predictions without routing/primary votes; all ten panels reproduce the original decisions, with no extra downstream input. Numbers in this original review remain valid for primary retention under the finalized policy.
 
 ## Verdict and scope
