@@ -55,6 +55,50 @@ Detection of viral content, correctness of the retained boundaries, taxonomic
 accuracy and evidence confidence are distinct endpoints. The current headline
 benchmarks assess input-level detection, not all four at once.
 
+### Conditional exclusion of supported virus-like candidates
+
+The README additionally reports two explicit sensitivity analyses of the negative
+labels. The localized review found seven coherent capsid/portal/terminase modules
+and eleven additional plasmid inputs with multiple CT3 virion-hallmark genes
+inside a retained interval. The latter can represent partial viral modules;
+multiple hallmark genes need not imply distinct functions or a complete virus.
+These observations support a virus-like interpretation without establishing
+whether each source is a phage-plasmid, a plasmid-associated prophage or a
+mislabelled assembly.
+
+| Scenario | Excluded retained inputs | Remaining DNA retentions | Remaining DNA negative inputs | Conditional rate |
+| --- | ---: | ---: | ---: | ---: |
+| Original labels | 0 | 101 | 2,390 | 4.23% |
+| Exclude coherent-module candidates | 7 | 94 | 2,383 | 3.94% |
+| Exclude all multiple-localized-virion-hallmark candidates | 18 | 83 | 2,372 | 3.50% |
+
+The excluded source IDs are:
+
+- **Coherent-module set (7):** `PLASMID_NEG_000059`, `PLASMID_NEG_000102`,
+  `PLASMID_NEG_000113`, `PLASMID_NEG_000306`, `PLASMID_NEG_000326`,
+  `PLASMID_NEG_000346`, `PLASMID_NEG_000489`.
+- **Additional multiple-hallmark set (11):** `PLASMID_NEG_000017`,
+  `PLASMID_NEG_000137`, `PLASMID_NEG_000158`, `PLASMID_NEG_000203`,
+  `PLASMID_NEG_000271`, `PLASMID_NEG_000283`, `PLASMID_NEG_000359`,
+  `PLASMID_NEG_000416`, `PLASMID_NEG_000424`, `PLASMID_NEG_000461`,
+  `PLASMID_NEG_000486`.
+
+The 18-input scenario includes the seven-input set. Each original input is counted
+once and removed from both numerator and denominator: `(101 - k)/(2390 - k)`.
+Neither scenario excludes RNA inputs, so clean-RNA retention stays at
+27/1,600 (1.69%). No positive-panel counts, primary-retention rules or saved
+outputs change. A boundary-only provirus call or an isolated viral homolog is
+not sufficient for either exclusion criterion.
+
+These are **conditional, evidence-adjusted FPR scenarios**, not an independently
+adjudicated biological FPR. The evidence review was conducted on retained
+nominal negatives, not a blinded reassessment of the entire negative panel.
+They show how the interpretation changes if these explicitly identified
+virus-like candidates are outside the intended nonviral controls. Retention of
+such candidates can be a useful discovery outcome. Remaining retentions are
+not thereby proven biological errors, and excluded candidates are not thereby
+proven infectious viruses or accurately bounded proviruses.
+
 ## Experimental policy comparison
 
 A saved-evidence replay tested localized mixed-content review, CT3

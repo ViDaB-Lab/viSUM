@@ -34,6 +34,39 @@ class BetaDocumentationTests(unittest.TestCase):
                     continue
                 self.assertTrue((source.parent / target).exists(), f"Broken link in {name}: {link}")
 
+    def test_readme_cites_each_external_pipeline_program(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        roles = readme.split("## Programs and roles\n", 1)[1].split("\n## ", 1)[0]
+        citations = readme.split("## Who to cite\n", 1)[1]
+        programs = re.findall(r"^\| ([^|]+?) \| (?:Yes|No) \|", roles, re.MULTILINE)
+        self.assertTrue(programs)
+        for program in [*programs, "Nextflow"]:
+            if program == "viCAT":
+                self.assertIn("viCAT and viHARMONY are components of viSUM", citations)
+                continue
+            self.assertRegex(
+                citations,
+                rf"(?m)^\| {re.escape(program)} \| .*https://doi\.org/[^)]+",
+            )
+
+    def test_readme_negative_exclusions_are_explicit_and_consistent(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        benchmark = readme.split("## Preliminary performance\n", 1)[1].split("\n## ", 1)[0]
+        self.assertNotIn("geNomad", benchmark)
+        for excluded in (7, 18):
+            retained, total = 101 - excluded, 2390 - excluded
+            self.assertIn(f"{retained:,}/{total:,} ({100 * retained / total:.2f}%)", benchmark)
+        self.assertIn("conditional, evidence-adjusted", benchmark)
+        self.assertIn("27/1,600 (1.69%)", benchmark)
+        review = (ROOT / "docs/benchmarks/retained-negative-context.md").read_text(encoding="utf-8")
+        cohorts = review.split("The excluded source IDs are:\n", 1)[1].split("The 18-input scenario", 1)[0]
+        narrow, additional = cohorts.split("**Additional multiple-hallmark set (11):**", 1)
+        narrow_ids = set(re.findall(r"PLASMID_NEG_\d{6}", narrow))
+        additional_ids = set(re.findall(r"PLASMID_NEG_\d{6}", additional))
+        self.assertEqual(len(narrow_ids), 7)
+        self.assertEqual(len(additional_ids), 11)
+        self.assertFalse(narrow_ids & additional_ids)
+
 
 if __name__ == "__main__":
     unittest.main()

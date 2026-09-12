@@ -4,6 +4,8 @@
 
 viSUM combines complementary programs to identify candidate viruses—including divergent and understudied viruses—and turn their results into consistent, sequence-level evidence. Its two goals are broader viral detection and interpretable classifications that support cross-study comparisons and reference-database curation.
 
+**Evidence integration is a core output, not just a step toward detection.** viSUM brings together origin predictions, protein homology, candidate proviral regions, retroelement context and taxonomic evidence. viHARMONY produces standardized, rank-aware taxonomic assignments with supporting evidence, confidence categories and explicit conflicts, separating supported classifications from exploratory hypotheses. For non-model systems, this helps researchers interpret novel candidates even when a close reference or a confident species-level assignment is unavailable.
+
 **Research beta in preparation.** Analysis and preliminary benchmarks have completed in the development environment; clean-install verification remains pending. A tagged beta release has not yet been published.
 
 ## How it works
@@ -59,20 +61,27 @@ The development benchmarks include **539 DNA viral inputs, 874 RNA viral inputs,
 
 These results use the all-tools configuration with viCAT enabled and the optional RNA homology floor on. They are not a measurement of the unmodified quickstart configuration.
 
-| Benchmark endpoint | viSUM | geNomad |
-| --- | --- | --- |
-| DNA viral sensitivity | **477/539 (88.50%)** | 452/539 (83.86%) |
-| RNA viral sensitivity | **788/874 (90.16%)** | 646/874 (73.91%) |
-| DNA nominal-negative retention | 101/2,390 (4.23%) | 38/2,390 (1.59%) |
-| Clean-RNA nominal-negative retention | 27/1,600 (1.69%) | 18/1,600 (1.13%) |
+| Benchmark endpoint | viSUM |
+| --- | --- |
+| DNA viral sensitivity | **477/539 (88.50%)** |
+| RNA viral sensitivity | **788/874 (90.16%)** |
+| DNA nominal-negative retention (label-based FPR) | 101/2,390 (4.23%) |
+| Clean-RNA nominal-negative retention (label-based FPR) | 27/1,600 (1.69%) |
 
-viSUM retained **25 more DNA positives and 142 more RNA positives net** than geNomad, alongside more nominal-negative inputs. The [full benchmark comparison](docs/benchmarks/preliminary-2026-09.md) includes every discovery method and subgroup results.
+The [full benchmark comparison](docs/benchmarks/preliminary-2026-09.md) includes all evaluated discovery methods and subgroup results.
 
 **Why “nominal-negative retention”?** A cellular or plasmid source label does not rule out viral genes or an embedded viral region. Review of retained negatives found viral homologs and virus-like gene content; seven plasmid inputs contained coherent capsid/portal/terminase modules supporting phage-like candidates. Phage–plasmids are an established biological category ([Pfeifer et al., 2021](https://doi.org/10.1093/nar/gkab064)). Other retained sequences had mixed or unresolved evidence.
 
-The percentages above therefore measure disagreement with the original benchmark labels—an **apparent, label-based FPR**, not a confirmed biological false-positive rate. Labels remain unchanged for every tool. See the [retained-negative evidence review](docs/benchmarks/retained-negative-context.md).
+**Evidence-adjusted FPR scenarios.** If supported virus-like candidates are excluded from the negative evaluation set, the remaining DNA retention rates are:
 
-These are preliminary development tests, not independent external validation. They measure detection, not taxonomic accuracy, calibrated confidence or exact proviral boundaries.
+| Exclusion criterion | Remaining retained / remaining negative inputs |
+| --- | --- |
+| Seven coherent capsid/portal/terminase-module candidates | **94/2,383 (3.94%)** |
+| All 18 plasmid candidates with multiple localized CT3 virion-hallmark genes, including those seven | **83/2,372 (3.50%)** |
+
+These scenarios recognize meaningful viral evidence: retaining such candidates can serve viSUM's intended discovery purpose. Each excluded input is removed from both numerator and denominator; the two scenarios are alternatives, not additive. Clean-RNA retention remains **27/1,600 (1.69%)** because neither criterion excludes RNA inputs. These are conditional, evidence-adjusted estimates—not independently confirmed biological FPRs or changes to the pipeline's calls. The [retained-negative evidence review](docs/benchmarks/retained-negative-context.md) documents the criteria and excluded IDs. Original benchmark labels remain available unchanged.
+
+These preliminary development tests quantify detection and negative retention. viSUM also delivers integrated evidence, taxonomic context and confidence reporting; independent evaluation of taxonomic accuracy, confidence calibration and exact proviral boundaries remains future work.
 
 ## Get started
 
@@ -91,4 +100,42 @@ Use `--type rna` for RNA assemblies. Final candidates, classifications and revie
 - [Database setup](docs/database-setup.md)
 - [All documentation](docs/README.md)
 
-For reproducibility, record the viSUM commit/tag and the tool/database versions used. Cite the underlying programs and databases alongside viSUM. Report issues with a redacted command and relevant logs; do not upload confidential sequence data. Research use only.
+## Who to cite
+
+When publishing results from viSUM, cite **viSUM and the underlying programs that contributed to your analysis**, including database preparation. Record the software versions and database releases used; not every optional program runs in every analysis.
+
+**viSUM beta-release citation:** to be added. viCAT and viHARMONY are components of viSUM and will be covered by that citation.
+<!-- Add the viSUM beta-release citation here when available. -->
+
+| Program | Reference |
+| --- | --- |
+| geNomad | Camargo AP et al. (2024). [Identification of mobile genetic elements with geNomad](https://doi.org/10.1038/s41587-023-01953-y). *Nature Biotechnology* **42**, 1303–1312. |
+| VirSorter2 | Guo J et al. (2021). [VirSorter2: a multi-classifier, expert-guided approach to detect diverse DNA and RNA viruses](https://doi.org/10.1186/s40168-020-00990-y). *Microbiome* **9**, 37. |
+| Cenote-Taker3 | Tisza MJ et al. (2026). [Cenote-Taker 3 for Fast and Accurate Virus Discovery and Annotation of the Virome](https://doi.org/10.24072/pcjournal.706). *Peer Community Journal*. |
+| DeepMicroClass2 | Hou S et al. (2024). [DeepMicroClass sorts metagenomic contigs into prokaryotes, eukaryotes and viruses](https://doi.org/10.1093/nargab/lqae044). *NAR Genomics and Bioinformatics* **6**, lqae044. Cite this original-framework paper as requested by the [DeepMicroClass2 authors](https://github.com/aiguo-11/DeepMicroClass2#citation). |
+| GiantHunter | Qu F et al. (2025). [GiantHunter: accurate detection of giant virus in metagenomic data using reinforcement-learning and Monte Carlo tree search](https://doi.org/10.1093/bioinformatics/btaf239). *Bioinformatics* **41** (Suppl. 1), i30–i39. |
+| Deep6 | Finke JF, Kellogg CTE and Suttle CA (2023). [Deep6: Classification of Metatranscriptomic Sequences into Cellular Empires and Viral Realms Using Deep Learning Models](https://doi.org/10.1128/mra.01079-22). *Microbiology Resource Announcements* **12**, e01079-22. |
+| VirBot | Chen G et al. (2023). [VirBot: an RNA viral contig detector for metagenomic data](https://doi.org/10.1093/bioinformatics/btad093). *Bioinformatics* **39**, btad093. |
+| CheckV | Nayfach S et al. (2021). [CheckV assesses the quality and completeness of metagenome-assembled viral genomes](https://doi.org/10.1038/s41587-020-00774-7). *Nature Biotechnology* **39**, 578–585. |
+| TEsorter | Zhang RG et al. (2022). [TEsorter: an accurate and fast method to classify LTR-retrotransposons in plant genomes](https://doi.org/10.1093/hr/uhac017). *Horticulture Research* **9**, uhac017. |
+| VITAP | Zheng K et al. (2025). [VITAP: a high precision tool for DNA and RNA viral classification based on meta-omic data](https://doi.org/10.1038/s41467-025-57500-7). *Nature Communications* **16**, 2226. |
+| vConTACT3 | Bolduc B et al. (2025). [Machine learning enables scalable and systematic hierarchical virus taxonomy](https://doi.org/10.1038/s41587-025-02946-9). *Nature Biotechnology*. |
+| Nextflow | Di Tommaso P et al. (2017). [Nextflow enables reproducible computational workflows](https://doi.org/10.1038/nbt.3820). *Nature Biotechnology* **35**, 316–319. |
+
+<details>
+<summary>Supporting software and database citations</summary>
+
+Include the following methods where used by the enabled tools or database builders, and follow each tool's citation instructions for additional dependencies:
+
+- **DIAMOND:** Buchfink B, Reuter K and Drost HG (2021). [Sensitive protein alignments at tree-of-life scale using DIAMOND](https://doi.org/10.1038/s41592-021-01101-x). *Nature Methods* **18**, 366–368.
+- **MMseqs2:** Steinegger M and Söding J (2017). [MMseqs2 enables sensitive protein sequence searching for the analysis of massive data sets](https://doi.org/10.1038/nbt.3988). *Nature Biotechnology* **35**, 1026–1028. For database building with **Linclust**, also cite their (2018) paper, [Clustering huge protein sequence sets in linear time](https://doi.org/10.1038/s41467-018-04964-5), *Nature Communications* **9**, 2542.
+- **Prodigal:** Hyatt D et al. (2010). [Prodigal: prokaryotic gene recognition and translation initiation site identification](https://doi.org/10.1186/1471-2105-11-119). *BMC Bioinformatics* **11**, 119.
+- **Pyrodigal:** Larralde M (2022). [Pyrodigal: Python bindings and interface to Prodigal, an efficient method for gene prediction in prokaryotes](https://doi.org/10.21105/joss.04296). *Journal of Open Source Software* **7**, 4296. Cite both Pyrodigal and Prodigal when using the [Pyrodigal-gv](https://github.com/althonos/pyrodigal-gv) or [Pyrodigal-rv](https://github.com/LanderDC/pyrodigal-rv) extensions, and identify the extension/version used.
+- **Prodigal-gv viral gene-calling models:** Cook R et al. (2024). [Driving through stop signs: predicting stop codon reassignment improves functional annotation of bacteriophages](https://doi.org/10.1093/ismeco/ycae079). *ISME Communications* **4**, ycae079.
+- **HMMER3:** Eddy SR (2011). [Accelerated Profile HMM Searches](https://doi.org/10.1371/journal.pcbi.1002195). *PLOS Computational Biology* **7**, e1002195.
+
+Software citations do not replace database attribution. Cite the source resources and exact releases used for reference proteins, taxonomy and retroelement models. For example, use the release-specific reference in the [vConTACT3 database citation guide](https://vcontact3.readthedocs.io/en/latest/citations.html) and the appropriate database reference from [TEsorter's citation instructions](https://github.com/zhangrengang/TEsorter#citation). For viCAT, credit the supplied viral and nonviral source resources as well as viSUM; for VITAP, record the ICTV/reference release used to build its database.
+
+</details>
+
+For reproducibility, record the viSUM commit/tag and the tool/database versions used. Report issues with a redacted command and relevant logs; do not upload confidential sequence data. Research use only.
