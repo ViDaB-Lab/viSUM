@@ -53,19 +53,20 @@ class BetaDocumentationTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         benchmark = readme.split("## Preliminary performance\n", 1)[1].split("\n## ", 1)[0]
         self.assertNotIn("geNomad", benchmark)
-        for excluded in (7, 18):
+        for excluded in (48, 55):
             retained, total = 101 - excluded, 2390 - excluded
             self.assertIn(f"{retained:,}/{total:,} ({100 * retained / total:.2f}%)", benchmark)
         self.assertIn("conditional, evidence-adjusted", benchmark)
         self.assertIn("27/1,600 (1.69%)", benchmark)
         review = (ROOT / "docs/benchmarks/retained-negative-context.md").read_text(encoding="utf-8")
-        cohorts = review.split("The excluded source IDs are:\n", 1)[1].split("The 18-input scenario", 1)[0]
-        narrow, additional = cohorts.split("**Additional multiple-hallmark set (11):**", 1)
-        narrow_ids = set(re.findall(r"PLASMID_NEG_\d{6}", narrow))
-        additional_ids = set(re.findall(r"PLASMID_NEG_\d{6}", additional))
-        self.assertEqual(len(narrow_ids), 7)
-        self.assertEqual(len(additional_ids), 11)
-        self.assertFalse(narrow_ids & additional_ids)
+        cohorts = review.split("The excluded source IDs are:\n", 1)[1].split("The 55-input scenario", 1)[0]
+        for prefix, digits, expected in (("CELL_NEG_", 6, 5), ("MITO_NEG_", 6, 5),
+                                         ("PLASMID_NEG_", 6, 38), ("NEG_TE_LTR_", 4, 7)):
+            ids = re.findall(rf"{prefix}\d{{{digits}}}", cohorts)
+            self.assertEqual(len(ids), expected)
+            self.assertEqual(len(set(ids)), expected)
+        self.assertIn("direct_hmm", review)
+        self.assertIn("viral_like_mobile_element_with_viral_support", review)
 
 
 if __name__ == "__main__":

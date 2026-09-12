@@ -57,38 +57,73 @@ benchmarks assess input-level detection, not all four at once.
 
 ### Conditional exclusion of supported virus-like candidates
 
-The README additionally reports two explicit sensitivity analyses of the negative
-labels. The localized review found seven coherent capsid/portal/terminase modules
-and eleven additional plasmid inputs with multiple CT3 virion-hallmark genes
-inside a retained interval. The latter can represent partial viral modules;
-multiple hallmark genes need not imply distinct functions or a complete virus.
-These observations support a virus-like interpretation without establishing
-whether each source is a phage-plasmid, a plasmid-associated prophage or a
-mislabelled assembly.
+The README reports a broader virus-like-content discovery endpoint, rather than
+restricting exclusions to the strongest plasmid modules. A retained DNA input
+qualifies for the regional/hallmark set if it has either a localized CT3 virion
+or RdRP hallmark, or an overlapping CheckV viral region with positive viral-gene
+counts and local viCAT viral-supported protein loci. This is a retrospective
+interpretation of saved evidence, not a new primary-retention rule.
+
+| DNA source | Retained inputs | Inputs yielding extracted candidate regions | Regional/hallmark-supported inputs |
+| --- | ---: | ---: | ---: |
+| Cellular | 15 | 6 | 5 |
+| Mitochondrial | 11 | 11 | 5 |
+| Plasmid | 67 | 41 | 38 |
+| Plastid | 1 | 1 | 0 |
+| Retroelement | 7 | 0 | 0; seven endogenous-retroviral controls considered separately |
+| Total | 101 | 59 | 48 |
+
+The 59 inputs yielded 62 extracted records. The 48 supported inputs comprise
+34 with localized virion/RdRP hallmarks and 14 additional inputs with CheckV
+regional evidence plus viral homology. Of those 48, 36 yielded extracted regions
+and 12 were retained intact. The 38 plasmid inputs include 28 with virion hallmarks
+and 10 additional regional/homology-supported candidates. Eighteen of the 28 have
+multiple virion-hallmark genes, including the seven coherent modules above.
+
+All seven retained retroelement controls are source-labelled ERV1/ERVK-family
+repeats. Their saved TEsorter fields also show `direct_hmm`, order `LTR`,
+superfamily `Retrovirus`, evidence strength `qualified`, and status
+`viral_like_mobile_element_with_viral_support`. Thus retroelement identification
+was actually present in the pipeline outputs, not inferred only from source labels.
+Counting these as intended discoveries is appropriate for an endpoint including
+endogenous viral/mobile-element content. It is not evidence of seven infectious
+retroviruses. Their saved `viral_entity_interpretation` remains `viral_contig`;
+TEsorter's context must be read alongside that field, not mistaken for a claim
+that viHARMONY assigned a dedicated endogenous-element entity label.
 
 | Scenario | Excluded retained inputs | Remaining DNA retentions | Remaining DNA negative inputs | Conditional rate |
 | --- | ---: | ---: | ---: | ---: |
 | Original labels | 0 | 101 | 2,390 | 4.23% |
-| Exclude coherent-module candidates | 7 | 94 | 2,383 | 3.94% |
-| Exclude all multiple-localized-virion-hallmark candidates | 18 | 83 | 2,372 | 3.50% |
+| Exclude regional/hallmark-supported candidates | 48 | 53 | 2,342 | 2.26% |
+| Also exclude endogenous-retroviral controls identified by TEsorter | 55 | 46 | 2,335 | 1.97% |
 
 The excluded source IDs are:
 
-- **Coherent-module set (7):** `PLASMID_NEG_000059`, `PLASMID_NEG_000102`,
-  `PLASMID_NEG_000113`, `PLASMID_NEG_000306`, `PLASMID_NEG_000326`,
-  `PLASMID_NEG_000346`, `PLASMID_NEG_000489`.
-- **Additional multiple-hallmark set (11):** `PLASMID_NEG_000017`,
-  `PLASMID_NEG_000137`, `PLASMID_NEG_000158`, `PLASMID_NEG_000203`,
-  `PLASMID_NEG_000271`, `PLASMID_NEG_000283`, `PLASMID_NEG_000359`,
-  `PLASMID_NEG_000416`, `PLASMID_NEG_000424`, `PLASMID_NEG_000461`,
-  `PLASMID_NEG_000486`.
+- **Cellular (5):** `CELL_NEG_000003`, `CELL_NEG_000077`, `CELL_NEG_000191`,
+  `CELL_NEG_000202`, `CELL_NEG_000486`.
+- **Mitochondrial (5):** `MITO_NEG_000141`, `MITO_NEG_000177`, `MITO_NEG_000272`,
+  `MITO_NEG_000300`, `MITO_NEG_000489`.
+- **Plasmid (38):** `PLASMID_NEG_000017`, `PLASMID_NEG_000059`, `PLASMID_NEG_000081`,
+  `PLASMID_NEG_000088`, `PLASMID_NEG_000089`, `PLASMID_NEG_000102`, `PLASMID_NEG_000113`,
+  `PLASMID_NEG_000136`, `PLASMID_NEG_000137`, `PLASMID_NEG_000142`, `PLASMID_NEG_000158`,
+  `PLASMID_NEG_000189`, `PLASMID_NEG_000203`, `PLASMID_NEG_000251`, `PLASMID_NEG_000261`,
+  `PLASMID_NEG_000271`, `PLASMID_NEG_000274`, `PLASMID_NEG_000279`, `PLASMID_NEG_000283`,
+  `PLASMID_NEG_000286`, `PLASMID_NEG_000288`, `PLASMID_NEG_000306`, `PLASMID_NEG_000316`,
+  `PLASMID_NEG_000326`, `PLASMID_NEG_000346`, `PLASMID_NEG_000353`, `PLASMID_NEG_000359`,
+  `PLASMID_NEG_000397`, `PLASMID_NEG_000405`, `PLASMID_NEG_000416`, `PLASMID_NEG_000424`,
+  `PLASMID_NEG_000432`, `PLASMID_NEG_000436`, `PLASMID_NEG_000461`, `PLASMID_NEG_000481`,
+  `PLASMID_NEG_000486`, `PLASMID_NEG_000489`, `PLASMID_NEG_000499`.
+- **Endogenous-retroviral controls (7):** `NEG_TE_LTR_0005`, `NEG_TE_LTR_0006`,
+  `NEG_TE_LTR_0007`, `NEG_TE_LTR_0014`, `NEG_TE_LTR_0032`, `NEG_TE_LTR_0038`,
+  `NEG_TE_LTR_0117`.
 
-The 18-input scenario includes the seven-input set. Each original input is counted
+The 55-input scenario includes the 48-input set. Each original input is counted
 once and removed from both numerator and denominator: `(101 - k)/(2390 - k)`.
 Neither scenario excludes RNA inputs, so clean-RNA retention stays at
 27/1,600 (1.69%). No positive-panel counts, primary-retention rules or saved
-outputs change. A boundary-only provirus call or an isolated viral homolog is
-not sufficient for either exclusion criterion.
+outputs change. An extracted-region label alone or an isolated viral homolog
+without the specified hallmark/regional support is not sufficient for the
+48-input set. RNA homologs are not automatically excluded.
 
 These are **conditional, evidence-adjusted FPR scenarios**, not an independently
 adjudicated biological FPR. The evidence review was conducted on retained
@@ -97,7 +132,11 @@ They show how the interpretation changes if these explicitly identified
 virus-like candidates are outside the intended nonviral controls. Retention of
 such candidates can be a useful discovery outcome. Remaining retentions are
 not thereby proven biological errors, and excluded candidates are not thereby
-proven infectious viruses or accurately bounded proviruses.
+proven infectious viruses or accurately bounded proviruses. In particular,
+`PLASMID_NEG_000436` has regional/homology evidence but its retained interval
+also contains substantial host content. Its exclusion is a viral-content
+interpretation, not endorsement of the entire retained sequence as a clean
+viral genome. These calculations assess discovery of content, not output purity.
 
 ## Experimental policy comparison
 

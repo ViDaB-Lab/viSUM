@@ -72,14 +72,16 @@ The [full benchmark comparison](docs/benchmarks/preliminary-2026-09.md) includes
 
 **Why “nominal-negative retention”?** A cellular or plasmid source label does not rule out viral genes or an embedded viral region. Review of retained negatives found viral homologs and virus-like gene content; seven plasmid inputs contained coherent capsid/portal/terminase modules supporting phage-like candidates. Phage–plasmids are an established biological category ([Pfeifer et al., 2021](https://doi.org/10.1093/nar/gkab064)). Other retained sequences had mixed or unresolved evidence.
 
-**Evidence-adjusted FPR scenarios.** If supported virus-like candidates are excluded from the negative evaluation set, the remaining DNA retention rates are:
+**Evidence-adjusted DNA FPR: 1.97% for the virus-like-content discovery endpoint.** Review identified **48 retained DNA inputs with localized virion/RdRP hallmarks or CheckV regional evidence plus local viral-protein homology**, and **seven endogenous-retroviral controls also identified by TEsorter**. Excluding these 55 inputs from the negative evaluation set gives:
 
 | Exclusion criterion | Remaining retained / remaining negative inputs |
 | --- | --- |
-| Seven coherent capsid/portal/terminase-module candidates | **94/2,383 (3.94%)** |
-| All 18 plasmid candidates with multiple localized CT3 virion-hallmark genes, including those seven | **83/2,372 (3.50%)** |
+| 48 regional/hallmark-supported candidates: 38 plasmid, 5 cellular and 5 mitochondrial inputs | **53/2,342 (2.26%)** |
+| Those 48 plus 7 endogenous-retroviral controls identified by TEsorter | **46/2,335 (1.97%)** |
 
-These scenarios recognize meaningful viral evidence: retaining such candidates can serve viSUM's intended discovery purpose. Each excluded input is removed from both numerator and denominator; the two scenarios are alternatives, not additive. Clean-RNA retention remains **27/1,600 (1.69%)** because neither criterion excludes RNA inputs. These are conditional, evidence-adjusted estimates—not independently confirmed biological FPRs or changes to the pipeline's calls. The [retained-negative evidence review](docs/benchmarks/retained-negative-context.md) documents the criteria and excluded IDs. Original benchmark labels remain available unchanged.
+**Retroelements are part of the interpretation, not automatically a pipeline failure.** All seven controls had direct-HMM TEsorter annotations identifying LTR/Retrovirus-associated mobile elements. Recognizing and retaining that context serves viSUM's purpose of distinguishing virus-like sequences, endogenous viral elements and candidate viruses; it does not mean they are newly discovered infectious retroviruses. Likewise, regional and hallmark evidence can reveal viral content within cellular or plasmid-labelled inputs.
+
+Each excluded input is removed from both numerator and denominator: **(101 − 55)/(2,390 − 55) = 1.97%**. This is a conditional, evidence-adjusted FPR for an endpoint that includes virus-like and endogenous-retroviral content—not an independently confirmed biological FPR or a measure of proviral-boundary accuracy. The original-label DNA rate remains **4.23%**, and clean-RNA retention remains **27/1,600 (1.69%)**. The [retained-negative evidence review](docs/benchmarks/retained-negative-context.md) gives the regional-recovery breakdown, exclusion criteria and IDs. No pipeline calls or original benchmark labels were changed.
 
 These preliminary development tests quantify detection and negative retention. viSUM also delivers integrated evidence, taxonomic context and confidence reporting; independent evaluation of taxonomic accuracy, confidence calibration and exact proviral boundaries remains future work.
 
