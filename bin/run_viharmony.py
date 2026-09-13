@@ -68,6 +68,7 @@ METADATA_COLUMNS = [
     "provirus_boundary_source", "provirus_boundary_status",
     "provirus_boundary_supporting_tools", "provirus_retention_basis",
     "viral_entity_interpretation",
+    "rna_checkv_conflict_exception", "rna_checkv_exception_supporting_loci",
 ]
 
 STRENGTH_ORDER = {"": 0, "weak": 1, "qualified": 2, "strong": 3}
@@ -257,6 +258,35 @@ def adjudicate_viral_decision(
     if qualified_tools:
         return "provisional_provirus" if refined_region else "provisional_viral"
     return "ambiguous_review"
+
+
+def rna_checkv_exception_loci(input_type, decision, record_type, cellular, plasmid,
+                            supported_tools, interpretation, loci, parent_id, length):
+    """Balanced RNA-only exception; keep the original conflict in output metadata."""
+    if (input_type != "rna" or decision != "ambiguous_review" or record_type != "input_contig"
+        or set(cellular) != {"checkv"} or plasmid
+        or not {"deep6", "virbot", "vicat"}.issubset(supported_tools)
+        or interpretation in {"likely_retroelement", "viral_retroelement_conflict", "ambiguous_mobile_element"}):
+        return []
+    selected = [r for r in loci if r["sequence_id"] == parent_id]
+    if any(r["locus_classification"] in {"cellular_supported", "ambiguous"} for r in selected):
+        return []
+    matches = []
+    for row in selected:
+        if row["locus_classification"] != "viral_supported":
+            continue
+        def number(key):
+            value = row.get(key, "")
+            return float(value) if value not in {"", "NA", None} else 0.0
+        start, end = map(int, row["coordinates"].split("-"))
+        if not 1 <= start <= end <= length:
+            raise ValueError("RNA CheckV exception locus exceeds parent")
+        if (number("protein_length") >= 100 and number("best_bitscore") >= 100
+            and number("best_identity") >= 50
+            and min(number("best_query_coverage"), number("best_subject_coverage")) >= 80
+            and (end - start + 1) / length >= 0.70):
+            matches.append(row.get("locus_id", row["coordinates"]))
+    return sorted(set(matches))
 
 
 def adjudicate_disputed_ct3_boundary(
@@ -497,6 +527,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rna-pair-homology-floor", action="store_true",
                         help="Experimental RNA-only Deep6/viCAT primary-retention requirement")
     parser.add_argument("--output-prefix", required=True, type=Path)
+    parser.add_argument("--disable-rna-checkv-exception", action="store_true",
+                        help="Disable the audited RNA-only CheckV conflict exception for controlled comparisons")
     return parser.parse_args()
 
 
@@ -1144,6 +1176,7 @@ def run(args: argparse.Namespace) -> None:
 
     metadata_rows: list[dict[str, object]] = []
     pair_floor_demoted_ids = []
+    rna_checkv_exception_ids = []
     review_rows: list[dict[str, object]] = []
     evidence_audit_rows: list[dict[str, object]] = []
     taxonomy_audit_rows: list[dict[str, object]] = []
@@ -1316,6 +1349,15 @@ def run(args: argparse.Namespace) -> None:
             plasmid,
             tesorter_summary["sequence_interpretation"],
         )
+        checkv_exception_loci = []
+        if not getattr(args, "disable_rna_checkv_exception", False):
+            checkv_exception_loci = rna_checkv_exception_loci(
+                args.input_type, viral_decision, record_type, cellular, reported_plasmid_conflicts,
+                strong_tools | qualified_tools, tesorter_summary["sequence_interpretation"],
+                pair_loci, parent_id, len(sequence))
+        if checkv_exception_loci:
+            viral_decision = "retained_viral"
+            rna_checkv_exception_ids.append(final_id)
         boundary_primary_eligible, provirus_retention_basis = (
             adjudicate_disputed_ct3_boundary(
                 region, rows, selected_vicat_rows
@@ -1355,6 +1397,8 @@ def run(args: argparse.Namespace) -> None:
         )
         metadata = {
             "original_contig_name": original_name,
+            "rna_checkv_conflict_exception": str(bool(checkv_exception_loci)).lower(),
+            "rna_checkv_exception_supporting_loci": ",".join(checkv_exception_loci) or "NA",
             "normalized_name": parent_id,
             "final_sequence_id": final_id,
             "record_type": record_type,
@@ -1627,6 +1671,9 @@ def run(args: argparse.Namespace) -> None:
         "audit_mode": args.audit_mode,
         "tools_present": sorted({row.get("tool", "") for row in evidence_rows if row.get("tool")}),
         "policy": {
+            "rna_checkv_conflict_exception": bool(args.input_type == "rna" and not getattr(args, "disable_rna_checkv_exception", False)),
+            "rna_checkv_exception_ids": sorted(rna_checkv_exception_ids),
+            "rna_checkv_exception_thresholds": "RNA intact only; sole CheckV cellular conflict; no plasmid/mobile conflict; Deep6+VirBot+viCAT qualified/strong; no cellular/ambiguous loci; viral protein>=100aa; bitscore>=100; identity>=50%; query and subject coverage>=80%; coding span>=70% of input; preserve CheckV annotation",
             "rna_pair_homology_floor": bool(pair_floor and args.input_type == "rna"),
             "virsorter2_hallmark_only_policy": "review-only; no discovery routing or primary-consensus votes; no invented scores/boundaries; does not exempt RNA homology floor",
             "rna_pair_homology_floor_demoted_ids": sorted(pair_floor_demoted_ids),

@@ -59,7 +59,8 @@ process VIHARMONY {
         ? groupList.collect { groups -> "'${groups}'" }.join(' ')
         : ''
     """
-    # viHARMONY decision policy v1.2: VS2 hallmark-only calls are review-only;
+    # viHARMONY decision policy v1.3: audited RNA CheckV-only conflict exception;
+    # VS2 hallmark-only calls are review-only;
     # do not bypass the RNA pair floor or project unlocalized calls onto children.
     # Global MSL taxonomy resolution and
     # conservative strict species reporting; disputed CT3/viCAT boundaries require

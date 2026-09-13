@@ -96,7 +96,7 @@ MISSING_VALUES = {"", "na", "nan", "none"}
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Convert CheckV outputs into sparse standardized viSUM evidence."
+        description="Convert CheckV outputs into standardized viSUM evidence."
     )
     parser.add_argument("--sample-id", required=True)
     parser.add_argument("--input-type", required=True, choices=("dna", "rna"))
@@ -432,9 +432,6 @@ def run(args: argparse.Namespace) -> None:
         if is_provirus != contamination_is_provirus:
             raise ValueError(f"CheckV provirus flags disagree for {contig_id}")
 
-        determined_quality = (
-            clean_missing(quality["checkv_quality"]).lower() in DETERMINED_QUALITIES
-        )
         if is_provirus:
             observed_proviruses += 1
             regions = parse_regions(contamination_rows[contig_id], parent_length)
@@ -459,7 +456,10 @@ def run(args: argparse.Namespace) -> None:
                         end - start + 1,
                     )
                 )
-        elif determined_quality:
+        else:
+            # Completeness availability must not discard measured gene content.
+            # build_evidence_row keeps zero informative genes unclassified/weak;
+            # an undetermined quality category is not itself negative evidence.
             evidence_rows.append(
                 build_evidence_row(
                     args.sample_id,

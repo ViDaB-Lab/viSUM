@@ -94,7 +94,10 @@ class CheckVDatabaseWorkflowContractTests(unittest.TestCase):
         self.assertIn("--allow-ct3-only-refinement", module)
 
         config = (REPOSITORY_ROOT / "visum.config").read_text(encoding="utf-8")
-        self.assertIn("allow_ct3_only_refinement = true", config)
+        self.assertIn("allow_ct3_only_refinement = false", config)
+        launcher = (REPOSITORY_ROOT / "bin/benchmark_rna_pair.sh").read_text(encoding="utf-8")
+        self.assertIn("--allow_ct3_only_refinement false", launcher)
+        self.assertNotIn("--allow_ct3_only_refinement true", launcher)
         self.assertIn("vicat_provirus_min_overlap = 0.5", config)
 
     def test_analysis_preserves_primary_reports_and_zero_candidate_runs(self) -> None:

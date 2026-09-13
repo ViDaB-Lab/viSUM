@@ -209,13 +209,13 @@ class StandardizeCheckVTests(unittest.TestCase):
         with patch.object(sys, "argv", argv):
             standardize_checkv.main()
 
-    def test_emits_determined_quality_and_provirus_regions_only(self) -> None:
+    def test_emits_gene_context_without_determined_quality(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             paths = self.build_inputs(Path(temporary_directory))
             self.run_standardizer(paths)
             rows = read_tsv(paths["evidence.tsv"])
 
-            self.assertEqual(len(rows), 2)
+            self.assertEqual(len(rows), 3)
             provirus = next(row for row in rows if row["record_type"] == "provirus")
             self.assertEqual(provirus["sequence_id"], "sample__c000001|provirus_21_80")
             self.assertEqual(provirus["parent_sequence_id"], "sample__c000001")
@@ -240,9 +240,25 @@ class StandardizeCheckVTests(unittest.TestCase):
                 "checkv_high_quality_confident_aai",
             )
             self.assertEqual(high_quality["aai_confidence"], "medium")
-            self.assertFalse(
-                any(row["sequence_id"] == "sample__c000003" for row in rows)
-            )
+            undetermined = next(row for row in rows if row["sequence_id"] == "sample__c000003")
+            self.assertEqual(undetermined["classification"], "unclassified")
+            self.assertEqual(undetermined["evidence_strength"], "weak")
+
+    def test_undetermined_quality_preserves_host_only_and_mixed_content(self) -> None:
+        for viral, host, expected in [(0, 9, "cellular"), (2, 9, "virus"), (2, 0, "virus")]:
+            with self.subTest(viral=viral, host=host), tempfile.TemporaryDirectory() as temporary_directory:
+                paths = self.build_inputs(Path(temporary_directory))
+                quality = read_tsv(paths["quality.tsv"])
+                row = next(r for r in quality if r["contig_id"] == "sample__c000003")
+                row.update(viral_genes=str(viral), host_genes=str(host), warnings="retained context")
+                write_tsv(paths["quality.tsv"], list(quality[0]), quality)
+                self.run_standardizer(paths)
+                result = next(r for r in read_tsv(paths["evidence.tsv"]) if r["sequence_id"] == "sample__c000003")
+                self.assertEqual(result["classification"], expected)
+                self.assertEqual(result["viral_genes"], str(viral))
+                self.assertEqual(result["host_genes"], str(host))
+                self.assertEqual(result["warnings"], "retained context")
+                self.assertEqual(result["score"], "")
 
     def test_rejects_proviral_length_disagreement(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

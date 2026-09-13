@@ -40,6 +40,22 @@ def read_fasta(path: Path) -> dict[str, str]:
 
 
 class RefineProviralRegionsTests(unittest.TestCase):
+    def test_advisory_vicat_cannot_restore_ct3_trimming_authority(self) -> None:
+        ct3 = refine_proviral_regions.BoundaryCall("parent", "cenotetaker3", "ct3", 10, 90)
+        vicat = refine_proviral_regions.BoundaryCall("parent", "vicat", "vicat", 20, 80)
+        self.assertIsNone(refine_proviral_regions.select_boundary([ct3, vicat], False, 0.5))
+        self.assertEqual(refine_proviral_regions.select_boundary([ct3, vicat], True, 0.5), ct3)
+
+    def test_disabling_ct3_authority_preserves_authoritative_boundaries(self) -> None:
+        ct3 = refine_proviral_regions.BoundaryCall("parent", "cenotetaker3", "ct3", 10, 90)
+        checkv = refine_proviral_regions.BoundaryCall("parent", "checkv", "checkv", 20, 80)
+        genomad = refine_proviral_regions.BoundaryCall("parent", "genomad", "genomad", 15, 85)
+        vicat = refine_proviral_regions.BoundaryCall("parent", "vicat", "vicat", 30, 70)
+        for enabled in (False, True):
+            self.assertEqual(refine_proviral_regions.select_boundary([ct3, checkv], enabled, 0.5), checkv)
+            self.assertEqual(refine_proviral_regions.select_boundary([ct3, checkv, genomad], enabled, 0.5), genomad)
+            self.assertEqual(refine_proviral_regions.select_boundary([checkv, vicat], enabled, 0.5), checkv)
+
     def run_refiner(
         self,
         directory: Path,

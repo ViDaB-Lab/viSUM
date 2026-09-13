@@ -28,7 +28,7 @@ bash "$PROJECT/visum" -ansi-log true \
     --vicat_nonviral_db "$PROJECT/databases/vicat/nonviral_classaware_v1" \
     --vitap_db /work/databases/vitapdb/vitapupdate/DB_VMR-MSL41 \
     --vcontact3_db "$PROJECT/databases/vcontact3/releases/232" \
-    --allow_ct3_only_refinement true --vicat_provirus_min_overlap 0.5 \
+    --allow_ct3_only_refinement false --vicat_provirus_min_overlap 0.5 \
     --harmonizer_audit full --rna_pair_homology_floor true \
     --max_cpus 52 --max_memory '400 GB' \
     --genomad_cpus 4 --virsorter2_cpus 4 --ct3_cpus 4 --deep6_cpus 1 \

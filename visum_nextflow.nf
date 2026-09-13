@@ -259,7 +259,7 @@ COMMON ANALYSIS OPTIONS
   --gianthunter_min_length INT      GiantHunter minimum length [3000].
   --gianthunter_reject FLOAT        Minimum aligned-protein fraction [0.1].
   --gianthunter_query_cover INT     Minimum query coverage percent [40].
-  --allow_ct3_only_refinement BOOL  Permit CT3-only provirus trimming [true].
+  --allow_ct3_only_refinement BOOL  Permit CT3-only provirus trimming [false; opt-in].
   --vicat_provirus_min_overlap FLOAT  viCAT cluster overlap needed to corroborate CheckV [0.5].
   --vitap_include_low_confidence BOOL
                                     Retain VITAP low-confidence calls [false].
@@ -563,7 +563,7 @@ workflow {
     def expectedHarmonyToolsByType = [
         dna: (expectedDiscoveryToolsByType.dna + harmonyOnlyTools).unique().sort(),
         rna: (expectedDiscoveryToolsByType.rna + harmonyOnlyTools +
-            (runVicat && rnaPairHomologyFloor ? ['vicat_loci'] : [])).unique().sort(),
+            (runVicat ? ['vicat_loci'] : [])).unique().sort(),
     ]
     def vcontact3DbDomain = params.vcontact3_db_domain
         ?.toString()
@@ -1461,7 +1461,8 @@ workflow {
         )
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VICAT.out.evidence)
         ch_harmony_evidence = ch_harmony_evidence.mix(STANDARDIZE_VICAT.out.context)
-        if( rnaPairHomologyFloor ) {
+        // Both the RNA homology floor and audited CheckV exception consume loci.
+        if( runVicat ) {
             ch_harmony_evidence = ch_harmony_evidence.mix(
                 STANDARDIZE_VICAT.out.loci.combine(
                     NORMALIZE_FASTA.out.normalized_records
