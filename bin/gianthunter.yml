@@ -1,9 +1,0 @@
-name: gianthunter
-channels:
-  - conda-forge
-  - bioconda
-dependencies:
-  - phabox=2.1.11
-  - pip
-  - pip:
-      - git+https://github.com/FuchuanQu/GiantHunter.git

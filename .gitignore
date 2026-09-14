@@ -7,3 +7,15 @@ databases/
 # Python runtime artifacts
 __pycache__/
 *.py[cod]
+
+# Local execution, benchmark runs, and development worktrees
+/work/
+/results/
+/output/
+/outputs/
+/benchmark/
+/.nextflow/
+/.nextflow.log*
+/.codex-tmp/
+/.vscode/
+.pytest_cache/
