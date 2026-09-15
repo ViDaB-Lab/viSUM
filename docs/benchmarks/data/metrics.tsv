@@ -1,0 +1,111 @@
+sample	input_type	positive	method	n	called	rate	status
+BMARK_DNA_CELLULAR	dna	False	deep6	500			not_applicable
+BMARK_DNA_CELLULAR	dna	False	virbot	500			not_applicable
+BMARK_DNA_CELLULAR	dna	False	viSUM_ON	500	15	0.03	evaluated
+BMARK_DNA_CELLULAR	dna	False	viSUM_OFF	500	15	0.03	evaluated
+BMARK_DNA_CELLULAR	dna	False	genomad	500	3	0.006	evaluated
+BMARK_DNA_CELLULAR	dna	False	virsorter2	500	12	0.024	evaluated
+BMARK_DNA_CELLULAR	dna	False	virsorter2_native	500	12	0.024	evaluated
+BMARK_DNA_CELLULAR	dna	False	cenotetaker3	500	27	0.054	evaluated
+BMARK_DNA_CELLULAR	dna	False	deepmicroclass2	500	4	0.008	evaluated
+BMARK_DNA_CELLULAR	dna	False	gianthunter	500	122	0.244	evaluated
+BMARK_DNA_CELLULAR	dna	False	vicat	500	102	0.204	evaluated
+BMARK_DNA_MITOCHONDRIAL	dna	False	deep6	500			not_applicable
+BMARK_DNA_MITOCHONDRIAL	dna	False	virbot	500			not_applicable
+BMARK_DNA_MITOCHONDRIAL	dna	False	viSUM_ON	500	11	0.022	evaluated
+BMARK_DNA_MITOCHONDRIAL	dna	False	viSUM_OFF	500	11	0.022	evaluated
+BMARK_DNA_MITOCHONDRIAL	dna	False	genomad	500	1	0.002	evaluated
+BMARK_DNA_MITOCHONDRIAL	dna	False	virsorter2	500	24	0.048	evaluated
+BMARK_DNA_MITOCHONDRIAL	dna	False	virsorter2_native	500	24	0.048	evaluated
+BMARK_DNA_MITOCHONDRIAL	dna	False	cenotetaker3	500	29	0.058	evaluated
+BMARK_DNA_MITOCHONDRIAL	dna	False	deepmicroclass2	500	0	0.0	evaluated
+BMARK_DNA_MITOCHONDRIAL	dna	False	gianthunter	500	7	0.014	evaluated
+BMARK_DNA_MITOCHONDRIAL	dna	False	vicat	500	180	0.36	evaluated
+BMARK_DNA_PLASMID	dna	False	deep6	500			not_applicable
+BMARK_DNA_PLASMID	dna	False	virbot	500			not_applicable
+BMARK_DNA_PLASMID	dna	False	viSUM_ON	500	67	0.134	evaluated
+BMARK_DNA_PLASMID	dna	False	viSUM_OFF	500	67	0.134	evaluated
+BMARK_DNA_PLASMID	dna	False	genomad	500	18	0.036	evaluated
+BMARK_DNA_PLASMID	dna	False	virsorter2	500	51	0.102	evaluated
+BMARK_DNA_PLASMID	dna	False	virsorter2_native	500	51	0.102	evaluated
+BMARK_DNA_PLASMID	dna	False	cenotetaker3	500	91	0.182	evaluated
+BMARK_DNA_PLASMID	dna	False	deepmicroclass2	500	0	0.0	evaluated
+BMARK_DNA_PLASMID	dna	False	gianthunter	500	15	0.03	evaluated
+BMARK_DNA_PLASMID	dna	False	vicat	500	336	0.672	evaluated
+BMARK_DNA_PLASTID	dna	False	deep6	500			not_applicable
+BMARK_DNA_PLASTID	dna	False	virbot	500			not_applicable
+BMARK_DNA_PLASTID	dna	False	viSUM_ON	500	1	0.002	evaluated
+BMARK_DNA_PLASTID	dna	False	viSUM_OFF	500	1	0.002	evaluated
+BMARK_DNA_PLASTID	dna	False	genomad	500	1	0.002	evaluated
+BMARK_DNA_PLASTID	dna	False	virsorter2	500	21	0.042	evaluated
+BMARK_DNA_PLASTID	dna	False	virsorter2_native	500	21	0.042	evaluated
+BMARK_DNA_PLASTID	dna	False	cenotetaker3	500	7	0.014	evaluated
+BMARK_DNA_PLASTID	dna	False	deepmicroclass2	500	0	0.0	evaluated
+BMARK_DNA_PLASTID	dna	False	gianthunter	500	19	0.038	evaluated
+BMARK_DNA_PLASTID	dna	False	vicat	500	57	0.114	evaluated
+BMARK_DNA_RETROELEMENT	dna	False	deep6	390			not_applicable
+BMARK_DNA_RETROELEMENT	dna	False	virbot	390			not_applicable
+BMARK_DNA_RETROELEMENT	dna	False	viSUM_ON	390	7	0.017948717948717947	evaluated
+BMARK_DNA_RETROELEMENT	dna	False	viSUM_OFF	390	7	0.017948717948717947	evaluated
+BMARK_DNA_RETROELEMENT	dna	False	genomad	390	15	0.038461538461538464	evaluated
+BMARK_DNA_RETROELEMENT	dna	False	virsorter2	390	7	0.017948717948717947	evaluated
+BMARK_DNA_RETROELEMENT	dna	False	virsorter2_native	390	7	0.017948717948717947	evaluated
+BMARK_DNA_RETROELEMENT	dna	False	cenotetaker3	390	6	0.015384615384615385	evaluated
+BMARK_DNA_RETROELEMENT	dna	False	deepmicroclass2	390	92	0.2358974358974359	evaluated
+BMARK_DNA_RETROELEMENT	dna	False	gianthunter	390	13	0.03333333333333333	evaluated
+BMARK_DNA_RETROELEMENT	dna	False	vicat	390	43	0.11025641025641025	evaluated
+BMARK_DNA_VIRAL	dna	True	deep6	539			not_applicable
+BMARK_DNA_VIRAL	dna	True	virbot	539			not_applicable
+BMARK_DNA_VIRAL	dna	True	viSUM_ON	539	477	0.8849721706864564	evaluated
+BMARK_DNA_VIRAL	dna	True	viSUM_OFF	539	477	0.8849721706864564	evaluated
+BMARK_DNA_VIRAL	dna	True	genomad	539	452	0.8385899814471243	evaluated
+BMARK_DNA_VIRAL	dna	True	virsorter2	539	439	0.8144712430426716	evaluated
+BMARK_DNA_VIRAL	dna	True	virsorter2_native	539	440	0.8163265306122449	evaluated
+BMARK_DNA_VIRAL	dna	True	cenotetaker3	539	453	0.8404452690166976	evaluated
+BMARK_DNA_VIRAL	dna	True	deepmicroclass2	539	155	0.287569573283859	evaluated
+BMARK_DNA_VIRAL	dna	True	gianthunter	539	24	0.04452690166975881	evaluated
+BMARK_DNA_VIRAL	dna	True	vicat	539	524	0.9721706864564007	evaluated
+BMARK_RNA_VIRAL	rna	True	deepmicroclass2	874			not_applicable
+BMARK_RNA_VIRAL	rna	True	gianthunter	874			not_applicable
+BMARK_RNA_VIRAL	rna	True	viSUM_ON	874	788	0.9016018306636155	evaluated
+BMARK_RNA_VIRAL	rna	True	viSUM_OFF	874	789	0.902745995423341	evaluated
+BMARK_RNA_VIRAL	rna	True	genomad	874	646	0.7391304347826086	evaluated
+BMARK_RNA_VIRAL	rna	True	virsorter2	874	288	0.3295194508009153	evaluated
+BMARK_RNA_VIRAL	rna	True	virsorter2_native	874	429	0.49084668192219677	evaluated
+BMARK_RNA_VIRAL	rna	True	cenotetaker3	874	566	0.6475972540045767	evaluated
+BMARK_RNA_VIRAL	rna	True	deep6	874	747	0.8546910755148741	evaluated
+BMARK_RNA_VIRAL	rna	True	virbot	874	749	0.8569794050343249	evaluated
+BMARK_RNA_VIRAL	rna	True	vicat	874	833	0.9530892448512586	evaluated
+RNANEG_CLEAN_BROAD	rna	False	deepmicroclass2	400			not_applicable
+RNANEG_CLEAN_BROAD	rna	False	gianthunter	400			not_applicable
+RNANEG_CLEAN_BROAD	rna	False	viSUM_ON	400	7	0.0175	evaluated
+RNANEG_CLEAN_BROAD	rna	False	viSUM_OFF	400	11	0.0275	evaluated
+RNANEG_CLEAN_BROAD	rna	False	genomad	400	2	0.005	evaluated
+RNANEG_CLEAN_BROAD	rna	False	virsorter2	400	3	0.0075	evaluated
+RNANEG_CLEAN_BROAD	rna	False	virsorter2_native	400	3	0.0075	evaluated
+RNANEG_CLEAN_BROAD	rna	False	cenotetaker3	400	2	0.005	evaluated
+RNANEG_CLEAN_BROAD	rna	False	deep6	400	127	0.3175	evaluated
+RNANEG_CLEAN_BROAD	rna	False	virbot	400	1	0.0025	evaluated
+RNANEG_CLEAN_BROAD	rna	False	vicat	400	34	0.085	evaluated
+RNANEG_CLEAN_CONFIRMED	rna	False	deepmicroclass2	1200			not_applicable
+RNANEG_CLEAN_CONFIRMED	rna	False	gianthunter	1200			not_applicable
+RNANEG_CLEAN_CONFIRMED	rna	False	viSUM_ON	1200	20	0.016666666666666666	evaluated
+RNANEG_CLEAN_CONFIRMED	rna	False	viSUM_OFF	1200	39	0.0325	evaluated
+RNANEG_CLEAN_CONFIRMED	rna	False	genomad	1200	16	0.013333333333333334	evaluated
+RNANEG_CLEAN_CONFIRMED	rna	False	virsorter2	1200	8	0.006666666666666667	evaluated
+RNANEG_CLEAN_CONFIRMED	rna	False	virsorter2_native	1200	12	0.01	evaluated
+RNANEG_CLEAN_CONFIRMED	rna	False	cenotetaker3	1200	9	0.0075	evaluated
+RNANEG_CLEAN_CONFIRMED	rna	False	deep6	1200	303	0.2525	evaluated
+RNANEG_CLEAN_CONFIRMED	rna	False	virbot	1200	0	0.0	evaluated
+RNANEG_CLEAN_CONFIRMED	rna	False	vicat	1200	152	0.12666666666666668	evaluated
+RNANEG_MOBILE_CHALLENGE	rna	False	deepmicroclass2	200			not_applicable
+RNANEG_MOBILE_CHALLENGE	rna	False	gianthunter	200			not_applicable
+RNANEG_MOBILE_CHALLENGE	rna	False	viSUM_ON	200	0	0.0	evaluated
+RNANEG_MOBILE_CHALLENGE	rna	False	viSUM_OFF	200	6	0.03	evaluated
+RNANEG_MOBILE_CHALLENGE	rna	False	genomad	200	0	0.0	evaluated
+RNANEG_MOBILE_CHALLENGE	rna	False	virsorter2	200	0	0.0	evaluated
+RNANEG_MOBILE_CHALLENGE	rna	False	virsorter2_native	200	1	0.005	evaluated
+RNANEG_MOBILE_CHALLENGE	rna	False	cenotetaker3	200	1	0.005	evaluated
+RNANEG_MOBILE_CHALLENGE	rna	False	deep6	200	65	0.325	evaluated
+RNANEG_MOBILE_CHALLENGE	rna	False	virbot	200	0	0.0	evaluated
+RNANEG_MOBILE_CHALLENGE	rna	False	vicat	200	35	0.175	evaluated

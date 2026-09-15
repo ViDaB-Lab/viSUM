@@ -1,0 +1,85 @@
+process VIHARMONY {
+
+    tag "${prefix}"
+
+    conda 'conda-forge::python=3.11'
+    cpus 1
+    memory params.harmonizer_memory
+    time params.harmonizer_time
+
+    publishDir { "${params.outdir}/${prefix}_results/viharmony" }, mode: 'copy'
+
+    input:
+    tuple val(prefix),
+          val(type),
+          path(normalized_fasta),
+          path(header_map),
+          path(discovery_gate),
+          path(refined_fasta),
+          path(region_map),
+          val(evidence_file_count),
+          path(evidence_files),
+          val(group_file_count),
+          path(vcontact3_groups),
+          path(ictv_msl),
+          val(audit_mode),
+          val(vcontact3_min_taxonomy_length)
+
+    output:
+    tuple val(prefix),
+          path("${prefix}.final.normalized.fasta"),
+          path("${prefix}.final.original_ids.fasta"),
+          path("${prefix}.final_metadata.tsv"),
+          path("${prefix}.review_queue.tsv"),
+          path("${prefix}.sequence_disposition.tsv"),
+          path("${prefix}.sequence_map.tsv"),
+          path("${prefix}.harmonizer_manifest.json"),
+          path("${prefix}.database_candidates.fasta"),
+          path("${prefix}.database_candidates.tsv"),
+          path("${prefix}.all_candidates.fasta"),
+          path("${prefix}.review_candidates.fasta"),
+          path("${prefix}.provisional.normalized.fasta"),
+          path("${prefix}.provisional.original_ids.fasta"),
+          path("${prefix}.provisional_metadata.tsv"),
+          emit: results
+    tuple val(prefix),
+          path("${prefix}.*_audit.tsv.gz"),
+          optional: true,
+          emit: audits
+
+    script:
+    def evidenceList = evidence_files instanceof List ? evidence_files : [evidence_files]
+    def pairFlag = type == 'rna' && params.rna_pair_homology_floor.toString().equalsIgnoreCase('true')
+        ? '--rna-pair-homology-floor' : ''
+    def evidenceArguments = evidence_file_count > 0
+        ? evidenceList.collect { evidence -> "'${evidence}'" }.join(' ')
+        : ''
+    def groupList = vcontact3_groups instanceof List ? vcontact3_groups : [vcontact3_groups]
+    def groupArguments = group_file_count > 0
+        ? groupList.collect { groups -> "'${groups}'" }.join(' ')
+        : ''
+    """
+    # viHARMONY decision policy v1.3: audited RNA CheckV-only conflict exception;
+    # VS2 hallmark-only calls are review-only;
+    # do not bypass the RNA pair floor or project unlocalized calls onto children.
+    # Global MSL taxonomy resolution and
+    # conservative strict species reporting; disputed CT3/viCAT boundaries require
+    # regional support; parent-only cellular/plasmid evidence remains context,
+    # and strongly supported virus/plasmid hybrids retain both interpretations.
+    python3 "${projectDir}/bin/run_viharmony.py" \
+        --sample-id "${prefix}" \
+        --input-type "${type}" \
+        --normalized-fasta "${normalized_fasta}" \
+        --header-map "${header_map}" \
+        --discovery-gate "${discovery_gate}" \
+        --refined-fasta "${refined_fasta}" \
+        --region-map "${region_map}" \
+        --ictv-msl "${ictv_msl}" \
+        --evidence ${evidenceArguments} \
+        --vcontact3-groups ${groupArguments} \
+        --vcontact3-min-taxonomy-length "${vcontact3_min_taxonomy_length}" \
+        --audit-mode "${audit_mode}" \
+        ${pairFlag} \
+        --output-prefix "${prefix}"
+    """
+}

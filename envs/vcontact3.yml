@@ -1,0 +1,21 @@
+name: visum-vcontact3
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - pip
+  - git
+  - curl
+  - mmseqs2
+  - util-linux
+  - packaging
+  # vConTACT3 3.2.4 initializes its shares_clusters column as float NaN and
+  # subsequently stores string labels in it. Pandas 3 rejects that implicit
+  # dtype change; 2.1.4 is within vConTACT3's declared >=2.1.1 requirement and
+  # retains the behavior expected by the released implementation.
+  - pandas=2.1.4
+  - pip:
+      # Official release 3.2.4. Pinning its resolved commit prevents a future
+      # upstream tag or default-branch change from altering this environment.
+      - git+https://bitbucket.org/MAVERICLab/vcontact3.git@d57ae81e0be5ab57a8a14692a4cb8ab255ce2d52

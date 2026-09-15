@@ -1,0 +1,7 @@
+name: visum-checkv
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - checkv=1.1.1
+  - util-linux

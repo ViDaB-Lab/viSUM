@@ -1,0 +1,11 @@
+name: visum-vicat-db-build
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.12
+  - python-duckdb=1.5.4
+  - mmseqs2=18.8cc5c
+  - diamond=2.1.25
+  - seqkit=2.13.0
+  - pigz

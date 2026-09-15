@@ -1,0 +1,13 @@
+name: visum-gianthunter
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - phabox=2.1.11
+  - git
+  - curl
+  - unzip
+  - util-linux
+  - pip
+  - pip:
+      - git+https://github.com/FuchuanQu/GiantHunter.git@d53c466687b64062f23c52a9c0b9c35c60914b98
