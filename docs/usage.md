@@ -7,7 +7,7 @@
 The development runs used Linux and Nextflow 26.04.6. Install a compatible Java runtime and Nextflow following the [official Nextflow instructions](https://www.nextflow.io/), and make Conda and Mamba available on `PATH`: the supplied configuration sets `conda.useMamba = true`. The workflow creates its per-tool environments. Native Windows execution is not validated.
 
 ```bash
-git clone --branch codex/review-visum-scripts https://github.com/ViDaB-Lab/viSUM.git
+git clone https://github.com/ViDaB-Lab/viSUM.git
 cd viSUM
 
 # If nextflow is not on PATH, set this to your actual executable:
