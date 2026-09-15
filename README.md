@@ -1,7 +1,11 @@
 # viSUM
 
-**Viral discovery and standardized classification for assembled DNA and RNA sequences.**
+**Motivations**
 
+viSUM was developed to help my students, regardless of experience level, perform in-depth, comprehensive viral analyses of their high-throughput sequencing data. My goal was to make these analyses accessible for their thesis projects without requiring each student to build and integrate a complex computational workflow from scratch. I hope it proves useful to other students, educators, and researchers as well!
+
+**Viral discovery and standardized classification for assembled DNA and RNA sequences.**
+ 
 viSUM combines complementary programs to identify candidate viruses—including divergent and understudied viruses—and turn their results into consistent, sequence-level evidence. Its two goals are broader viral detection and interpretable classifications that support cross-study comparisons and reference-database curation.
 
 **Evidence integration is the core of viSUM** 
@@ -13,6 +17,13 @@ viSUM brings together and summarizes origin predictions, protein homology, candi
 viSUM is still in active development and benchmarking. At the time of this release, we have performed preliminary benchmarksof the current version (read more below), but we still need to test a complete fresh-install, and we are in the process of a secondary benchmark using the same test dataset used to access the performance of geNomad. 
 
 Overall, this is a beta release, the main archecture should remain stable for the alpha release, however, we are fine tuning some decision making to balance sensitivity and false-positivity. So, please report any issues you come across!
+
+**List of stuff to add**
+
+1. Functional annotation module.
+2. Add optional LucaVirus in discovery module (https://github.com/LucaOne/LucaVirus).
+
+The hope is viSUM becomes field-driven, if you have any suggestions for additions that would be useful, please let us know.
 
 ## How it works
 
