@@ -64,7 +64,7 @@ flowchart TD
 | GiantHunter | Yes | No | Giant DNA virus discovery | On for DNA |
 | Deep6 | No | Yes | Sequence-origin classification (cellular or viral) | On for RNA |
 | VirBot | No | Yes | RNA virus-focused discovery program | On for RNA |
-| viCAT | Yes | Yes | Competitive viral/nonviral protein homology and taxonomy | Opt-in; requires both databases. Adds time but increases sensitivity and provides cellular/organelle evidence. |
+| viCAT | Yes | Yes | Competitive viral/nonviral protein homology and taxonomy | Optional; requires both databases. Adds time but increases sensitivity and provides cellular/organelle evidence. |
 | CheckV | Yes | Yes | Quality assessment and candidate-region evidence | On |
 | TEsorter | Yes | Yes | Retroelement detection and interpretation | On |
 | VITAP | Yes | Yes | Additional viral taxonomic classification | On |
@@ -118,7 +118,7 @@ When publishing results from viSUM, cite **viSUM and the underlying programs tha
 
 **viSUM beta-release citation:** viCAT and viHARMONY are components of viSUM and will be covered by that citation. Manuscript is in prep and will be released as a preprint ASAP.
 
-<!-- Add the viSUM beta-release citation here when available. -->
+Veglia, A.J. & Rivera-Vicéns, R.E. (2026). viSUM: An integrated framework for viral sequence discovery, evidence harmonization, and confidence-aware taxonomic classification (Version v0.9.0-beta.1) Zenodo. https://doi.org/10.5281/zenodo.22774539
 
 | Program | Reference |
 | --- | --- |
