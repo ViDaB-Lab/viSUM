@@ -31,7 +31,17 @@ bash ./visum -c visum.config --setup \
 
 `--setup` selects tools using the same `--run_<tool> true/false` flags as analysis. It runs global preparations sequentially, without sample normalization, discovery or harmonization. viCAT's sample-specific reference-subset and hit-preparation steps are excluded. Do not supply `--input`, `--prefix`, `--type`, `--prefix_many` or `--indir` with setup.
 
-VITAP and vConTACT3 are enabled by default, including in setup. viCAT remains opt-in and requires both viral and nonviral databases. Setup has no DNA/RNA input type, so it prepares both DNA- and RNA-oriented tools when enabled. TEsorter has no standalone preparation process, and setup does not validate every analysis runtime. See [database setup](database-setup.md) for the isolated installation test and remaining validation scope.
+VITAP and vConTACT3 are enabled by default, including in setup. viCAT remains optional and requires both viral and nonviral databases. Setup has no DNA/RNA input type, so it prepares both DNA- and RNA-oriented tools when enabled. TEsorter has no standalone preparation process, and setup does not validate every analysis runtime. See [database setup](database-setup.md) for the isolated installation test and remaining validation scope.
+
+### To bin before viSUM or not to bin befor viSUM?
+
+This is more for DNA data and approach it in two ways:
+
+1. Bin your metagenomics sequences with vRhyme (https://github.com/AnantharamanLab/vRhyme) before viSUM -- in this situation since viSUM is not "bin aware" you would need to use the auxilary scripts withing vRhyme to combine binned sequences. Then you can run your vMAGs thorugh viSUM.
+
+2. Bin your metagenomic sequences with vRhyme AFTER viSUM -- You can run your sequences through viSUM then only use the resulting virus sequences as input for vRhyme, then merge the binned sequences with the auxilary script within vRhyme, and finally run viSUM one last time to get final taxonomic classifications. 
+
+We are working on this, if you have suggestions, let us know!
 
 ### Start with the default configuration
 
