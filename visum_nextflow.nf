@@ -730,13 +730,13 @@ workflow {
 
         ch_virsorter2_for_standardizer = RUN_VIRSORTER2.out.results.map {
             prefix, type, review, score, boundary, viralFasta, metadata ->
-                tuple(prefix, type, score, boundary, metadata)
+                tuple(prefix, type, score, boundary, viralFasta, metadata)
         }
 
         ch_virsorter2_standardizer_input = ch_virsorter2_for_standardizer
             .join(
                 NORMALIZE_FASTA.out.normalized_records.map {
-                    prefix, type, fasta, headerMap -> tuple(prefix, headerMap)
+                    prefix, type, fasta, headerMap -> tuple(prefix, fasta, headerMap)
                 }
             )
 

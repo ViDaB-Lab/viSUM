@@ -95,8 +95,10 @@ class ZeroCallStandardizerTests(unittest.TestCase):
             26266,
         )
 
-        self.assertEqual(fields["coordinates"], "373-26639")
+        self.assertEqual(fields["coordinates"], "")
         self.assertEqual(fields["topology"], "circular")
+        self.assertEqual(fields["native_coordinates"], "373-26639")
+        self.assertEqual(fields["boundary_status"], "circular_full_boundary_unresolved")
 
     def test_virsorter2_rejects_wrapped_boundary_for_linear_full_call(self) -> None:
         boundary = {
