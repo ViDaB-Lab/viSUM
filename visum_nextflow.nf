@@ -49,6 +49,34 @@ include { STANDARDIZE_VCONTACT3 } from './modules/local/standardize_vcontact3'
 include { VIHARMONY } from './modules/local/viharmony'
 
 
+// One-time recovery of a completed database-preparation task from the same
+// Nextflow session. Keeping its original output paths preserves downstream
+// cache keys when an uncached preparation task would otherwise move them.
+def recoveredDatabaseOutput(rawWorkdir, linkName, metadataName, expectedDatabase, optionName) {
+    def workdir = file(rawWorkdir)
+    def exitCode = file("${workdir}/.exitcode")
+    def database = file("${workdir}/${linkName}")
+    def metadata = file("${workdir}/${metadataName}")
+
+    if( !java.nio.file.Files.isDirectory(workdir) ||
+        !java.nio.file.Files.isRegularFile(exitCode) ||
+        java.nio.file.Files.readString(exitCode).trim() != '0' ||
+        !java.nio.file.Files.exists(database) ||
+        !java.nio.file.Files.isRegularFile(metadata) ||
+        !java.nio.file.Files.exists(file(expectedDatabase)) ) {
+        throw new IllegalArgumentException(
+            "${optionName} must name a completed preparation work directory with a valid database and metadata: ${workdir}"
+        )
+    }
+    if( database.toRealPath() != file(expectedDatabase).toRealPath() ) {
+        throw new IllegalArgumentException(
+            "${optionName} points to a different database than the configured database: ${workdir}"
+        )
+    }
+    return tuple(database, metadata)
+}
+
+
 def validatePrefix(rawPrefix, source) {
     if( rawPrefix == null || rawPrefix.toString().isEmpty() ) {
         throw new IllegalArgumentException("Missing sample prefix (${source}).")
@@ -646,15 +674,24 @@ workflow {
             )
         )
 
-        PREPARE_GENOMAD_DATABASE(ch_genomad_database_request)
+        if( params.resume_genomad_prepare_workdir ) {
+            def recovered = recoveredDatabaseOutput(
+                params.resume_genomad_prepare_workdir,
+                'genomad_db', 'genomad_database_metadata.tsv',
+                genomadDatabasePath, '--resume_genomad_prepare_workdir'
+            )
+            ch_genomad_database = Channel.of(recovered[0])
+        } else {
+            PREPARE_GENOMAD_DATABASE(ch_genomad_database_request)
 
-        viewChannel(showChannelMessages, PREPARE_GENOMAD_DATABASE.out.database) { database, metadata ->
-            "GENOMAD_DB database=${database} metadata=${metadata.name}"
+            viewChannel(showChannelMessages, PREPARE_GENOMAD_DATABASE.out.database) { database, metadata ->
+                "GENOMAD_DB database=${database} metadata=${metadata.name}"
+            }
+
+            ch_genomad_database = PREPARE_GENOMAD_DATABASE.out.database
+                .map { database, metadata -> database }
+                .first()
         }
-
-        ch_genomad_database = PREPARE_GENOMAD_DATABASE.out.database
-            .map { database, metadata -> database }
-            .first()
 
         RUN_GENOMAD(
             NORMALIZE_FASTA.out.normalized_records,
@@ -1349,33 +1386,51 @@ workflow {
                 )
             }
 
-        PREPARE_VICAT_DATABASE(ch_vicat_database_request)
+        if( params.resume_vicat_prepare_workdir || params.resume_vicat_nonviral_prepare_workdir ) {
+            if( !params.resume_vicat_prepare_workdir || !params.resume_vicat_nonviral_prepare_workdir ) {
+                error 'Supply both viCAT preparation work directories when recovering their task inputs.'
+            }
+            def recoveredViral = recoveredDatabaseOutput(
+                params.resume_vicat_prepare_workdir,
+                'vicat_database', 'vicat_database_setup_metadata.tsv',
+                vicatDatabasePath, '--resume_vicat_prepare_workdir'
+            )
+            def recoveredNonviral = recoveredDatabaseOutput(
+                params.resume_vicat_nonviral_prepare_workdir,
+                'vicat_nonviral_database', 'vicat_nonviral_database_setup_metadata.tsv',
+                vicatNonviralDatabasePath, '--resume_vicat_nonviral_prepare_workdir'
+            )
+            ch_vicat_database = Channel.of(recoveredViral)
+            ch_vicat_nonviral_database = Channel.of(recoveredNonviral)
+        } else {
+            PREPARE_VICAT_DATABASE(ch_vicat_database_request)
 
-        viewChannel(showChannelMessages, PREPARE_VICAT_DATABASE.out.database) { database, metadata ->
-            "VICAT_DB database=${database} metadata=${metadata.name}"
-        }
-
-        ch_vicat_database = PREPARE_VICAT_DATABASE.out.database
-            .map { database, metadata -> tuple(database, metadata) }
-            .first()
-
-        // Serialize the two heavyweight builds; their memory requests add up.
-        ch_vicat_nonviral_database_request = PREPARE_VICAT_DATABASE.out.database
-            .take(1)
-            .map { viralDatabase, viralSetupMetadata ->
-                tuple(vicatNonviralDatabasePath, 'class-aware-nonviral',
-                    nonviralSources[0], nonviralSources[1], nonviralSources[2], nonviralSources[3], nonviralHelpers)
+            viewChannel(showChannelMessages, PREPARE_VICAT_DATABASE.out.database) { database, metadata ->
+                "VICAT_DB database=${database} metadata=${metadata.name}"
             }
 
-        PREPARE_VICAT_NONVIRAL_DATABASE(ch_vicat_nonviral_database_request)
+            ch_vicat_database = PREPARE_VICAT_DATABASE.out.database
+                .map { database, metadata -> tuple(database, metadata) }
+                .first()
 
-        viewChannel(showChannelMessages, PREPARE_VICAT_NONVIRAL_DATABASE.out.database) { database, metadata ->
-            "VICAT_NONVIRAL_DB database=${database} metadata=${metadata.name}"
+            // Serialize the two heavyweight builds; their memory requests add up.
+            ch_vicat_nonviral_database_request = PREPARE_VICAT_DATABASE.out.database
+                .take(1)
+                .map { viralDatabase, viralSetupMetadata ->
+                    tuple(vicatNonviralDatabasePath, 'class-aware-nonviral',
+                        nonviralSources[0], nonviralSources[1], nonviralSources[2], nonviralSources[3], nonviralHelpers)
+                }
+
+            PREPARE_VICAT_NONVIRAL_DATABASE(ch_vicat_nonviral_database_request)
+
+            viewChannel(showChannelMessages, PREPARE_VICAT_NONVIRAL_DATABASE.out.database) { database, metadata ->
+                "VICAT_NONVIRAL_DB database=${database} metadata=${metadata.name}"
+            }
+
+            ch_vicat_nonviral_database = PREPARE_VICAT_NONVIRAL_DATABASE.out.database
+                .map { database, metadata -> tuple(database, metadata) }
+                .first()
         }
-
-        ch_vicat_nonviral_database = PREPARE_VICAT_NONVIRAL_DATABASE.out.database
-            .map { database, metadata -> tuple(database, metadata) }
-            .first()
 
         PREDICT_VICAT_ORFS(NORMALIZE_FASTA.out.normalized_records)
 
