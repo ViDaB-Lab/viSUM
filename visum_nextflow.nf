@@ -680,7 +680,7 @@ workflow {
                 'genomad_db', 'genomad_database_metadata.tsv',
                 genomadDatabasePath, '--resume_genomad_prepare_workdir'
             )
-            ch_genomad_database = Channel.of(recovered[0])
+            ch_genomad_database = Channel.value(recovered[0])
         } else {
             PREPARE_GENOMAD_DATABASE(ch_genomad_database_request)
 
@@ -1400,8 +1400,8 @@ workflow {
                 'vicat_nonviral_database', 'vicat_nonviral_database_setup_metadata.tsv',
                 vicatNonviralDatabasePath, '--resume_vicat_nonviral_prepare_workdir'
             )
-            ch_vicat_database = Channel.of(recoveredViral)
-            ch_vicat_nonviral_database = Channel.of(recoveredNonviral)
+            ch_vicat_database = Channel.value(recoveredViral)
+            ch_vicat_nonviral_database = Channel.value(recoveredNonviral)
         } else {
             PREPARE_VICAT_DATABASE(ch_vicat_database_request)
 
