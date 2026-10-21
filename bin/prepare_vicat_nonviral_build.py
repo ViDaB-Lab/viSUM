@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Prepare fingerprinted NCBI inputs, then invoke the existing nonviral builder.
 
-The calling Nextflow process owns the destination lock. No downloads or source
-selection occur here; the caller supplies the reproducible reference inventory.
+The calling Nextflow process owns the destination lock. Optional acquisition uses
+the supplied versioned inventory without changing classification or clustering.
 """
 import argparse
 import hashlib
@@ -13,6 +13,7 @@ import subprocess
 import sys
 
 from classify_vicat_nonviral_references import read_manifest
+from download_vicat_nonviral_sources import download_sources
 
 
 def sha256(path):
@@ -44,6 +45,8 @@ def classified_inputs(args):
     stamp = work / 'classification_provenance.json'
     script = Path(__file__).with_name('classify_vicat_nonviral_references.py')
     inventory = source_inventory(args.manifest, args.package_root, args.metadata_root)
+    if getattr(args, 'download_provenance', None):
+        inventory['download_sources'] = json.loads(Path(args.download_provenance).read_text())
     inventory['classifier_sha256'] = sha256(script)
     if stamp.exists():
         recorded = json.loads(stamp.read_text())
@@ -75,15 +78,23 @@ def main():
     parser.add_argument('--manifest')
     parser.add_argument('--package-root')
     parser.add_argument('--metadata-root')
+    parser.add_argument('--download-sources', action='store_true')
     parser.add_argument('--destination', required=True)
     parser.add_argument('--work-dir', required=True)
     parser.add_argument('--threads', required=True, type=int)
     args = parser.parse_args()
     raw = [args.manifest, args.package_root, args.metadata_root]
-    if args.threads < 1 or (args.classified_dir and any(raw)) or (not args.classified_dir and not all(raw)):
-        parser.error('Supply classified-dir OR all three NCBI source arguments, and positive threads')
+    valid_sources = (bool(args.classified_dir) and not any(raw) and not args.download_sources) or (
+        not args.classified_dir and bool(args.manifest) and (
+            (args.download_sources and not args.package_root and not args.metadata_root) or
+            (not args.download_sources and bool(args.package_root) and bool(args.metadata_root))))
+    if args.threads < 1 or not valid_sources:
+        parser.error('Supply classified-dir OR all three NCBI source arguments OR manifest with download-sources, and positive threads')
     if Path(args.destination).exists():
         parser.error('Refusing to replace an existing database')
+    if args.download_sources:
+        args.package_root, args.metadata_root, args.download_provenance = map(str, download_sources(
+            args.manifest, Path(args.work_dir).resolve() / 'sources', workers=min(args.threads, 4)))
     classified = classified_inputs(args)
     subprocess.run(['bash', str(Path(__file__).with_name('build_vicat_nonviral_database.sh')),
                     '--classified-dir', str(classified), '--destination', args.destination,

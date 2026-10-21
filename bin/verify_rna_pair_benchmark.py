@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 from pathlib import Path
+from benchmark_bundle import Bundle, SUFFIX_LABELS
 
 def rows(path):
     with path.open(newline='') as handle:
@@ -21,12 +22,11 @@ def main():
         ('RNANEG_MOBILE_CHALLENGE',200,0,args.negative_results),
         ('BMARK_RNA_VIRAL',874,788,args.combined_results)]:
         h=root/f'{sample}_results'/'viharmony'
-        manifest=json.loads((h/f'{sample}.harmonizer_manifest.json').read_text())
+        bundle=Bundle(h,sample)
+        manifest=bundle.manifest
         assert manifest['policy']['rna_pair_homology_floor'] is True,sample
-        for entry in manifest['outputs'].values():
-            assert hashlib.sha256((h/entry['file']).read_bytes()).hexdigest()==entry['sha256'],entry['file']
-        disp=rows(h/f'{sample}.sequence_disposition.tsv')
-        primary=rows(h/f'{sample}.database_candidates.tsv')
+        disp=bundle.table('disposition')
+        primary=bundle.table('database_tsv')
         retained={r['original_contig_name'] for r in primary}
         assert len(disp)==n and len({r['original_contig_name'] for r in disp})==n,sample
         assert len(retained)==expected,(sample,len(retained),expected)
@@ -36,10 +36,13 @@ def main():
     for old in dna:
         sample=old.name.removesuffix('_results')
         new=args.combined_results/old.name/'viharmony'
+        previous=Bundle(old/'viharmony',sample)
+        current=Bundle(new,sample)
         for suffix in ['final_metadata.tsv','sequence_disposition.tsv','final.normalized.fasta',
                        'database_candidates.tsv','provisional_metadata.tsv']:
             name=f'{sample}.{suffix}'
-            assert (old/'viharmony'/name).read_bytes()==(new/name).read_bytes(),f'DNA changed: {name}'
+            label=SUFFIX_LABELS[suffix]
+            assert previous.path(label).read_bytes()==current.path(label).read_bytes(),f'DNA changed: {name}'
         print(f'PASS {sample}: DNA outputs unchanged')
 
 if __name__=='__main__':

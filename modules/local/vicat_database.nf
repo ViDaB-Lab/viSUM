@@ -6,18 +6,23 @@ process PREPARE_VICAT_DATABASE {
     cache false
 
     // Validation of an existing database is lightweight. Reserve the large
-    // build resources only when raw MetaVR inputs were supplied.
+    // build resources only for explicit sources or an absent auto-acquired DB.
     cpus {
-        (source_proteins || cellular_proteins)
+        (source_proteins || cellular_proteins || (database_source == 'viSUM-managed' &&
+            params.vicat_metavr_auto_download.toString().trim().toLowerCase() == 'true' && !file(database_path).exists()))
             ? Math.min(params.vicat_build_cpus as int, params.max_cpus as int)
             : 1
     }
-    memory { (source_proteins || cellular_proteins) ? params.vicat_build_memory : '4 GB' }
-    time { (source_proteins || cellular_proteins) ? params.vicat_build_time : '1h' }
+    memory { (source_proteins || cellular_proteins || (database_source == 'viSUM-managed' &&
+        params.vicat_metavr_auto_download.toString().trim().toLowerCase() == 'true' && !file(database_path).exists()))
+        ? params.vicat_build_memory : '4 GB' }
+    time { params.vicat_build_time }
 
     publishDir "${params.outdir}/database_setup",
         mode: 'copy',
-        pattern: 'vicat_database_setup_metadata.tsv'
+        pattern: 'vicat_database_setup_metadata.tsv',
+        overwrite: true,
+        failOnError: true
 
     input:
     tuple val(database_path),
@@ -44,6 +49,7 @@ process PREPARE_VICAT_DATABASE {
 
     script:
     def taxonomyMemory = params.vicat_build_memory.toString().replaceAll('\\s+', '')
+    def autoMetavr = params.vicat_metavr_auto_download.toString().trim().toLowerCase() == 'true'
     """
     set -euo pipefail
 
@@ -53,6 +59,9 @@ process PREPARE_VICAT_DATABASE {
     VIRAL_REPRESENTATIVES="${viral_representatives}"
     SOURCE_PROTEINS="${source_proteins}"
     SOURCE_METADATA="${source_metadata}"
+    PROTEIN_SHA256="${protein_sha256}"
+    METADATA_SHA256="${metadata_sha256}"
+    AUTO_METAVR='false'
     CELLULAR_PROTEINS="${cellular_proteins}"
     CELLULAR_METADATA="${cellular_metadata}"
     EXPECT_COMPETITIVE='false'
@@ -85,6 +94,8 @@ process PREPARE_VICAT_DATABASE {
         local diamond_count lookup_count competitive_count manifest_count
 
         [[ -d "\$candidate" && -r "\$candidate" ]] || return 1
+        python "${projectDir}/bin/validate_reference_database.py" vicat \
+            "\$candidate" || return 1
         locate_database_files "\$candidate" || return 1
         diamond dbinfo --db "\$VICAT_DIAMOND" >/dev/null 2>&1 || return 1
         diamond_count=\$(diamond dbinfo --db "\$VICAT_DIAMOND" \
@@ -176,6 +187,9 @@ PY
 
     DB_PARENT=\$(dirname "\$DB_DEST")
     BUILD_DIR="\${DB_DEST}.build"
+    # The existing builder removes BUILD_DIR after success. Keep source downloads
+    # outside it, so successful builds never delete the acquired 50-GB collection.
+    METAVR_SOURCE_DIR="\${DB_DEST}.sources"
     mkdir -p "\$DB_PARENT"
 
     command -v flock >/dev/null 2>&1 || {
@@ -225,10 +239,35 @@ PY
         exit 0
     fi
 
+    if [[ -z "\$SOURCE_PROTEINS" && -z "\$SOURCE_METADATA" && "${autoMetavr}" == 'true' ]]; then
+        python "${projectDir}/bin/prepare_vicat_metavr_sources.py" prepare \
+            --manifest "${params.vicat_metavr_download_manifest}" \
+            --source-dir "\$METAVR_SOURCE_DIR" \
+            --frozen-protein-sha256 "${protein_sha256}" \
+            --frozen-metadata-sha256 "${metadata_sha256}" \
+            --expected-uvigs "${expected_uvigs}" \
+            --expected-proteins "${expected_proteins}"
+        mapfile -t METAVR_SOURCE_VALUES < <(python - "\$METAVR_SOURCE_DIR/download_provenance.json" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding='utf-8') as source:
+    values = json.load(source)
+for key in ('proteins', 'metadata', 'protein_sha256', 'metadata_sha256'):
+    print(values[key])
+PY
+        )
+        [[ "\${#METAVR_SOURCE_VALUES[@]}" == 4 ]] || { echo 'ERROR: Incomplete MetaVR source receipt.' >&2; exit 1; }
+        SOURCE_PROTEINS="\${METAVR_SOURCE_VALUES[0]}"
+        SOURCE_METADATA="\${METAVR_SOURCE_VALUES[1]}"
+        PROTEIN_SHA256="\${METAVR_SOURCE_VALUES[2]}"
+        METADATA_SHA256="\${METAVR_SOURCE_VALUES[3]}"
+        AUTO_METAVR='true'
+    fi
+
     if [[ -z "\$SOURCE_PROTEINS" || -z "\$SOURCE_METADATA" ]]; then
         echo "ERROR: viCAT is enabled, but no valid database is available." >&2
         echo "Supply --vicat_db PATH, or provide both --vicat_metavr_proteins" >&2
-        echo "and --vicat_metavr_metadata to build MetaVR5 locally." >&2
+        echo "and --vicat_metavr_metadata, or enable verified --vicat_metavr_auto_download." >&2
         exit 1
     fi
     [[ -f "\$SOURCE_PROTEINS" ]] || {
@@ -270,8 +309,8 @@ PY
         --work-dir "\$BUILD_DIR" \
         --threads "${task.cpus}" \
         --memory-limit "${taxonomyMemory}" \
-        --protein-sha256 "${protein_sha256}" \
-        --metadata-sha256 "${metadata_sha256}" \
+        --protein-sha256 "\$PROTEIN_SHA256" \
+        --metadata-sha256 "\$METADATA_SHA256" \
         --expected-uvigs "${expected_uvigs}" \
         --expected-proteins "${expected_proteins}" \
         --expected-representatives "${expected_representatives}" \
@@ -281,6 +320,12 @@ PY
         echo "ERROR: The completed viCAT database failed final validation." >&2
         exit 1
     }
-    emit_database 'built-from-user-supplied-metavr-files'
+    if [[ "\$AUTO_METAVR" == 'true' ]]; then
+        cp "\$METAVR_SOURCE_DIR/download_provenance.json" "\$DB_DEST/vicat_metavr_source_provenance.json"
+        (cd "\$DB_DEST" && sha256sum vicat_metavr_source_provenance.json >> SHA256SUMS)
+        emit_database 'downloaded-and-built-from-verified-metavr-sources'
+    else
+        emit_database 'built-from-user-supplied-metavr-files'
+    fi
     """
 }

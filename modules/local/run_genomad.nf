@@ -33,6 +33,11 @@ process RUN_GENOMAD {
         ? params.genomad_score_calibration
         : params.genomad_score_calibration.toString().trim().equalsIgnoreCase('true')
     def calibrationFlag = calibrationEnabled ? '--enable-score-calibration' : ''
+    def composition = params.genomad_composition.toString().trim().toLowerCase()
+    if( !(composition in ['auto', 'metagenome', 'virome']) ) {
+        error '--genomad_composition must be auto, metagenome or virome.'
+    }
+    def compositionFlag = calibrationEnabled ? "--composition ${composition}" : ''
     """
     set -euo pipefail
 
@@ -46,6 +51,7 @@ process RUN_GENOMAD {
     genomad end-to-end \
         ${cleanupFlag} \
         ${calibrationFlag} \
+        ${compositionFlag} \
         --threads ${task.cpus} \
         --splits ${params.genomad_splits} \
         "${prefix}.fasta" \
@@ -124,9 +130,9 @@ process RUN_GENOMAD {
         RUN_STATUS='completed_with_virus_calls'
     fi
 
-    printf 'sample_id\tinput_type\tinput_fasta\tinput_sequence_count\tgenomad_version\tthreads\tsplits\tcleanup\tscore_calibration_requested\tscore_calibration_applied\trun_status\tvirus_call_count\tplasmid_call_count\n' \
+    printf 'sample_id\tinput_type\tinput_fasta\tinput_sequence_count\tgenomad_version\tthreads\tsplits\tcleanup\tscore_calibration_requested\tscore_calibration_applied\trun_status\tvirus_call_count\tplasmid_call_count\tscore_calibration_composition_requested\n' \
         > "${prefix}.genomad_run_metadata.tsv"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "${prefix}" \
         "${type}" \
         "${normalized_fasta.name}" \
@@ -140,6 +146,7 @@ process RUN_GENOMAD {
         "\$RUN_STATUS" \
         "\$VIRUS_CALL_COUNT" \
         "\$PLASMID_CALL_COUNT" \
+        "${composition}" \
         >> "${prefix}.genomad_run_metadata.tsv"
     """
 }

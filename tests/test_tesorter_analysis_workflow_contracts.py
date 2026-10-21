@@ -36,12 +36,21 @@ class TEsorterAnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn('-p "${task.cpus}"', self.module)
         self.assertNotIn("PREPARE_TESORTER_DATABASE", self.workflow)
 
+    def test_short_temporary_root_is_task_local_not_a_scientific_option(self) -> None:
+        self.assertIn("beforeScript '''", self.module)
+        self.assertIn('export TMPDIR=/tmp TEMP=/tmp TMP=/tmp', self.module)
+        self.assertNotIn('export TMPDIR=/tmp', self.config)
+        self.assertNotIn('set_start_method', self.module)
+        environment = (ROOT / 'envs/tesorter.yml').read_text(encoding='utf-8')
+        self.assertIn('tesorter=1.5.1', environment)
+        self.assertNotIn('python=', environment)
+
     def test_switch_resources_and_outputs_are_declared(self) -> None:
         for declaration in (
             "run_tesorter           = true",
             "tesorter_cpus          = 4",
             "tesorter_memory        = '8 GB'",
-            "tesorter_time          = '12h'",
+            "tesorter_time          = null",
         ):
             self.assertIn(declaration, self.config)
         self.assertIn("tesorter.cls.tsv", self.module)

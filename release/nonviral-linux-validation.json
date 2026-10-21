@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "uploaded_review_sha256": "e28d425f0689b6a3e52eb3016efcdfc3c27ab5490a18dc328e517109243ff01f",
+  "linux_test_package_sha256": "2fbc16ff5630e16e6162e9e9fee2200bcc3a266d6819edcbbd83d9fb38325640",
+  "package_manifest_sha256": "928efffaf4201c256a5d576668e532fd9940f87347f46a147d3c1c832fd57a10",
+  "source_files_matched_to_linux_package": 164,
+  "regression_tests": 43,
+  "skipped": 0,
+  "native_nonviral_setup": "PASS",
+  "native_database_reuse": "PASS",
+  "published_setup_metadata_updated": true,
+  "original_session": "07540a23-2689-47b5-944a-ad414c9229b0",
+  "synthetic_proteins": 7,
+  "checked_small_receipts": [
+    "vicat_nonviral_classification_summary.tsv",
+    "vicat_nonviral_cluster_summary.tsv",
+    "vicat_nonviral_database_metadata.tsv",
+    "vicat_nonviral_build_config.tsv",
+    "vicat_nonviral_source_manifest.tsv",
+    "vicat_nonviral_source_provenance.json"
+  ],
+  "live_ncbi_assembly": "GCF_000006765.1",
+  "live_classified_proteins": 5572,
+  "live_download_reuse_network_blocked": true,
+  "environment_explicit_sha256": "73bd1a5d9e0b8c252962ecc8510c10d333f2d44aab116e59723336d79dd6be63",
+  "warnings": [
+    "WARN: The operator `first` is useless when applied to a value channel which returns a single value by definition",
+    "WARN: The operator `first` is useless when applied to a value channel which returns a single value by definition"
+  ],
+  "full_480_assembly_installation_tested": false,
+  "full_fresh_installation_tested": false,
+  "expensive_searches_launched": false,
+  "student_runs_accessed": false
+}

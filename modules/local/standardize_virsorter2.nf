@@ -12,7 +12,9 @@ process STANDARDIZE_VIRSORTER2 {
           val(type),
           path(score_table),
           path(boundary_table),
+          path(viral_fasta),
           path(run_metadata),
+          path(normalized_fasta),
           path(header_map)
 
     output:
@@ -20,6 +22,9 @@ process STANDARDIZE_VIRSORTER2 {
           val('virsorter2'),
           path("${prefix}.virsorter2_evidence.tsv"),
           emit: evidence
+    tuple val(prefix),
+          path("${prefix}.virsorter2_boundary_audit.tsv"),
+          emit: boundary_audit
 
     script:
     """
@@ -30,7 +35,10 @@ process STANDARDIZE_VIRSORTER2 {
         --header-map "${header_map}" \
         --score-table "${score_table}" \
         --boundary-table "${boundary_table}" \
+        --viral-fasta "${viral_fasta}" \
         --run-metadata "${run_metadata}" \
+        --normalized-fasta "${normalized_fasta}" \
+        --boundary-audit "${prefix}.virsorter2_boundary_audit.tsv" \
         --output "${prefix}.virsorter2_evidence.tsv"
     """
 }

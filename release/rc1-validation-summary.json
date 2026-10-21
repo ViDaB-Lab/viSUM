@@ -1,0 +1,203 @@
+{
+  "status": "PASS",
+  "samples": [
+    {
+      "sample": "BMARK_DNA_CELLULAR",
+      "inputs": 500,
+      "evaluated_candidates": 221,
+      "primary": 17,
+      "viral_candidates": 38,
+      "TE_candidates": 3,
+      "TE_only": 3,
+      "flat_nested_sets_equal": true
+    },
+    {
+      "sample": "BMARK_DNA_MITOCHONDRIAL",
+      "inputs": 500,
+      "evaluated_candidates": 187,
+      "primary": 22,
+      "viral_candidates": 27,
+      "TE_candidates": 0,
+      "TE_only": 0,
+      "flat_nested_sets_equal": true
+    },
+    {
+      "sample": "BMARK_DNA_PLASMID",
+      "inputs": 500,
+      "evaluated_candidates": 365,
+      "primary": 73,
+      "viral_candidates": 98,
+      "TE_candidates": 0,
+      "TE_only": 0,
+      "flat_nested_sets_equal": true
+    },
+    {
+      "sample": "BMARK_DNA_PLASTID",
+      "inputs": 500,
+      "evaluated_candidates": 91,
+      "primary": 2,
+      "viral_candidates": 4,
+      "TE_candidates": 0,
+      "TE_only": 0,
+      "flat_nested_sets_equal": true
+    },
+    {
+      "sample": "BMARK_DNA_RETROELEMENT",
+      "inputs": 390,
+      "evaluated_candidates": 134,
+      "primary": 34,
+      "viral_candidates": 75,
+      "TE_candidates": 25,
+      "TE_only": 25,
+      "flat_nested_sets_equal": true
+    },
+    {
+      "sample": "BMARK_DNA_VIRAL",
+      "inputs": 539,
+      "evaluated_candidates": 532,
+      "primary": 478,
+      "viral_candidates": 488,
+      "TE_candidates": 0,
+      "TE_only": 0,
+      "flat_nested_sets_equal": true
+    },
+    {
+      "sample": "BMARK_RNA_VIRAL",
+      "inputs": 874,
+      "evaluated_candidates": 856,
+      "primary": 789,
+      "viral_candidates": 817,
+      "TE_candidates": 9,
+      "TE_only": 9,
+      "flat_nested_sets_equal": true
+    },
+    {
+      "sample": "RNANEG_CLEAN_BROAD",
+      "inputs": 400,
+      "evaluated_candidates": 154,
+      "primary": 8,
+      "viral_candidates": 48,
+      "TE_candidates": 0,
+      "TE_only": 0,
+      "flat_nested_sets_equal": true
+    },
+    {
+      "sample": "RNANEG_CLEAN_CONFIRMED",
+      "inputs": 1200,
+      "evaluated_candidates": 436,
+      "primary": 20,
+      "viral_candidates": 105,
+      "TE_candidates": 0,
+      "TE_only": 0,
+      "flat_nested_sets_equal": true
+    },
+    {
+      "sample": "RNANEG_MOBILE_CHALLENGE",
+      "inputs": 200,
+      "evaluated_candidates": 92,
+      "primary": 0,
+      "viral_candidates": 33,
+      "TE_candidates": 3,
+      "TE_only": 3,
+      "flat_nested_sets_equal": true
+    }
+  ],
+  "totals": {
+    "inputs": 5603,
+    "evaluated_candidates": 3068,
+    "primary": 1443,
+    "viral_candidates": 1733,
+    "TE_candidates": 40,
+    "TE_only": 40
+  },
+  "scientific_sources_unchanged": {
+    "bin/run_viharmony.py": "0d261fb284a157352d6bedea8a460b1532744dc2e4521cc49008c882d27b3b9f",
+    "bin/evidence_schema.py": "bf6ec16ef35509c1b408d3c8ddd912b5713346c7a038b8fe7d96c8660a60cbf6",
+    "bin/ictv_reconciliation.py": "ff36eae9d0c17ec135b2cd675ee99ab5c9f0b03edb6b861a566b5130b30a3801",
+    "bin/te_routing.py": "830789c57379a01aa20ffd03f8012a8f1ba9c47c6b58a3caf1838b995aa93179",
+    "bin/reporting_bundle.py": "56d073dfdbbad8cc7c49e7177e5cd22dfd5abb1fc470dbf14d3be7e63cdd566b"
+  },
+  "approved_preparation_AST_checks": {
+    "audit_genomad_routing_evidence.py": {
+      "approved_archive_sha256": "57976b1661bc7710139c7f5a375cac6c077bb7d469589b1f79a4859dd40eada5",
+      "staged_sha256": "57976b1661bc7710139c7f5a375cac6c077bb7d469589b1f79a4859dd40eada5",
+      "AST_identical": true
+    },
+    "build_genomad_routing.py": {
+      "approved_archive_sha256": "d524d18090a419268cc2fad1d7b31791e3a474cda8b121c10b675e8f50fd037e",
+      "staged_sha256": "d524d18090a419268cc2fad1d7b31791e3a474cda8b121c10b675e8f50fd037e",
+      "AST_identical": true
+    },
+    "finalize_genomad_routing.py": {
+      "approved_archive_sha256": "8f446163097cf00d147db41b8d6c10dee0ce21bac9fb9da6a567bbe3bdffdb02",
+      "staged_sha256": "8f446163097cf00d147db41b8d6c10dee0ce21bac9fb9da6a567bbe3bdffdb02",
+      "AST_identical": true
+    },
+    "fingerprint_genomad_parents.py": {
+      "approved_archive_sha256": "0e29e32a65c61a58c42af5b7a42d4197b125d748850d8352d99147a747689faa",
+      "staged_sha256": "0e29e32a65c61a58c42af5b7a42d4197b125d748850d8352d99147a747689faa",
+      "AST_identical": true
+    },
+    "prepare_genomad_benchmark.py": {
+      "approved_archive_sha256": "f83e8e5765b8283e98e668e90a503ffbcc385df5a13c96b8106907633ef2d85d",
+      "staged_sha256": "f83e8e5765b8283e98e668e90a503ffbcc385df5a13c96b8106907633ef2d85d",
+      "AST_identical": true
+    },
+    "verify_genomad_preparation.py": {
+      "approved_archive_sha256": "2db34f9c7ce8f34af3ca99db257ad57a8d3304174fdf6ec8f9288a3bc9e04a0a",
+      "staged_sha256": "2db34f9c7ce8f34af3ca99db257ad57a8d3304174fdf6ec8f9288a3bc9e04a0a",
+      "AST_identical": true
+    }
+  },
+  "reporting_linux_gate": {
+    "status": "CLOSED",
+    "archive_sha256": "35e27109c192e04b557350dd359398dddac7245117d1566cade5066c178a87d6",
+    "candidate_records": 1211,
+    "regression_tests": 23,
+    "phases": [
+      {
+        "stage": "first",
+        "statuses": {
+          "COMPLETED": 6
+        }
+      },
+      {
+        "stage": "unchanged_resume",
+        "statuses": {
+          "CACHED": 6
+        }
+      },
+      {
+        "stage": "helper_change",
+        "statuses": {
+          "CACHED": 3,
+          "COMPLETED": 3
+        }
+      },
+      {
+        "stage": "restore_helper",
+        "statuses": {
+          "CACHED": 6
+        }
+      }
+    ]
+  },
+  "truth_labels_changed": false,
+  "classifier_inference_launched": false,
+  "upstream_searches_launched": false,
+  "student_runs_accessed": false,
+  "regression_suite": {
+    "final_statuses": {
+      "passed": 700,
+      "skipped": 15
+    },
+    "configured_rerun_cases": 220,
+    "resolved_initial_failures": 21,
+    "initial_failures": "Unpropagated subprocess dependency path and missing explicit archived-fixture locations; configured rerun passed.",
+    "skipped": "15 native/optional-runtime checks not counted as passes; fresh Linux remains a gate."
+  },
+  "approved_genomad_composition_module_restored": true,
+  "normal_composition_default": "auto",
+  "benchmark_composition": "metagenome",
+  "new_freeze_claim": "Code, environment specifications and packaged reference assets only; external DB/installed package identities pending host capture."
+}

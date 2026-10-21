@@ -49,15 +49,10 @@ class BetaDocumentationTests(unittest.TestCase):
                 rf"(?m)^\| {re.escape(program)} \| .*https://doi\.org/[^)]+",
             )
 
-    def test_readme_negative_exclusions_are_explicit_and_consistent(self):
+    def test_historical_negative_review_is_preserved_separately_from_user_readme(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        benchmark = readme.split("## Preliminary performance\n", 1)[1].split("\n## ", 1)[0]
-        self.assertNotIn("geNomad", benchmark)
-        for excluded in (48, 55):
-            retained, total = 101 - excluded, 2390 - excluded
-            self.assertIn(f"{retained:,}/{total:,} ({100 * retained / total:.2f}%)", benchmark)
-        self.assertIn("conditional, evidence-adjusted", benchmark)
-        self.assertIn("27/1,600 (1.69%)", benchmark)
+        self.assertNotIn("## Preliminary performance", readme)
+        self.assertIn("docs/development/README.md", readme)
         review = (ROOT / "docs/benchmarks/retained-negative-context.md").read_text(encoding="utf-8")
         cohorts = review.split("The excluded source IDs are:\n", 1)[1].split("The 55-input scenario", 1)[0]
         for prefix, digits, expected in (("CELL_NEG_", 6, 5), ("MITO_NEG_", 6, 5),

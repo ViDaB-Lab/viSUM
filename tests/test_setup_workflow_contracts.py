@@ -14,7 +14,7 @@ class SetupWorkflowTests(unittest.TestCase):
         self.assertIn('DATABASE_SETUP()', branch)
         self.assertIn('return', branch)
         self.assertIn('does not accept analysis input parameters', branch)
-        self.assertLess(end, text.index('    NORMALIZE_FASTA(ch_samples)'))
+        self.assertLess(end, text.index('    NORMALIZE_FASTA(ch_ready_samples)'))
 
     def test_only_global_prepare_processes_imported(self):
         text = (ROOT / 'workflows/database_setup.nf').read_text()
@@ -45,6 +45,15 @@ class SetupWorkflowTests(unittest.TestCase):
             self.assertIn('validate_reference_database.py', text)
             self.assertIn('--check-mmseqs', text)
             self.assertIn('cache false', text)
+
+    def test_vicat_serial_dependency_maps_value_without_queue_take(self):
+        text = (ROOT / 'workflows/database_setup.nf').read_text()
+        start = text.index('ch_vicat_nonviral_database_request = PREPARE_VICAT_DATABASE.out.database')
+        end = text.index('PREPARE_VICAT_NONVIRAL_DATABASE(ch_vicat_nonviral_database_request)', start)
+        dependency = text[start:end]
+        self.assertNotIn('.take(', dependency)
+        self.assertIn('.map { viralDatabase, viralSetupMetadata ->', dependency)
+        self.assertIn("tuple(vicatNonviralDatabasePath, 'class-aware-nonviral'", dependency)
 
 
 if __name__ == '__main__':

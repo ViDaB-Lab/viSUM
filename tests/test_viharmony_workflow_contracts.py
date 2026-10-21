@@ -32,15 +32,17 @@ class ViharmonyWorkflowContractTests(unittest.TestCase):
             ".sequence_disposition.tsv", ".sequence_map.tsv",
             ".harmonizer_manifest.json", ".database_candidates.fasta",
             ".database_candidates.tsv",
-            ".all_candidates.fasta", ".review_candidates.fasta",
+            ".all_candidates.fasta",
             ".provisional.normalized.fasta",
             ".provisional.original_ids.fasta", ".provisional_metadata.tsv",
         ):
             self.assertIn(suffix, module)
         self.assertIn("--audit-mode", module)
         self.assertIn("--vcontact3-min-taxonomy-length", module)
-        self.assertIn('path("${prefix}.*_audit.tsv.gz"),\n          optional: true', module)
-        self.assertIn("viHARMONY decision policy v1.3", module)
+        self.assertNotIn('.review_candidates.fasta', module)
+        self.assertIn('path("audit/${prefix}.*_audit.tsv.gz"),\n          optional: true', module)
+        self.assertIn("viHARMONY decision policy v1.4", module)
+        self.assertIn("TE-routing-v1", module)
 
     def test_config_uses_one_canonical_msl_parameter(self) -> None:
         config = (ROOT / "visum.config").read_text(encoding="utf-8")
@@ -51,6 +53,43 @@ class ViharmonyWorkflowContractTests(unittest.TestCase):
         self.assertIn("def ictvCsv = file(params.ictv_csv)", workflow)
         self.assertNotIn("harmonizerIctvCsv", workflow)
         self.assertIn("vcontact3_min_taxonomy_length", config)
+
+    def test_workers_respect_nextflow_cpu_allocation(self) -> None:
+        config = (ROOT / "visum.config").read_text(encoding="utf-8")
+        workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+        module = (ROOT / "modules/local/viharmony.nf").read_text(encoding="utf-8")
+        self.assertIn("harmonizer_cpus   = 1", config)
+        self.assertIn("Math.min(params.harmonizer_cpus as int, params.max_cpus as int)", module)
+        self.assertIn('--workers "${task.cpus}"', module)
+        self.assertIn("'--harmonizer_cpus': params.harmonizer_cpus", workflow)
+        self.assertIn("--harmonizer_cpus INT", workflow)
+
+    def test_reporting_cap_defaults_and_native_command_are_wired(self) -> None:
+        config = (ROOT / "visum.config").read_text(encoding="utf-8")
+        workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+        module = (ROOT / "modules/local/viharmony.nf").read_text(encoding="utf-8")
+        self.assertIn("harmonizer_max_rank = 'family'", config)
+        self.assertIn("--harmonizer_max_rank RANK", workflow)
+        self.assertIn("Invalid --harmonizer_max_rank", workflow)
+        self.assertIn('def maxRank = params.harmonizer_max_rank.toString().trim().toLowerCase()', module)
+        self.assertIn('--max-rank "${maxRank}"', module)
+        self.assertIn('audit/${prefix}.*_audit.tsv.gz', module)
+
+    def test_published_results_refresh_on_reporting_changes_and_cached_restore(self) -> None:
+        module = (ROOT / "modules/local/viharmony.nf").read_text(encoding="utf-8")
+        self.assertIn('"${params.outdir}/${prefix}_results/viharmony"', module)
+        self.assertIn("mode: 'copy', overwrite: true, failOnError: true", module)
+
+    def test_reconciliation_bundle_and_manifest_are_native_task_inputs(self) -> None:
+        config = (ROOT / "visum.config").read_text(encoding="utf-8")
+        workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
+        module = (ROOT / "modules/local/viharmony.nf").read_text(encoding="utf-8")
+        self.assertIn('ictv_reconciliation = "${projectDir}/assets/ictv_reconciliation/', config)
+        self.assertIn("path(ictv_reconciliation)", module)
+        self.assertIn("path(ictv_reconciliation_manifest)", module)
+        self.assertIn('--ictv-reconciliation "${ictv_reconciliation}"', module)
+        self.assertIn("groupFiles, ictvCsv, ictvReconciliation, ictvReconciliationManifest, harmonizerAudit", workflow)
+        self.assertIn("${prefix}.*_audit.tsv.gz", module)
 
 
 if __name__ == "__main__":

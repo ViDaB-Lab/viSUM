@@ -1,0 +1,16 @@
+{
+  "version": "visum-alpha-endpoints-v1",
+  "unit": "original input fragment per benchmark_batch; not extracted region or source genome",
+  "execution_key": ["benchmark_batch", "sequence_id"],
+  "primary": {"candidate_destination": "viral_candidates", "viral_decision": ["retained_viral", "retained_provirus"]},
+  "viral_candidates": {"candidate_destination": "viral_candidates", "includes_provisional": true},
+  "TE_candidates": {"candidate_destination": "TE_candidates", "counts_as_viral_detection": false},
+  "TE_only": "TE-export input IDs minus all viral-export input IDs; mixed parents excluded from TE_only",
+  "confidence_alone_defines_primary": false,
+  "strata": ["source_routed", "unresolved_dna", "unresolved_rna"],
+  "pooled_dual_route_metric": false,
+  "truth_labels": "original source_class strings unchanged",
+  "negative_context_review": "secondary endpoint only; no silent numerator/denominator adjustment",
+  "taxonomic_accuracy": "separate from binary export metrics",
+  "reference_training_overlap": "must be disclosed, not assumed absent"
+}

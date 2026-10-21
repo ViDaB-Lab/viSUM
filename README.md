@@ -1,29 +1,90 @@
 # viSUM
 
-**Motivations**
+Viral discovery and standardized classification for assembled DNA and RNA sequences.
+
+## Motivation
 
 viSUM was developed to help my students, regardless of experience level, perform in-depth, comprehensive viral analyses of their high-throughput sequencing data. My goal was to make these analyses accessible for their thesis projects without requiring each student to build and integrate a complex computational workflow from scratch. I hope it proves useful to other students, educators, and researchers as well!
 
-**Viral discovery and standardized classification for assembled DNA and RNA sequences.**
- 
-viSUM combines complementary programs to identify candidate viruses—including divergent and understudied viruses—and turn their results into consistent, sequence-level evidence. Its two goals are broader viral detection and interpretable classifications that support cross-study comparisons and reference-database curation.
+viSUM combines complementary programs to identify viral candidates and summarize
+their origin, taxonomy, quality and conflicting evidence. viHARMONY integrates
+those results into sequence-level calls, with the detailed evidence retained for
+inspection. Support categories describe evidence, not calibrated probabilities.
 
-**Evidence integration is the core of viSUM** 
+Version `0.9.0-beta.2` is currently a **local review candidate**, not a published
+release. Use for research; it is not validated for clinical diagnosis.
 
-viSUM brings together and summarizes origin predictions, protein homology, candidate proviral regions, retroelement context and taxonomic evidence per input sequence. viHARMONY harmonizes results across programs to produce standardized, rank-aware taxonomic assignments with supporting evidence, confidence categories and explicit conflicts, separating supported classifications from exploratory hypotheses. For non-model systems, this helps researchers interpret novel candidates even when a close reference or a confident species-level assignment is unavailable.
+## What's changed since beta.1
 
-**STATUS** 
+- **Simpler setup and resume.** Use ordinary Nextflow commands. Database
+  preparation is separate from analysis; valid installed assets are reused.
+- **Faster viHARMONY.** Bounded multiprocessing is available through
+  `--harmonizer_cpus`; the default remains one worker.
+- **Automatic viCAT source acquisition.** Setup can download the pinned MetaVR
+  sources and the nonviral references selected by the packaged assembly list.
+- **Consistent taxonomy names.** A pinned ICTV reconciliation bundle translates
+  supported names for taxonomy voting while preserving the original evidence.
+- **Family-default reporting.** `--harmonizer_max_rank family` limits reported
+  depth; deeper predictions remain in the audits. A deeper cap permits, but
+  does not create, a supported genus or species assignment.
+- **Clearer viral and TE outputs.** Viral candidates have one combined FASTA
+  with retained/provisional labels. TE candidates have a separate FASTA and
+  summary. Review reasons are tables, not additional FASTA exports.
+- **More accessible summaries.** Outputs include original/parent identifiers,
+  CheckV assessment scope and completeness, vCONTACT3 group context, and `NA`
+  placeholders for missing values.
+- **Runtime and resource fixes.** TEsorter uses a short temporary path,
+  vCONTACT3 includes Parquet support, viHARMONY requests 32 GB by default, and
+  viSUM does not impose task wall-time limits.
 
-viSUM is still in active development and benchmarking. At the time of this release, we have performed preliminary benchmarksof the current version (read more below), but we still need to test a complete fresh-install, and we are in the process of a secondary benchmark using the same test dataset used to access the performance of geNomad. 
+Use a new work/results directory when moving from beta.1. Output filenames and
+some TE destinations have changed; beta.1 results should not be silently mixed
+with beta.2 results. See the [changelog](CHANGELOG.md).
 
-Overall, this is a beta release, the main archecture should remain stable for the alpha release, however, we are fine tuning some decision making to balance sensitivity and false-positivity. So, please report any issues you come across!
+## Get started
 
-**List of stuff to add**
+Use Linux with Java, Nextflow, Conda and Mamba on `PATH`. From the installation
+directory, prepare the default tools once:
 
-1. Functional annotation module.
-2. Add optional LucaVirus in discovery module (https://github.com/LucaOne/LucaVirus).
+```bash
+nextflow run visum_nextflow.nf --setup
+```
 
-The hope is viSUM becomes field-driven, if you have any suggestions for additions that would be useful, please let us know.
+Then analyze an assembled nucleotide FASTA:
+
+```bash
+nextflow run visum_nextflow.nf \
+  --input /data/contigs.fasta --prefix sample01 --type dna \
+  --outdir results/sample01
+```
+
+Use `--type rna` for assembled transcripts. Resume by repeating the analysis
+command with `-resume` from its original launch directory. Keep `.nextflow/`
+and the task work directory.
+
+Databases default to `<installation>/databases`, tool/model bundles to
+`<installation>/tools`, and Conda environments to `<installation>/.conda`.
+You do not need to set those paths unless you want different locations.
+
+viCAT is optional and off by default. To also prepare its viral and nonviral
+databases:
+
+```bash
+nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build
+```
+
+The full viCAT viral build is large: its current allocation is **350 GB RAM**,
+within the profile's 400-GB scheduling budget. This is not a measured minimum;
+check your server before starting. Building is separate from using an existing
+database. Enable viCAT during analysis with `--run_vicat true` as well.
+
+- [Installation, single/batch runs and resume](docs/usage.md)
+- [Database setup and reuse](docs/database-setup.md)
+- [CPU, RAM and SLURM configuration](docs/resources.md)
+- [Understanding candidates and taxonomy](docs/interpretation.md)
+- [Output folders and exact columns](docs/reporting-bundle.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Documentation index](docs/README.md)
 
 ## How it works
 
@@ -39,88 +100,52 @@ flowchart TD
     end
     INPUT -->|DNA| DNA
     INPUT -->|RNA| RNA
-    EVIDENCE --> M2["Module 2 · Primary sequence pass<br/>Combine evidence and select putative viral sequences<br/>Assess quality and refine candidate proviral regions"]
-    M2 --> ASIDE["Set aside inputs with cellular support and no sufficient viral support"]
-    M2 --> M3["Module 3 · Taxonomic classification refinement<br/>Add virus taxonomy and gene-sharing predictions<br/>Identify retroelement-related evidence"]
-    M3 --> M4["Module 4 · viHARMONY<br/>Integrate support, conflicting evidence and region context<br/>Assign origin, confidence and taxonomic classification"]
-    M4 --> PRIMARY["Primary viral candidates"]
-    M4 --> REVIEW["Provisional candidates and conflicts for review"]
-    M4 --> RECORDS["Standardized classifications, evidence and provenance"]
+    EVIDENCE --> M2["Module 2 · Primary sequence pass<br/>Select candidates and assess candidate proviral regions"]
+    M2 --> ASIDE["Set aside inputs without sufficient viral support"]
+    M2 --> M3["Module 3 · Classification refinement<br/>Add taxonomy, gene-sharing groups and TE context"]
+    M3 --> M4["Module 4 · viHARMONY<br/>Integrate origin, taxonomy, conflicts and evidence scope"]
+    M4 --> VIRAL["Viral candidates · retained/provisional labels"]
+    M4 --> TE["TE candidates · separate export"]
+    M4 --> REVIEW["Review tables and detailed audits"]
 ```
-
-1. **Evidence gathering.** Multiple tools assess viral and cellular origin. DNA and RNA follow distinct workflows, with shared tools and input-specific specialists.
-2. **Primary sequence pass.** Evidence from the enabled programs identifies putative viral sequences for quality assessment and candidate proviral-region refinement. Inputs lacking sufficient viral support are set aside; lack of support is not proof of nonviral origin.
-3. **Taxonomic classification refinement.** VITAP and vConTACT3 add virus-classification and gene-sharing evidence. TEsorter adds retroelement context to help distinguish retroelement-associated predictions from retrovirus interpretations.
-4. **viHARMONY.** The final integration combines the strength and agreement of origin evidence, conflicting cellular/mobile-element signals, and support for retained regions. It reports primary or provisional candidates, evidence-based confidence, candidate proviral status, and taxonomic assignments. Better-supported taxonomy is separated from exploratory assignments, including candidate novel groups. Confidence tiers describe evidence support—not calibrated probabilities.
 
 ## Programs and roles
 
 | Program | DNA | RNA | Role | Default |
 | --- | --- | --- | --- | --- |
-| geNomad | Yes | Yes | Viral/plasmid-origin, candidate proviral regions, and taxonomic evidence | On |
+| geNomad | Yes | Yes | Origin, taxonomy and candidate proviral regions | On |
 | VirSorter2 | Yes | Yes | Viral discovery evidence | On |
-| Cenote-Taker3 | Yes | Yes | Viral hallmarks, candidate proviral regions, and and taxonomic evidence| On |
-| DeepMicroClass2 | Yes | No | Sequence-origin classification (cellular, organelle, or viral) | On for DNA |
+| Cenote-Taker3 | Yes | Yes | Viral hallmarks and candidate regions | On |
+| DeepMicroClass2 | Yes | No | Sequence-origin classification | On for DNA |
 | GiantHunter | Yes | No | Giant DNA virus discovery | On for DNA |
-| Deep6 | No | Yes | Sequence-origin classification (cellular or viral) | On for RNA |
-| VirBot | No | Yes | RNA virus-focused discovery program | On for RNA |
-| viCAT | Yes | Yes | Competitive viral/nonviral protein homology and taxonomy | Optional; requires both databases. Adds time but increases sensitivity and provides cellular/organelle evidence. |
-| CheckV | Yes | Yes | Quality assessment and candidate-region evidence | On |
-| TEsorter | Yes | Yes | Retroelement detection and interpretation | On |
-| VITAP | Yes | Yes | Additional viral taxonomic classification | On |
+| Deep6 | No | Yes | Sequence-origin classification | On for RNA |
+| VirBot | No | Yes | RNA-virus discovery | On for RNA |
+| viCAT | Yes | Yes | Competitive viral/nonviral homology and taxonomy | Opt-in |
+| CheckV | Yes | Yes | Quality and candidate-region evidence | On |
+| TEsorter | Yes | Yes | Transposable-element/retroelement context | On |
+| VITAP | Yes | Yes | Taxonomic classification | On |
 | vConTACT3 | Yes | Yes | Gene-sharing groups and taxonomic refinement | On |
 
-DNA/RNA columns describe viSUM's routing; individual programs differ in biological scope.
-
-## Preliminary performance
-
-The preliminary benchmark dataset include **539 DNA viral inputs, 874 RNA viral inputs, 2,390 nominal-negative DNA inputs** (cellular, mitochondrial, plasmid, plastid and retroelement sequences), **1,600 clean-RNA negative proxies**, and a separate 200-sequence RNA mobile-element challenge.
-
-These results use the all-tools configuration with viCAT enabled.
-
-| Benchmark endpoint | viSUM |
-| --- | --- |
-| DNA viral sensitivity | **477/539 (88.50%)** |
-| RNA viral sensitivity | **788/874 (90.16%)** |
-| DNA nominal-negative retention (label-based FPR; **see below**) | 101/2,390 (4.23%) |
-| Clean-RNA nominal-negative retention (label-based FPR) | 27/1,600 (1.69%) |
-
-**Why “nominal-negative retention”?** The preliminary benchmark used NCBI-derived sequences representing eukaryotic and prokaryotic cellular sources, organellar sequences (mitochondrial and plastid), and plasmids. Unlike the geNomad classification benchmark (the secondary benchmark in progress), which screened chromosome and plasmid data to remove predicted viral content, our nominal-negative sequences were not prefiltered to exclude virus-like regions. Source annotations were used as formal benchmark labels rather than independently verified biological ground truth: a cellular or plasmid source does not exclude viral homologs, integrated viral elements, or embedded proviral regions. Retained formal-negative sequences were therefore counted as false positives under the original labels, with evidence of virus-like content reviewed and reported separately. 
-
-Review of retained negatives found viral homologs and virus-like gene content; seven plasmid inputs contained coherent capsid/portal/terminase modules supporting phage-like candidates. Phage–plasmids are an established biological category ([Pfeifer et al., 2021](https://doi.org/10.1093/nar/gkab064)). Other retained sequences had mixed or unresolved evidence.
-
-**Evidence-adjusted DNA FPR: 1.97% for the virus-like-content discovery endpoint.** 
-
-Review identified **48 retained DNA inputs with localized virion/RdRP hallmarks or CheckV regional evidence plus local viral-protein homology**, and **seven endogenous-retroviral controls also identified by TEsorter**. 
-
-These preliminary development tests quantify detection and negative retention. viSUM also delivers integrated evidence, taxonomic context and confidence reporting; independent evaluation of taxonomic accuracy, confidence calibration and exact proviral boundaries remains future work.
-
-## Get started
-
-See the [usage guide](docs/usage.md) for installation, database preparation, resource settings and batch inputs. Once installed and configured:
-
-```bash
-bash ./visum -c visum.config -profile local_safe \
-  --input /absolute/path/to/contigs.fasta \
-  --prefix sample01 --type dna \
-  --outdir results/sample01
-```
-
-Use `--type rna` for RNA assemblies. Final candidates, classifications and review outputs are written under `<outdir>/<prefix>_results/viharmony/`.
-
-- [Usage and output guide](docs/usage.md)
-- [Database setup](docs/database-setup.md)
-- [All documentation](docs/README.md)
+DNA/RNA columns describe viSUM routing, not a guarantee of equal performance
+for every sequence type. Disable a program with `--run_<tool> false` if needed;
+this removes its evidence from the analysis.
 
 ## Who to cite
 
-When publishing results from viSUM, cite **viSUM and the underlying programs that contributed to your analysis**, including database preparation. Record the software versions and database releases used; not every optional program runs in every analysis.
+viCAT and viHARMONY are components of viSUM. Cite viSUM, the programs that ran,
+and their reference resources. Record the software version and database releases.
+Citation metadata for this review version is in [CITATION.cff](CITATION.cff).
+No beta.2 DOI has been assigned here.
 
-**viSUM beta-release citation:** viCAT and viHARMONY are components of viSUM and will be covered by that citation. Manuscript is in prep and will be released as a preprint ASAP.
+The published beta.1 citation is retained for that earlier version:
 
-Veglia, A.J. & Rivera-Vicéns, R.E. (2026). viSUM: An integrated framework for viral sequence discovery, evidence harmonization, and confidence-aware taxonomic classification (Version v0.9.0-beta.1) Zenodo. https://doi.org/10.5281/zenodo.22774539
+Veglia, A.J. & Rivera-Vicéns, R.E. (2026). *viSUM: An integrated framework for
+viral sequence discovery, evidence harmonization, and confidence-aware taxonomic
+classification* (Version v0.9.0-beta.1). Zenodo.
+[doi:10.5281/zenodo.22774539](https://doi.org/10.5281/zenodo.22774539).
+Do not describe that archived beta.1 record as a beta.2 release.
 
-| Program | Reference |
++| Program | Reference |
 | --- | --- |
 | geNomad | Camargo AP et al. (2024). [Identification of mobile genetic elements with geNomad](https://doi.org/10.1038/s41587-023-01953-y). *Nature Biotechnology* **42**, 1303–1312. |
 | VirSorter2 | Guo J et al. (2021). [VirSorter2: a multi-classifier, expert-guided approach to detect diverse DNA and RNA viruses](https://doi.org/10.1186/s40168-020-00990-y). *Microbiome* **9**, 37. |
@@ -148,3 +173,15 @@ Include the following methods where used by the enabled tools or database builde
 - **HMMER3:** Eddy SR (2011). [Accelerated Profile HMM Searches](https://doi.org/10.1371/journal.pcbi.1002195). *PLOS Computational Biology* **7**, e1002195.
 
 Software citations do not replace database attribution. Cite the source resources and exact releases used for reference proteins, taxonomy and retroelement models. For example, use the release-specific reference in the [vConTACT3 database citation guide](https://vcontact3.readthedocs.io/en/latest/citations.html) and the appropriate database reference from [TEsorter's citation instructions](https://github.com/zhangrengang/TEsorter#citation). For viCAT, credit the supplied viral and nonviral source resources as well as viSUM; for VITAP, record the ICTV/reference release used to build its database.
+
+## License and support
+
+viSUM software is distributed under the [MIT license](LICENSE). Third-party
+software and reference data retain their own licenses and attribution terms;
+this source package does not include the large external databases.
+
+Report issues with your version, input type, redacted command and relevant
+logs. Do not upload private sequences or credentials. Complete fresh-install
+validation and the full release benchmark are still in progress; historical
+development results are not beta.2 performance measurements.
+Maintainer records are separate from the user guides: [development documentation](docs/development/README.md).

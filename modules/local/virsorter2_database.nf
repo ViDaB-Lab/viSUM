@@ -30,19 +30,11 @@ process PREPARE_VIRSORTER2_DATABASE {
 
     validate_database() {
         local candidate="\$1"
-        local group
-
-        [[ -d "\$candidate" ]] || return 1
-        [[ -r "\$candidate" ]] || return 1
-        [[ -s "\$candidate/hmm/viral/combined.hmm" ]] || return 1
-
-        for group in dsDNAphage ssDNA NCLDV RNA lavidaviridae; do
-            [[ -s "\$candidate/group/\$group/model" ]] || return 1
-        done
-
-        # VirSorter2 uses Snakemake environments installed under the database.
-        find "\$candidate/conda_envs" -type f -path '*/conda-meta/history' \
-            -print -quit 2>/dev/null | grep -q . || return 1
+        local marker_args=()
+        # Managed validation occurs under flock, including post-install checks.
+        [[ "\$DB_SOURCE" != 'user-supplied' ]] && marker_args=(--allow-installing)
+        python "${projectDir}/bin/validate_reference_database.py" virsorter2 \
+            "\$candidate" "\${marker_args[@]}"
     }
 
     write_metadata() {
@@ -100,7 +92,7 @@ process PREPARE_VIRSORTER2_DATABASE {
     exec 9>"\${DB_DEST}.install.lock"
     flock 9
 
-    if validate_database "\$DB_DEST"; then
+    if [[ ! -e "\$INSTALLING_MARKER" && ! -L "\$INSTALLING_MARKER" ]] && validate_database "\$DB_DEST"; then
         rm -f "\$INSTALLING_MARKER"
         emit_database 'skipped-existing-managed-database'
         exit 0

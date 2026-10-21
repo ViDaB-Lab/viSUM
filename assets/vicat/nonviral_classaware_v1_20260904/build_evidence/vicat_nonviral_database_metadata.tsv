@@ -1,0 +1,10 @@
+field	value
+database_name	viCAT class-aware nonviral references
+source_proteins	3731712
+representatives	2708478
+clustering_min_seq_id	0.90
+clustering_bidirectional_coverage	0.80
+minimum_protein_length	none
+threads_used	52
+reference_classes	CELLULAR_CHROMOSOME,CELLULAR_UNPLACED,PLASMID,PLASTID,MITOCHONDRIAL,SHARED_NONVIRAL
+build_completed	2026-09-04T17:25:40-05:00

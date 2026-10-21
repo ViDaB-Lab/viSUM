@@ -7,10 +7,12 @@ process PREPARE_VICAT_NONVIRAL_DATABASE {
     cache false
     cpus { (classified_dir || source_manifest) ? Math.min(params.vicat_nonviral_build_cpus as int, params.max_cpus as int) : 1 }
     memory { (classified_dir || source_manifest) ? params.vicat_nonviral_build_memory : '4 GB' }
-    time { (classified_dir || source_manifest) ? params.vicat_nonviral_build_time : '2h' }
+    time { params.vicat_nonviral_build_time }
 
     publishDir "${params.outdir}/database_setup",
         mode: 'copy',
+        overwrite: true,
+        failOnError: true,
         pattern: 'vicat_nonviral_database_setup_metadata.tsv'
 
     input:
@@ -31,8 +33,7 @@ process PREPARE_VICAT_NONVIRAL_DATABASE {
     if [[ ! -e "\$DB" && ! -L "\$DB" ]]; then
         [[ -n "${classified_dir}" || -n "${source_manifest}" ]] || {
             echo 'ERROR: No viCAT nonviral database exists. Supply --vicat_nonviral_classified_dir' >&2
-            echo 'or all of --vicat_nonviral_manifest, --vicat_nonviral_package_root,' >&2
-            echo 'and --vicat_nonviral_metadata_root to build locally.' >&2
+            echo 'or enable --vicat_nonviral_auto_download, or supply all three local NCBI source inputs.' >&2
             exit 1
         }
         mkdir -p "\$(dirname "\$DB")"
@@ -43,12 +44,17 @@ process PREPARE_VICAT_NONVIRAL_DATABASE {
             args=()
             if [[ -n "${classified_dir}" ]]; then
                 args=(--classified-dir "${classified_dir}")
+            elif [[ -z "${package_root}" && -z "${metadata_root}" ]]; then
+                args=(--manifest "${source_manifest}" --download-sources)
             else
                 args=(--manifest "${source_manifest}" --package-root "${package_root}" --metadata-root "${metadata_root}")
             fi
             python prepare_vicat_nonviral_build.py "\${args[@]}" \
                 --destination "\$DB" --work-dir "\${DB}.build" --threads "${task.cpus}"
             ACTION='built-from-user-supplied-nonviral-files'
+            if [[ -n "${source_manifest}" && -z "${package_root}" && -z "${metadata_root}" ]]; then
+                ACTION='downloaded-and-built-from-assembly-manifest'
+            fi
         fi
     fi
     [[ -d "\$DB" && -r "\$DB" ]] || {
@@ -56,21 +62,7 @@ process PREPARE_VICAT_NONVIRAL_DATABASE {
         exit 1
     }
 
-    REQUIRED=(
-        vicat_nonviral.dmnd
-        vicat_nonviral_representatives.faa.gz
-        vicat_nonviral_representative_metadata.parquet
-        vicat_nonviral_database_metadata.tsv
-        vicat_nonviral_cluster_summary.tsv
-        SHA256SUMS
-        .visum_db_complete
-    )
-    for name in "\${REQUIRED[@]}"; do
-        [[ -s "\$DB/\$name" ]] || {
-            echo "ERROR: viCAT nonviral database is missing: \$DB/\$name" >&2
-            exit 1
-        }
-    done
+    python "${projectDir}/bin/validate_reference_database.py" vicat_nonviral "\$DB"
 
     diamond dbinfo --db "\$DB/vicat_nonviral.dmnd" >/dev/null
     DIAMOND_COUNT=\$(diamond dbinfo --db "\$DB/vicat_nonviral.dmnd" \

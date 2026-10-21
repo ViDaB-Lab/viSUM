@@ -13,7 +13,7 @@ process RUN_GIANTHUNTER {
 
     input:
     tuple val(prefix), val(type), path(normalized_fasta), path(header_map)
-    tuple path(gianthunter_database), path(gianthunter_database_metadata)
+    path gianthunter_database
 
     output:
     tuple val(prefix),

@@ -24,14 +24,9 @@ class Vcontact3AnalysisWorkflowContractTests(unittest.TestCase):
 
     def test_database_output_is_reusable_for_every_sample(self) -> None:
         workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
-        assignment = workflow.index(
-            "ch_vcontact3_database = PREPARE_VCONTACT3_DATABASE.out.database"
-        )
-        invocation = workflow.index("RUN_VCONTACT3(", assignment)
-        database_block = workflow[assignment:invocation]
-
-        self.assertIn("tuple(database, metadata)", database_block)
-        self.assertIn(".first()", database_block)
+        self.assertIn("ch_vcontact3_database = Channel.value(tuple(", workflow)
+        self.assertIn("file(prepared.vcontact3.path), prepared.vcontact3.release", workflow)
+        self.assertNotIn("PREPARE_VCONTACT3_DATABASE", workflow)
         self.assertIn("if( runVcontact3 ) harmonyOnlyTools << 'vcontact3'", workflow)
 
     def test_module_uses_official_command_and_resource_budget(self) -> None:
@@ -58,6 +53,12 @@ class Vcontact3AnalysisWorkflowContractTests(unittest.TestCase):
         self.assertIn("skipped_no_refined_candidates", module)
         self.assertIn("candidate_assignment_row_count", module)
         self.assertIn("clustered_candidate_count", module)
+
+    def test_analysis_checks_parquet_before_running_vcontact3(self) -> None:
+        module = (ROOT / 'modules/local/run_vcontact3.nf').read_text()
+        check = 'python -B "${projectDir}/bin/check_vcontact3_parquet.py"'
+        self.assertEqual(module.count(check), 1)
+        self.assertLess(module.index(check), module.index('if ! vcontact3 run'))
 
     def test_standardizer_publishes_formal_evidence_and_group_membership(self) -> None:
         module = (ROOT / "modules/local/standardize_vcontact3.nf").read_text(

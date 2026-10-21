@@ -8,6 +8,8 @@ channels:
   - anaconda
 
 dependencies:
+  # Setup shares this environment; inference dependency pins below are unchanged.
+  - git
   - _libgcc_mutex=0.1
   - _openmp_mutex=4.5
   - _tflow_select=2.1.0

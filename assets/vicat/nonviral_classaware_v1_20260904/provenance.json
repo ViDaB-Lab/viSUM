@@ -1,0 +1,112 @@
+{
+  "build": {
+    "completed": "2026-09-04T17:25:40-05:00",
+    "cov_mode": 0,
+    "coverage": 0.8,
+    "diamond_version": "2.2.5.185",
+    "min_seq_id": 0.9,
+    "minimum_protein_length": null,
+    "mmseqs_version": "18.8cc5c",
+    "recorded_threads": 52,
+    "representatives": 2708478
+  },
+  "database_files_sha256": {
+    "classes/cellular_chromosome.representatives.faa.gz": "668188d649f5154e898ed89d428488dff27fca8450617ab67c60cd7f7c7e61dd",
+    "classes/cellular_unplaced.representatives.faa.gz": "f03a7c3525b26da55a5cd11aa959a3d26103124318c81c2bcaa33e9027f55506",
+    "classes/mitochondrial.representatives.faa.gz": "8762868456caec6969ca0a8bb8a2e53b465de4d377fb4bac0ca911634c9d412e",
+    "classes/plasmid.representatives.faa.gz": "b5610a843f2c00edbb9852ac5570fa493f73f76d01540fb5c51002eb9c7343f6",
+    "classes/plastid.representatives.faa.gz": "7aaa2d3b1e43bacc35bce6d7d2549db295dfbbcba1fc7f053db40661a238ac48",
+    "classes/shared_nonviral.representatives.faa.gz": "f075abba332703492a8bfa9613f3ad2a53f020ae3af458050ebe867d4bf3d29a",
+    "vicat_nonviral.dmnd": "c7c1e2bcfb1d19ebb38defd27acba2b16b1c2af511fd5fd5a18071bf30d3745e",
+    "vicat_nonviral_build_config.tsv": "acd93726a43963dcc481a07856b6086f5e96832175b01949fe1280d9967e7d54",
+    "vicat_nonviral_classification_summary.tsv": "0ea5f86b9237b20537aa8117823b1a9568cb6d61f9d059f78e0e24b33aa8a448",
+    "vicat_nonviral_cluster_membership.tsv.gz": "9db6bdcf49093d4353b21818c289ddbe751571363af1a231abc0542245984507",
+    "vicat_nonviral_cluster_summary.tsv": "eba5a99c043b230cf572c1ed04d1b6bc59bad66323263f4447ff68e054a41156",
+    "vicat_nonviral_database_metadata.tsv": "195cf2366b5eb54dd832562f0e45d348ebb8fc4e6f78c06224585c5659102ffc",
+    "vicat_nonviral_representative_metadata.parquet": "9d3c098d80929357d3bdc55439774caddcadf921d087c88493ba5e0619595590",
+    "vicat_nonviral_representative_metadata.tsv.gz": "ff1c9f21c4805d080945124455949cfb08a9d0b6e7e448f24876464ac5fd49c2",
+    "vicat_nonviral_representatives.faa.gz": "e2427304bc76bbd83d7c14e1c0c5082ec9c2f760a55e0df764975f97f5e5ec0e",
+    "vicat_nonviral_source_metadata.tsv.gz": "dbc7cf8fffecad85e65d4670300691f2cc30f3a4e9ac9848c73e9640429dc9c8"
+  },
+  "historical_scripts": {
+    "matching_git_commit": "d8805bd8e83a38aff0c3d97f2b2306a4b74f97f1",
+    "scope": "These two files match; this does not identify the entire runtime checkout.",
+    "sha256": {
+      "bin/build_vicat_nonviral_database.sh": "f2c150ad1f95f12c1beea28fdc07b710667ce1cee176b711296b844e56200a01",
+      "bin/prepare_vicat_nonviral_cluster_metadata.py": "ec38289a2a410c7cd9e287ced43dd8dfd28ba713581f2b4cba75b0016a049871"
+    }
+  },
+  "inventory": {
+    "assemblies_by_group": {
+      "archaea": 80,
+      "bacteria": 300,
+      "fungi": 30,
+      "invertebrate": 20,
+      "plant": 20,
+      "protozoa": 20,
+      "vertebrate_mammalian": 10
+    },
+    "assembly_count": 480,
+    "classification_notes": {
+      "": 3731648,
+      "catalog_fallback_no_feature_mapping": 64
+    },
+    "included_protein_count": 3731712,
+    "proteins_by_class": {
+      "CELLULAR_CHROMOSOME": 3606714,
+      "CELLULAR_UNPLACED": 82555,
+      "MITOCHONDRIAL": 315,
+      "PLASMID": 40464,
+      "PLASTID": 1212,
+      "SHARED_NONVIRAL": 452
+    },
+    "proteins_by_group": {
+      "archaea": 229042,
+      "bacteria": 1121531,
+      "fungi": 256155,
+      "invertebrate": 566968,
+      "plant": 952785,
+      "protozoa": 126283,
+      "vertebrate_mammalian": 478948
+    }
+  },
+  "manifest": {
+    "filename": "assembly_manifest.tsv",
+    "recovery": "Unique source_accession and consistent group/organism/taxid from every catalog row; accession-sorted.",
+    "sha256": "7039630fd08289d871c5c714ff3eaf4fe96a4f164063b7fa73dc6e40f6cf2a29"
+  },
+  "not_verified_here": [
+    "Current server database bytes",
+    "Absent DIAMOND/FASTA/parquet/membership files"
+  ],
+  "redistribution_status": "Not cleared by this audit; retain accession inventory and review applicable notices before hosting.",
+  "snapshot_id": "nonviral_classaware_v1_20260904",
+  "source_catalog": {
+    "filename": "vicat_nonviral_source_metadata.tsv.gz",
+    "sha256": "dbc7cf8fffecad85e65d4670300691f2cc30f3a4e9ac9848c73e9640429dc9c8"
+  },
+  "source_review": {
+    "filename": "nonviral_classaware_v1_review_20260904_172747.tar.gz",
+    "sha256": "54e0a6d5228a9a53a5205252bcbfdbe5a1d45efa68dbfceb6edcca4af4feb814"
+  },
+  "status": "historical_build_documented_not_a_new_database_release",
+  "unmatched_summary": {
+    "chronology": "unknown; do not infer which classification state came first",
+    "excluded_proteins": 404,
+    "filename": "unmatched_evidence/classification_summary.tsv",
+    "included_proteins": 3731308,
+    "sha256": "02196e41954dd8de60fac424a3017380444d00fbc57cfb5e675c290824b9c4a2",
+    "source_filename": "vicat_nonviral_classification_summary.tsv",
+    "status": "unmatched_not_a_build_input_or_authoritative_summary"
+  },
+  "unrecovered_provenance": [
+    "Original assembly-selection criteria",
+    "Original download dates and commands",
+    "Original protein FASTA and feature-table hashes/annotation revisions"
+  ],
+  "verified_here": [
+    "Complete source-catalog hash and row-level inventory/counts",
+    "Hashes of four build metadata/summary files present in the review",
+    "Historical builder and metadata-helper hashes against Git"
+  ]
+}

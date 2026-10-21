@@ -1,0 +1,37 @@
+{
+  "schema": "visum-ictv-reconciliation-prototype-v1",
+  "target_release": "MSL41.v1",
+  "source_commit": "e83bc2c73a746165a209ba88d76ef8a8fb8635d2",
+  "source_url": "https://github.com/ICTV-Virus-Knowledgebase/ICTVdatabase",
+  "sources": {
+    "taxonomy_node_export.utf8.txt": {
+      "sha256": "a456548c9063bca6a1314352da7e4b8b7bdfea93bee37397234d4f51a6f6cb34",
+      "git_blob": "5c8646ed0857bb199a4299dfbfdfab815b25a2e1",
+      "bytes": 57936560
+    },
+    "taxonomy_node_merge_split.utf8.txt": {
+      "sha256": "d4a4244b0e8ddfd267ab1b37f3ac8ee42c8608e90293f21f6d95dd86a924de27",
+      "git_blob": "072100c76f5eca9fd645eeb55b3023a28c535df0",
+      "bytes": 1181936
+    },
+    "taxonomy_toc.utf8.txt": {
+      "sha256": "8cf3a55f20f676a9f69a0f299c1b0f01e50766bad0ec1a677a77073760966418",
+      "git_blob": "52f54ab2f2ba83ca2f0a4b8361fbee27dfb9c053",
+      "bytes": 1115
+    },
+    "taxonomy_level.utf8.txt": {
+      "sha256": "d79af7df4aaa68d565085ac4b386337525d514b09b79537625534d3284c80387",
+      "git_blob": "74cb8dcf2677bb901aee0bab41c6bacca52d7d2d",
+      "bytes": 1606
+    },
+    "LICENSE.txt": {
+      "sha256": "7e8e8c49e0cfc94108cb1fcab5be846dfa57ab45232614a44d33af31ef538faf",
+      "git_blob": "3f00874ad9f5fb00fed152078981b960961fc4e2",
+      "bytes": 1531
+    }
+  },
+  "bundle_sha256": "ea759a90abe71a9065276040720cdc6c5df2d2b5ae68e0431d238c38707e81e1",
+  "target_node_count": 22671,
+  "historical_name_rank_count": 35417,
+  "attribution": "Derived from ICTVdatabase, International Committee on Taxonomy of Viruses; CC BY 4.0. Fields projected and historical relationships indexed by viSUM prototype; not endorsed by ICTV."
+}

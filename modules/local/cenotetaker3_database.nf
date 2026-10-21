@@ -28,82 +28,12 @@ process PREPARE_CENOTETAKER3_DATABASE {
     AUTO_DOWNLOAD="${auto_download}"
     HMM_DB_VERSION="${hmm_database_version}"
 
-    report_missing_file() {
-        local required_file="\$1"
-        local report_errors="\$2"
-
-        if [[ "\$report_errors" == 'true' ]]; then
-            echo "Validation failed: missing or empty required file: \$required_file" >&2
-        fi
-    }
-
-    validate_mmseqs_database() {
-        local database_prefix="\$1"
-        local report_errors="\$2"
-
-        [[ -s "\$database_prefix" ]] || {
-            report_missing_file "\$database_prefix" "\$report_errors"
-            return 1
-        }
-        [[ -s "\${database_prefix}.dbtype" ]] || {
-            report_missing_file "\${database_prefix}.dbtype" "\$report_errors"
-            return 1
-        }
-    }
-
-    validate_taxonomy_database() {
-        local database_prefix="\$1"
-        local report_errors="\$2"
-
-        validate_mmseqs_database "\$database_prefix" "\$report_errors" || return 1
-        [[ -s "\${database_prefix}_mapping" ]] || {
-            report_missing_file "\${database_prefix}_mapping" "\$report_errors"
-            return 1
-        }
-        [[ -s "\${database_prefix}_taxonomy" ]] || {
-            report_missing_file "\${database_prefix}_taxonomy" "\$report_errors"
-            return 1
-        }
-    }
-
     validate_database() {
         local candidate="\$1"
-        local report_errors="\${2:-false}"
-        local hmm_name
-        local required_hmm
-        local domain_list
-
-        if [[ ! -d "\$candidate" || ! -r "\$candidate" ]]; then
-            if [[ "\$report_errors" == 'true' ]]; then
-                echo "Validation failed: database directory is missing or unreadable: \$candidate" >&2
-            fi
-            return 1
-        fi
-
-        for hmm_name in \
-            Virion_HMMs \
-            DNA_rep_HMMs \
-            RDRP_HMMs \
-            Useful_Annotation_HMMs \
-            phrogs_for_ct; do
-            required_hmm="\$candidate/hmmscan_DBs/\$HMM_DB_VERSION/\${hmm_name}.h3m"
-            [[ -s "\$required_hmm" ]] || {
-                report_missing_file "\$required_hmm" "\$report_errors"
-                return 1
-            }
-        done
-
-        validate_taxonomy_database \
-            "\$candidate/mmseqs_DBs/ct3_hallmark.taxDB" "\$report_errors" || return 1
-        validate_taxonomy_database \
-            "\$candidate/mmseqs_DBs/refseq_virus_prot_taxDB" "\$report_errors" || return 1
-        validate_mmseqs_database \
-            "\$candidate/mmseqs_DBs/CDD" "\$report_errors" || return 1
-        domain_list="\$candidate/viral_cdds_and_pfams_191028.txt"
-        [[ -s "\$domain_list" ]] || {
-            report_missing_file "\$domain_list" "\$report_errors"
-            return 1
-        }
+        local marker_args=()
+        [[ "\$DB_SOURCE" != 'user-supplied' ]] && marker_args=(--allow-installing)
+        python "${projectDir}/bin/validate_reference_database.py" cenotetaker3 \
+            "\$candidate" --hmm-version "\$HMM_DB_VERSION" "\${marker_args[@]}"
     }
 
     write_metadata() {
@@ -165,7 +95,7 @@ process PREPARE_CENOTETAKER3_DATABASE {
     exec 9>"\${DB_DEST}.install.lock"
     flock 9
 
-    if validate_database "\$DB_DEST"; then
+    if [[ ! -e "\$INSTALLING_MARKER" && ! -L "\$INSTALLING_MARKER" ]] && validate_database "\$DB_DEST"; then
         rm -f "\$INSTALLING_MARKER"
         emit_database 'skipped-existing-managed-database'
         exit 0

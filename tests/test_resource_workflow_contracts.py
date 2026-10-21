@@ -17,17 +17,13 @@ class ResourceWorkflowContractTests(unittest.TestCase):
     def read_module(self, name: str) -> str:
         return (MODULES / name).read_text(encoding="utf-8")
 
-    def test_local_executor_cap_is_applied_before_jvm_startup(self) -> None:
-        self.assertIn("max_cpus      = 8", self.config)
-        self.assertIn("max_memory    = '48 GB'", self.config)
-        self.assertNotIn("executor.cpus = params.max_cpus", self.config)
-        self.assertNotIn("executor.memory = params.max_memory", self.config)
-        self.assertNotIn("executor.$local", self.config)
-        self.assertIn("-XX:ActiveProcessorCount=${MAX_CPUS}", self.launcher)
-        self.assertIn('VISUM_LOCAL_CPU_CAP="$MAX_CPUS"', self.launcher)
-        self.assertIn('taskset --cpu-list "$selected_spec"', self.launcher)
-        self.assertIn('VISUM_CPU_CAP_MODE="scheduler+affinity"', self.launcher)
-        self.assertIn("System.getenv('VISUM_LOCAL_CPU_CAP')", self.workflow)
+    def test_local_executor_uses_native_budgets_without_launcher_state(self) -> None:
+        self.assertIn("executor.cpus = params.max_cpus as int", self.config)
+        self.assertIn("executor.memory = params.max_memory", self.config)
+        self.assertNotIn("taskset", self.launcher)
+        self.assertNotIn("NXF_OPTS", self.launcher)
+        self.assertNotIn("VISUM_LOCAL_CPU_CAP", self.workflow)
+        self.assertIn('exec "$nextflow_bin" run "$ROOT_DIR/visum_nextflow.nf" "$@"', self.launcher)
 
     def test_utility_processes_inherit_one_cpu(self) -> None:
         process_block = re.search(
@@ -36,6 +32,52 @@ class ResourceWorkflowContractTests(unittest.TestCase):
         self.assertIsNotNone(process_block)
         self.assertRegex(process_block.group("body"), r"\bcpus\s*=\s*1\b")
         self.assertNotIn("params.threads", process_block.group("body"))
+
+    def test_all_twenty_wall_time_defaults_are_null(self) -> None:
+        expected = {
+            'utility_time', 'genomad_time', 'checkv_time', 'tesorter_time',
+            'deep6_time', 'deepmicroclass2_time', 'virsorter2_time', 'ct3_time',
+            'vitap_time', 'vitap_standardizer_time', 'vicat_nonviral_build_time',
+            'vicat_build_time', 'vicat_orf_time', 'vicat_time',
+            'vicat_standardizer_time', 'gianthunter_time', 'virbot_time',
+            'vcontact3_time', 'vcontact3_standardizer_time', 'harmonizer_time',
+        }
+        defaults = dict(re.findall(r'(?m)^\s*(\w+_time)\s*=\s*([^\n]+)', self.config))
+        self.assertEqual(set(defaults), expected)
+        self.assertTrue(all(value.strip() == 'null' for value in defaults.values()), defaults)
+
+    def test_profiles_cannot_reintroduce_shipped_time_limits(self) -> None:
+        declarations = re.findall(r'(?m)^\s*(?:process\.)?time\s*=\s*([^\n]+)', self.config)
+        self.assertEqual(declarations, ['{ params.utility_time }'])
+
+    def test_every_module_time_directive_uses_an_overridable_parameter(self) -> None:
+        defaults = set(re.findall(r'(?m)^\s*(\w+_time)\s*=', self.config))
+        declarations = []
+        for path in MODULES.glob('*.nf'):
+            for directive in re.findall(r'(?m)^\s*time\s+([^\n]+)', path.read_text(encoding='utf-8')):
+                with self.subTest(module=path.name, directive=directive):
+                    match = re.fullmatch(r'(?:params\.(\w+)|\{\s*params\.(\w+)\s*\})', directive.strip())
+                    self.assertIsNotNone(match, 'A module bypasses the configurable unlimited default')
+                    self.assertIn(match.group(1) or match.group(2), defaults)
+                    declarations.append(path.name)
+        self.assertGreaterEqual(len(declarations), 25)
+
+    def test_vicat_setup_validation_and_build_share_the_explicit_time_override(self) -> None:
+        for name, parameter in (
+            ('vicat_database.nf', 'vicat_build_time'),
+            ('vicat_nonviral_database.nf', 'vicat_nonviral_build_time'),
+        ):
+            with self.subTest(module=name):
+                self.assertIn('time { params.' + parameter + ' }', self.read_module(name))
+
+    def test_harmonizer_has_a_fixed_configurable_32_gb_request(self) -> None:
+        self.assertRegex(self.config, r"harmonizer_memory\s*=\s*'32 GB'")
+        self.assertRegex(self.config, r'harmonizer_cpus\s*=\s*1\b')
+        module = self.read_module('viharmony.nf')
+        self.assertIn('memory params.harmonizer_memory', module)
+        self.assertIn('time params.harmonizer_time', module)
+        self.assertIn('Math.min(params.harmonizer_cpus as int, params.max_cpus as int)', module)
+        self.assertRegex(self.config, r"max_memory\s*=\s*'64 GB'")
 
     def test_each_discovery_program_uses_its_own_cpu_parameter(self) -> None:
         expected = {

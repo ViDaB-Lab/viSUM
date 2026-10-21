@@ -45,7 +45,11 @@ def test_hallmark_cannot_supply_a_primary_vote():
 def test_cached_modules_include_policy_change():
     root=Path(__file__).resolve().parents[1]
     assert 'Adapter policy v1.2' in (root/'modules/local/standardize_virsorter2.nf').read_text()
-    assert 'viHARMONY decision policy v1.2' in (root/'modules/local/viharmony.nf').read_text()
+    # v1.4 adds reviewed TE routing while preserving the v1.2 hallmark guard.
+    harmony_module = (root/'modules/local/viharmony.nf').read_text()
+    assert 'viHARMONY decision policy v1.4' in harmony_module
+    assert 'TE-routing-v1' in harmony_module
+    assert 'VS2 hallmark-only calls are review-only' in harmony_module
     assert 'Routing policy v1.2' in (root/'modules/local/discovery_gate.nf').read_text()
 
 @pytest.mark.parametrize('strength', ['review', 'qualified', 'strong'])

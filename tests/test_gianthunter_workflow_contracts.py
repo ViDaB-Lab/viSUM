@@ -71,17 +71,11 @@ class GiantHunterWorkflowContractTests(unittest.TestCase):
         self.assertNotIn("--virus-fasta", self.standardizer)
 
     def test_database_validation_covers_runtime_assets(self):
-        for required_name in (
-            "database.dmnd",
-            "RefVirus.dmnd",
-            "RefVirus.faa",
-            "RefVirus_anno.pkl",
-            "transformer.pth",
-            "names.csv",
-            "nodes.csv",
-            "taxid.csv",
-        ):
+        self.assertIn('validate_reference_database.py" gianthunter', self.database)
+        # Complete/incomplete assets are exercised through the shared contract.
+        for required_name in ('database.dmnd', 'RefVirus.dmnd'):
             self.assertIn(required_name, self.database)
+        self.assertIn('diamond dbinfo', self.database)
 
 
 if __name__ == "__main__":

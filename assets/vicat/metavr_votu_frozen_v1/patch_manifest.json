@@ -1,0 +1,35 @@
+{
+  "before": {
+    "merged_portal_groups": 888,
+    "method_changed_rows": 0,
+    "missing_original": 0,
+    "missing_portal": 0,
+    "original_rows": 24435662,
+    "original_votu_groups": 12705643,
+    "portal_rows": 24435662,
+    "portal_votu_groups": 12705385,
+    "rank_changed_rows": 0,
+    "split_original_groups": 598,
+    "votu_changed_rows": 1409
+  },
+  "columns": [
+    "uvig",
+    "portal_votu_key",
+    "frozen_votu_key"
+  ],
+  "converted_portal_sha256": "9136964eb5fe77f5546b12074197c88c5022d78eb5093582c5869f2059d7f692",
+  "deployment_performed": false,
+  "differences_sha256": "179386fce164662417cc1d3f93a86b331eff588dfa7fe08dc10e3de4feb3f159",
+  "expected_changes": 1409,
+  "expected_rows": 24435662,
+  "full_source_equivalence": false,
+  "original_metadata_sha256": "df07af7f9364374d3726f75421d4ad29262a8cbdf97ad05237af2b01fc8a8a3d",
+  "patch_sha256": "2dd0e1e172898655d6c0dfed8ab6937a6f5edbcc8a2c308946254416e8bf4d26",
+  "protein_equivalence": "NOT TESTED",
+  "purpose": "Restore frozen reference grouping, NOT declare portal assignments incorrect",
+  "schema": "visum-metavr-votu-compatibility-v1",
+  "source_identity": {
+    "original_metadata_sha256": "df07af7f9364374d3726f75421d4ad29262a8cbdf97ad05237af2b01fc8a8a3d",
+    "portal_sha256": "b1260bd415f0d09503e6e8c36c9f773b0c4411f53aecec449d6ed7db8e87dfb7"
+  }
+}

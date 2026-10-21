@@ -11,6 +11,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
+from benchmark_bundle import Bundle
 
 TOOLS=['genomad','virsorter2','cenotetaker3','deep6','deepmicroclass2','virbot','gianthunter','vicat']
 
@@ -34,37 +35,36 @@ def write(path,rr):
 def evaluate(root,out):
     out.mkdir(parents=True,exist_ok=True)
     on=next(p for p in root.glob('rna_pair_floor_*') if (p/'BMARK_RNA_VIRAL_results').exists())
-    off=next(root.glob('rna_pair_OFF_*'))
+    off=next(root.glob('rna_pair_OFF_*'),None)
     metrics=[];calls=[];negative=[];deltas=[];integrity=[];details=[];regression=[]
     for folder in sorted(on.glob('*_results')):
         s=folder.name.removesuffix('_results');h=folder/'viharmony'
         typ='rna' if s.startswith('RNANEG') or s=='BMARK_RNA_VIRAL' else 'dna'
         positive=s in {'BMARK_DNA_VIRAL','BMARK_RNA_VIRAL'}
-        disp=read(h/f'{s}.sequence_disposition.tsv')
+        bundle=Bundle(h,s,allow_missing=True)
+        disp=bundle.table('disposition')
         mapping={r['normalized_name']:r['original_contig_name'] for r in disp}
         assert len(mapping)==len(disp)==len(set(mapping.values()))
         ids=set(mapping);n=len(ids)
-        primary=read(h/f'{s}.database_candidates.tsv')
-        meta=read(h/f'{s}.final_metadata.tsv')
-        manifest=json.loads((h/f'{s}.harmonizer_manifest.json').read_text())
-        for entry in manifest['outputs'].values():
-            p=h/entry['file']
-            if p.exists():
-                assert hashlib.sha256(p.read_bytes()).hexdigest()==entry['sha256'],p
-                integrity.append(dict(sample=s,file=entry['file'],status='hash_match'))
-            else:integrity.append(dict(sample=s,file=entry['file'],status='not_extracted_or_not_packaged'))
+        primary=bundle.table('database_tsv')
+        meta=bundle.table('metadata')
+        integrity.extend(bundle.integrity)
         called={r['normalized_name'] for r in primary}; assert called<=ids
-        sets={'viSUM_ON':called}
-        if (off/folder.name).exists():
+        _,endpoints=bundle.endpoints()
+        if called!=endpoints['primary']:raise ValueError('Primary endpoint mismatch')
+        sets={'viSUM_ON':called,'viSUM_viral_candidates':endpoints['viral_candidates'],
+              'viSUM_TE_candidates':endpoints['TE_candidates'],'viSUM_TE_only':endpoints['TE_only']}
+        if off is not None and (off/folder.name).exists():
             old=off/folder.name/'viharmony'
-            sets['viSUM_OFF']={r['normalized_name'] for r in read(old/f'{s}.database_candidates.tsv')}
+            previous=Bundle(old,s,allow_missing=True)
+            sets['viSUM_OFF']=previous.endpoints()[1]['primary']
             if typ=='dna':
                 for suffix in ['final_metadata.tsv','sequence_disposition.tsv','database_candidates.tsv','provisional_metadata.tsv']:
-                    assert (old/f'{s}.{suffix}').read_bytes()==(h/f'{s}.{suffix}').read_bytes(),(s,suffix)
+                    from benchmark_bundle import SUFFIX_LABELS
+                    label=SUFFIX_LABELS[suffix]
+                    assert previous.path(label).read_bytes()==bundle.path(label).read_bytes(),(s,suffix)
                 regression.append(dict(sample=s,status='DNA_ON_OFF_identical_for_four_tables'))
-        else:
-            demoted=set(manifest['policy']['rna_pair_homology_floor_demoted_ids'])
-            sets['viSUM_OFF']=called|{r['normalized_name'] for r in meta if r['final_sequence_id'] in demoted}
+        # Absent OFF runs are not reconstructed from demotion annotations.
         for tool in TOOLS:
             p=folder/tool/f'{s}.{tool}_evidence.tsv'
             if not p.exists():
@@ -80,9 +80,12 @@ def evaluate(root,out):
                 assert native<=ids and raw<=native
                 sets['virsorter2_native']=native
         for method,selected in sets.items():
-            metrics.append(dict(sample=s,input_type=typ,positive=positive,method=method,n=n,called=len(selected),rate=len(selected)/n,status='evaluated'))
+            interpretation=('TE_export_rate_not_viral_detection' if method.startswith('viSUM_TE') else
+                            'original_label_sensitivity' if positive else 'original_label_FPR')
+            metrics.append(dict(sample=s,input_type=typ,positive=positive,method=method,n=n,called=len(selected),
+                                rate=len(selected)/n,status='evaluated',interpretation=interpretation))
             for sid in sorted(ids):calls.append(dict(sample=s,original_id=mapping[sid],normalized_id=sid,positive=positive,method=method,called=int(sid in selected)))
-            if method not in {'viSUM_ON','viSUM_OFF'}:
+            if not method.startswith('viSUM_'):
                 deltas.append(dict(sample=s,method=method,n=n,both=len(called&selected),visum_only=len(called-selected),tool_only=len(selected-called),neither=len(ids-called-selected)))
         grouped=collections.defaultdict(list)
         for r in primary:grouped[r['normalized_name']].append(r)
@@ -92,7 +95,8 @@ def evaluate(root,out):
                 evidence_class='extracted_region_candidate' if extracted else 'intact_retention_no_extracted_region'
                 negative.append(dict(sample=s,input_type=typ,original_id=mapping[sid],normalized_id=sid,evidence_class=evidence_class,retained_records=len(rr),extracted_regions=len(extracted),independently_confirmed_provirus='not_established'))
                 details.extend(dict(sample=s,evidence_class=evidence_class,**r) for r in rr)
-        print(s,n,'viSUM',len(called),'regions',sum(r['record_type']!='input_contig' for r in primary),'TOOLS',[(k,len(v)) for k,v in sets.items() if k not in {'viSUM_ON','viSUM_OFF'}])
+        print(s,n,'viSUM primary',len(called),'viral candidates',len(endpoints['viral_candidates']),
+              'TE exports',len(endpoints['TE_candidates']),'TE-only inputs',len(endpoints['TE_only']))
     for name,rr in [('metrics.tsv',metrics),('input_calls.tsv',calls),('negative_parent_audit.tsv',negative),('negative_record_audit.tsv',details),('paired_comparison.tsv',deltas),('integrity.tsv',integrity),('regression.tsv',regression)]:write(out/name,rr)
     summary=[]
     for s in sorted({r['sample'] for r in metrics if not r['positive']}):

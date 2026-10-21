@@ -1,4 +1,4 @@
-// Preparation-only workflow. Uses the same process modules and parameter contracts as analysis.
+// Preparation-only workflow. Analysis never calls these global asset installers.
 include { PREPARE_GENOMAD_DATABASE } from '../modules/local/genomad_database'
 include { PREPARE_VIRSORTER2_DATABASE } from '../modules/local/virsorter2_database'
 include { PREPARE_CENOTETAKER3_DATABASE } from '../modules/local/cenotetaker3_database'
@@ -28,6 +28,21 @@ workflow DATABASE_SETUP {
         flags[tool] = parseBooleanParameter(params["run_${tool}"], "--run_${tool}")
     }
     if( !flags.values().any { it } ) { error 'Setup requires at least one enabled database-bearing tool.' }
+    // Reject an unverified portal identity before scheduling ANY preparation.
+    // Completed/prebuilt databases and explicit local sources never need this manifest.
+    if( flags.vicat ) {
+        def autoMetavr = parseBooleanParameter(params.vicat_metavr_auto_download, '--vicat_metavr_auto_download')
+        def managedViralPath = file(params.vicat_managed_db ?: "${params.dbdir}/vicat/metavr5")
+        if( autoMetavr && params.vicat_db == null && params.vicat_metavr_proteins == null &&
+            params.vicat_metavr_metadata == null && !managedViralPath.exists() ) {
+            def sourceManifest = file(params.vicat_metavr_download_manifest)
+            if( !sourceManifest.exists() ) { error "MetaVR download manifest not found: ${sourceManifest}" }
+            def portalIdentity = new groovy.json.JsonSlurper().parseText(sourceManifest.text)
+            if( portalIdentity.compatibility != 'verified-full-source-equivalence' ) {
+                error 'MetaVR portal compatibility is NOT yet verified against the frozen sources. No downloads or database builds were started. Supply a prepared viCAT database/the original local source pair, or complete the read-only full-source comparison first.'
+            }
+        }
+    }
     if( parseBooleanParameter(params.run_tesorter, '--run_tesorter') ) {
         log.warn('TEsorter has no standalone database preparation process; its environment/reference runtime must be checked in the analysis smoke test.')
     }
@@ -224,17 +239,19 @@ workflow DATABASE_SETUP {
         }
         def vicatBaseDatabase = userSuppliedDatabase
             ? file(params.vicat_db).toString()
-            : file(params.vicat_managed_db).toString()
+            : file(params.vicat_managed_db ?: "${params.dbdir}/vicat/metavr5").toString()
         def vicatDatabasePath = vicatBaseDatabase
         def vicatDatabaseSource = userSuppliedDatabase
             ? 'user-supplied'
             : 'viSUM-managed'
 
         // Resolve both sides before starting a potentially expensive viral build.
-        def vicatNonviralDatabasePath = file(params.vicat_nonviral_db).toString()
+        def vicatNonviralDatabasePath = file(params.vicat_nonviral_db ?: "${params.dbdir}/vicat/nonviral_classaware_v1").toString()
+        def nonviralAutoDownload = parseBooleanParameter(params.vicat_nonviral_auto_download, '--vicat_nonviral_auto_download')
         def nonviralRaw = [params.vicat_nonviral_manifest, params.vicat_nonviral_package_root, params.vicat_nonviral_metadata_root]
-        if( nonviralRaw.any { it != null } && !nonviralRaw.every { it != null } ) {
-            error 'A raw nonviral build requires manifest, package_root, and metadata_root together.'
+        def hasLocalRoots = nonviralRaw[1] != null || nonviralRaw[2] != null
+        if( hasLocalRoots && !nonviralRaw.every { it != null } ) {
+            error 'A local raw nonviral build requires manifest, package_root, and metadata_root together.'
         }
         if( params.vicat_nonviral_classified_dir != null && nonviralRaw.any { it != null } ) {
             error 'Choose --vicat_nonviral_classified_dir OR the three raw NCBI source inputs, not both.'
@@ -242,15 +259,22 @@ workflow DATABASE_SETUP {
         def nonviralSources = ([params.vicat_nonviral_classified_dir] + nonviralRaw).collect {
             it == null ? '' : file(it).toString()
         }
+        if( !nonviralSources.any { it } && !file(vicatNonviralDatabasePath).exists() && nonviralAutoDownload ) {
+            nonviralSources[1] = file("${projectDir}/assets/vicat/nonviral_classaware_v1_20260904/assembly_manifest.tsv").toString()
+        }
+        if( nonviralSources[1] && !nonviralSources[2] && !nonviralAutoDownload ) {
+            error 'Manifest-only nonviral setup requires --vicat_nonviral_auto_download true; otherwise supply both local source roots.'
+        }
         nonviralSources.findAll { it }.each { source ->
             if( !file(source).exists() ) { error "Nonviral source input does not exist: ${source}" }
         }
         if( !file(vicatNonviralDatabasePath).exists() && !nonviralSources.any { it } ) {
-            error 'No viCAT nonviral database or build inputs supplied. Set --vicat_nonviral_db to a completed database, or supply classified/raw NCBI inputs.'
+            error 'No viCAT nonviral database or build inputs supplied. Enable --vicat_nonviral_auto_download, supply a completed database, or supply classified/raw NCBI inputs.'
         }
         parsePositiveIntegerParameter(params.vicat_nonviral_build_cpus, '--vicat_nonviral_build_cpus')
         def nonviralHelpers = ['prepare_vicat_nonviral_build.py', 'classify_vicat_nonviral_references.py',
             'build_vicat_nonviral_database.sh', 'prepare_vicat_nonviral_cluster_metadata.py',
+            'download_vicat_nonviral_sources.py', 'download_vicat_refseq_metadata.py',
             'parse_diamond_dbinfo.py'].collect { file("${projectDir}/bin/${it}") }
 
         ch_vicat_database_request = ready.map { ignored ->
@@ -279,8 +303,8 @@ workflow DATABASE_SETUP {
 
 
         // Serialize the two heavyweight builds; their memory requests add up.
+        // This is already a single-value result; map waits for viral preparation.
         ch_vicat_nonviral_database_request = PREPARE_VICAT_DATABASE.out.database
-            .take(1)
             .map { viralDatabase, viralSetupMetadata ->
                 tuple(vicatNonviralDatabasePath, 'class-aware-nonviral',
                     nonviralSources[0], nonviralSources[1], nonviralSources[2], nonviralSources[3], nonviralHelpers)
@@ -326,7 +350,7 @@ workflow DATABASE_SETUP {
 
         def vitapDatabasePath = userSuppliedDatabase
             ? file(params.vitap_db).toString()
-            : file(params.vitap_dir).toString()
+            : file(params.vitap_dir ?: "${params.dbdir}/vitap").toString()
         def vitapDatabaseSource = userSuppliedDatabase
             ? 'user-supplied'
             : 'viSUM-managed'
@@ -371,7 +395,7 @@ workflow DATABASE_SETUP {
         def userSuppliedDatabase = params.vcontact3_db != null
         def vcontact3DatabasePath = userSuppliedDatabase
             ? file(params.vcontact3_db).toString()
-            : file(params.vcontact3_dir).toString()
+            : file(params.vcontact3_dir ?: "${params.dbdir}/vcontact3").toString()
         def vcontact3DatabaseSource = userSuppliedDatabase
             ? 'user-supplied'
             : 'viSUM-managed'
@@ -402,5 +426,5 @@ workflow DATABASE_SETUP {
 
         ready = PREPARE_VCONTACT3_DATABASE.out.database.map { result -> true }.first()
     }
-    ready.view { 'viSUM setup complete: all selected preparation processes passed. See outdir/database_setup for per-tool provenance.' }
+    ready.view { 'viSUM setup complete: all selected preparation processes passed. See outdir/database_setup for per-tool provenance. End-to-end runtime readiness still requires the small DNA/RNA analysis smoke test.' }
 }

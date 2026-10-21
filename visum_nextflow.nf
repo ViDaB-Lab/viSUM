@@ -2,30 +2,23 @@
 
 nextflow.enable.dsl = 2
 
+include { VALIDATE_PREPARED_ASSETS } from './modules/local/validate_prepared_assets'
+
 include { NORMALIZE_FASTA } from './modules/local/normalize_fasta'
-include { PREPARE_GENOMAD_DATABASE } from './modules/local/genomad_database'
 include { RUN_GENOMAD } from './modules/local/run_genomad'
 include { STANDARDIZE_GENOMAD } from './modules/local/standardize_genomad'
-include { PREPARE_VIRSORTER2_DATABASE } from './modules/local/virsorter2_database'
 include { RUN_VIRSORTER2 } from './modules/local/run_virsorter2'
 include { STANDARDIZE_VIRSORTER2 } from './modules/local/standardize_virsorter2'
-include { PREPARE_CENOTETAKER3_DATABASE } from './modules/local/cenotetaker3_database'
 include { RUN_CENOTETAKER3 } from './modules/local/run_cenotetaker3'
 include { STANDARDIZE_CENOTETAKER3 } from './modules/local/standardize_cenotetaker3'
-include { PREPARE_DEEP6_DATABASE } from './modules/local/deep6_database'
 include { RUN_DEEP6 } from './modules/local/run_deep6'
 include { STANDARDIZE_DEEP6 } from './modules/local/standardize_deep6'
-include { PREPARE_DEEPMICROCLASS2 } from './modules/local/deepmicroclass2_installation'
 include { RUN_DEEPMICROCLASS2 } from './modules/local/run_deepmicroclass2'
 include { STANDARDIZE_DEEPMICROCLASS2 } from './modules/local/standardize_deepmicroclass2'
-include { PREPARE_VIRBOT_DATABASE } from './modules/local/virbot_installation'
 include { RUN_VIRBOT } from './modules/local/run_virbot'
 include { STANDARDIZE_VIRBOT } from './modules/local/standardize_virbot'
-include { PREPARE_GIANTHUNTER_DATABASE } from './modules/local/gianthunter_database'
 include { RUN_GIANTHUNTER } from './modules/local/run_gianthunter'
 include { STANDARDIZE_GIANTHUNTER } from './modules/local/standardize_gianthunter'
-include { PREPARE_VICAT_DATABASE } from './modules/local/vicat_database'
-include { PREPARE_VICAT_NONVIRAL_DATABASE } from './modules/local/vicat_nonviral_database'
 include { PREDICT_VICAT_ORFS } from './modules/local/predict_vicat_orfs'
 include { RUN_VICAT_DIAMOND } from './modules/local/run_vicat_diamond'
 include { RUN_VICAT_NONVIRAL_DIAMOND } from './modules/local/run_vicat_nonviral_diamond'
@@ -34,19 +27,34 @@ include { PREPARE_VICAT_HITS } from './modules/local/prepare_vicat_hits'
 include { STANDARDIZE_VICAT } from './modules/local/standardize_vicat'
 include { PROJECT_VICAT_REFINED } from './modules/local/project_vicat_refined'
 include { DISCOVERY_GATE } from './modules/local/discovery_gate'
-include { PREPARE_CHECKV_DATABASE } from './modules/local/checkv_database'
 include { RUN_CHECKV } from './modules/local/run_checkv'
 include { STANDARDIZE_CHECKV } from './modules/local/standardize_checkv'
 include { REFINE_PROVIRAL_REGIONS } from './modules/local/refine_proviral_regions'
 include { RUN_TESORTER } from './modules/local/run_tesorter'
 include { STANDARDIZE_TESORTER } from './modules/local/standardize_tesorter'
-include { PREPARE_VITAP_DATABASE } from './modules/local/vitap_database'
 include { RUN_VITAP } from './modules/local/run_vitap'
 include { STANDARDIZE_VITAP } from './modules/local/standardize_vitap'
-include { PREPARE_VCONTACT3_DATABASE } from './modules/local/vcontact3_database'
 include { RUN_VCONTACT3 } from './modules/local/run_vcontact3'
 include { STANDARDIZE_VCONTACT3 } from './modules/local/standardize_vcontact3'
 include { VIHARMONY } from './modules/local/viharmony'
+
+
+// Resolve persistent assets once; preparation reports are not analysis inputs.
+def preparedPath(raw) {
+    def path = file(raw)
+    return path.exists() ? path.toRealPath() : path
+}
+
+def preparedVcontact(raw, domain) {
+    def path = preparedPath(raw)
+    def selectedManifest = path.toString().endsWith('.json')
+    def root = selectedManifest ? path.parent : path
+    def manifests = root.toFile().listFiles()?.findAll { it.name ==~ /[0-9]{3}\.json/ }?.sort { it.name } ?: []
+    def release = selectedManifest
+        ? path.fileName.toString().replaceFirst(/\.json$/, '')
+        : (manifests ? manifests.last().name.take(3) : 'unknown')
+    return [path: root.toString(), release: release, domain: domain]
+}
 
 
 def validatePrefix(rawPrefix, source) {
@@ -185,22 +193,30 @@ def validateEvidenceArtifacts(prefix, stage, expectedTools, actualTools, evidenc
 
 def visumHelp() {
     return '''
-viSUM 0.1.0 — viral sequence discovery, refinement, and taxonomy harmonization
+viSUM 0.9.0-beta.2 — viral sequence discovery, refinement, and taxonomy harmonization
 
 USAGE
-  Single FASTA (recommended local launcher):
-    ./visum -c visum.config \\
+  Run from the installation directory, or use an absolute workflow path.
+
+  Prepare the default tools before the first analysis:
+    nextflow run visum_nextflow.nf --setup
+
+  Also build optional viCAT databases (large-memory build profile):
+    nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build
+
+  Single FASTA:
+    nextflow run visum_nextflow.nf \\
       --input INPUT.fasta --prefix SAMPLE --type dna|rna [options]
 
   Multiple FASTAs:
-    ./visum -c visum.config \\
+    nextflow run visum_nextflow.nf \\
       --prefix_many samples.csv --indir INPUT_DIRECTORY [options]
 
   Help only:
-    ./visum -c visum.config --help
+    nextflow run visum_nextflow.nf --help
 
-  Database preparation only (enabled --run_* tools, no samples):
-    ./visum -c visum.config --setup
+  Resume an analysis: repeat its command from the original launch directory
+  with -resume, or -resume RUN_NAME to select a particular analysis.
 
 INPUT
   --setup                     Prepare enabled tools only, without analysis inputs.
@@ -215,16 +231,19 @@ INPUT
 
 OUTPUT AND RESOURCES
   --outdir PATH                Results directory [results].
-  --dbdir PATH                 Persistent managed databases [databases].
-  --tooldir PATH               Persistent managed tool bundles [tools].
-  --max_cpus INT               Aggregate local CPU scheduler cap through
-                               ./visum; per-task ceiling otherwise [8].
-  --max_memory MEMORY          Per-task memory ceiling [48 GB].
+  --dbdir PATH                 Override managed databases [installation/databases].
+  --tooldir PATH               Override tool/model bundles [installation/tools].
+  --max_cpus INT               Native local scheduling CPU budget and per-task
+                               CPU ceiling [8]. Not an OS or cross-run quota.
+  --max_memory MEMORY          Native local scheduling memory budget [64 GB].
   --harmonizer_audit MODE      none, compact, or full [compact].
+  --harmonizer_max_rank RANK   Maximum reported taxonomy depth [family]; deeper calls stay in audits.
+  --harmonizer_cpus INT        Bounded viHARMONY candidate workers [1]; decisions unchanged.
+  --harmonizer_memory MEMORY   viHARMONY memory request [32 GB].
   --rna_pair_homology_floor BOOL  Experimental RNA Deep6/viCAT-only homology floor [false].
   --show_channel_messages BOOL Print detailed channel emissions [false].
-  --ictv_csv PATH              Canonical ICTV rank table
-                               [assets/ICTV_VMR_MSL41.csv].
+  --ictv_csv PATH              Canonical ICTV rank table [assets/ICTV_VMR_MSL41.csv].
+  --ictv_reconciliation PATH   Matching pinned offline reconciliation bundle.
 
 PROGRAM SELECTION
   --run_genomad BOOL           geNomad discovery [true].
@@ -243,6 +262,7 @@ PROGRAM SELECTION
 COMMON ANALYSIS OPTIONS
   --genomad_score_calibration BOOL  Calibrate geNomad scores when supported
                                     by sample size [true].
+  --genomad_composition STR         auto|metagenome|virome [auto].
   --genomad_splits INT              0 is fastest; increase to lower memory [0].
   --vs2_min_length INT              VirSorter2 minimum length [1500].
   --vs2_min_score FLOAT             VirSorter2 minimum score [0.5].
@@ -301,12 +321,15 @@ DATABASE AND INSTALLATION OVERRIDES
   --checkv_db PATH             Existing CheckV database.
   --vicat_db PATH              Existing viCAT database.
   --vicat_nonviral_db PATH     Existing nonviral database or local build destination.
+  --vicat_nonviral_auto_download BOOL  Setup acquisition from the assembly list [true].
   --vicat_nonviral_classified_dir PATH  Classified inputs for a local nonviral build.
   --vicat_nonviral_manifest PATH       NCBI source assembly manifest (alternative to classified inputs).
   --vicat_nonviral_package_root PATH   Extracted NCBI protein package root.
   --vicat_nonviral_metadata_root PATH  NCBI feature-table root.
   --vicat_metavr_proteins PATH MetaVR proteins for a local viCAT build.
   --vicat_metavr_metadata PATH MetaVR metadata for a local viCAT build.
+  --vicat_metavr_auto_download BOOL  Setup-only portal acquisition [true]; requires verified source equivalence.
+  --vicat_metavr_download_manifest PATH  Approved, checksum-pinned portal source manifest.
   --vitap_db PATH              Existing VITAP database.
   --vitap_vmr PATH             VMR workbook/CSV for a VITAP build.
   --vitap_update_database BOOL Check for a newer VMR [false].
@@ -329,6 +352,16 @@ PER-TOOL RESOURCE OVERRIDES
 
 NOTES
   BOOL values must be true or false. Use -resume to reuse completed work.
+  Setup installs/prepares assets; analysis only reads prepared assets.
+  Setup reuses valid databases; it is not a command to force a rebuild/update.
+  The vicat_build profile budgets 32 CPUs/400 GB; its viral build requests 350 GB.
+  Those are configurable allocations, not a measured minimum RAM requirement.
+  No shipped task wall-time limits; cluster queue limits still apply.
+  Preserve the launch .nextflow directory and work directory for resume.
+  Use a new work/output directory when changing viSUM versions.
+  Profiles: local (default), local_safe, local_full, vicat_build, slurm.
+  SLURM users must supply their site's queue/account settings with -c site.config.
+  Read docs/usage.md for examples and docs/reporting-bundle.md for output fields.
   Advanced version pins, download URLs, checksums, and database-build controls
   are documented in visum.config and normally should not be changed.
 '''.stripIndent().trim()
@@ -360,16 +393,10 @@ workflow {
     }
 
     def maxCpus = parsePositiveIntegerParameter(params.max_cpus, '--max_cpus')
-    def launcherCpuCap = System.getenv('VISUM_LOCAL_CPU_CAP')
-    def cpuCapMode = System.getenv('VISUM_CPU_CAP_MODE')
-    if( launcherCpuCap != null ) {
-        def enforcedCpus = parsePositiveIntegerParameter(launcherCpuCap, 'VISUM_LOCAL_CPU_CAP')
-        if( enforcedCpus != maxCpus ) {
-            error "Launcher CPU cap (${enforcedCpus}) does not match --max_cpus (${maxCpus})."
+    ['resume_genomad_prepare_workdir', 'resume_vicat_prepare_workdir', 'resume_vicat_nonviral_prepare_workdir'].each { legacy ->
+        if( params.containsKey(legacy) ) {
+            error "--${legacy} is obsolete in this build. Use prepared database paths and native -resume; do not migrate an active old-build run."
         }
-    }
-    else {
-        log.warn("Direct Nextflow invocation detected: --max_cpus=${maxCpus} caps each task but not aggregate local concurrency. Use ./visum to enforce the aggregate CPU scheduler cap.")
     }
     def analysisCpuParameters = [
         '--genomad_cpus': params.genomad_cpus,
@@ -386,6 +413,7 @@ workflow {
         '--tesorter_cpus': params.tesorter_cpus,
         '--vitap_cpus': params.vitap_cpus,
         '--vcontact3_cpus': params.vcontact3_cpus,
+        '--harmonizer_cpus': params.harmonizer_cpus,
     ]
     analysisCpuParameters.each { parameterName, rawValue ->
         parsePositiveIntegerParameter(rawValue, parameterName)
@@ -401,8 +429,8 @@ workflow {
 
     println(
         "viSUM resource controls: max_cpus=${maxCpus} " +
-        "(${launcherCpuCap != null ? (cpuCapMode ?: 'aggregate scheduler cap enforced') : 'per-task ceiling only'}), " +
-        "max_memory=${params.max_memory} (per-task ceiling); " +
+        "(native local scheduling budget; per-task CPU ceiling), " +
+        "max_memory=${params.max_memory} (native local scheduling budget); " +
         "preferred tool CPUs (each capped at max_cpus)=" + analysisCpuParameters.collect { name, value ->
             "${name.substring(2)}=${value}"
         }.join(', ')
@@ -481,7 +509,8 @@ workflow {
                     error "Invalid type for prefix '${prefix}': '${type}'. Use dna or rna."
                 }
 
-                def fasta = file("${baseDir}/${relativeFasta}")
+                def fasta = file(java.nio.file.Paths.get(relativeFasta).isAbsolute()
+                    ? relativeFasta : "${baseDir}/${relativeFasta}")
                 if( !fasta.exists() ) {
                     error "FASTA not found for prefix '${prefix}': ${fasta}"
                 }
@@ -491,6 +520,9 @@ workflow {
     }
 
     def runGenomad = parseBooleanParameter(params.run_genomad, '--run_genomad')
+    if( !(params.genomad_composition?.toString()?.trim()?.toLowerCase() in ['auto', 'metagenome', 'virome']) ) {
+        error '--genomad_composition must be auto, metagenome or virome.'
+    }
     parseBooleanParameter(
         params.genomad_score_calibration,
         '--genomad_score_calibration'
@@ -585,6 +617,10 @@ workflow {
         error "Invalid --vicat_provirus_min_overlap '${params.vicat_provirus_min_overlap}'. Use a value from 0 to 1."
     }
     def harmonizerAudit = params.harmonizer_audit?.toString()?.trim()?.toLowerCase()
+    def harmonizerMaxRank = params.harmonizer_max_rank?.toString()?.trim()?.toLowerCase()
+    if( !(harmonizerMaxRank in ['domain', 'realm', 'kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'species']) ) {
+        error "Invalid --harmonizer_max_rank '${params.harmonizer_max_rank}'. Use domain, realm, kingdom, phylum, class, order, family, genus, or species."
+    }
     if( !(harmonizerAudit in ['none', 'compact', 'full']) ) {
         error "Invalid --harmonizer_audit '${params.harmonizer_audit}'. Use none, compact, or full."
     }
@@ -595,6 +631,11 @@ workflow {
     def ictvCsv = file(params.ictv_csv)
     if( !ictvCsv.exists() ) {
         error "Canonical ICTV taxonomy file was not found: ${ictvCsv}"
+    }
+    def ictvReconciliation = file(params.ictv_reconciliation)
+    def ictvReconciliationManifest = file("${params.ictv_reconciliation}.manifest.json")
+    if( !ictvReconciliation.exists() || !ictvReconciliationManifest.exists() ) {
+        error "Pinned ICTV reconciliation bundle or manifest was not found: ${ictvReconciliation}"
     }
 
     // Every standardizer emits sparse, threshold-qualified evidence. These
@@ -623,38 +664,59 @@ workflow {
         "vConTACT3=${runVcontact3}"
     )
 
-    NORMALIZE_FASTA(ch_samples)
+    // Setup is separate; never build or update assets during analysis.
+    def buildInputs = [
+        'vicat_metavr_proteins', 'vicat_metavr_metadata', 'vicat_nonviral_classified_dir',
+        'vicat_nonviral_manifest', 'vicat_nonviral_package_root', 'vicat_nonviral_metadata_root',
+        'vitap_vmr', 'vitap_db_label'
+    ]
+    buildInputs.each { option ->
+        if( params[option] != null ) {
+            error "--${option} is preparation-only. Run --setup separately, then use prepared database paths."
+        }
+    }
+    if( parseBooleanParameter(params.vitap_update_database, '--vitap_update_database') ||
+        parseBooleanParameter(params.vcontact3_update_database, '--vcontact3_update_database') ) {
+        error 'Database updates are preparation-only. Run --setup separately.'
+    }
+
+    def prepared = [:]
+    if( runGenomad ) prepared.genomad = [path: preparedPath(params.genomad_db ?: "${params.dbdir}/genomad/genomad_db").toString()]
+    if( runVirsorter2 ) prepared.virsorter2 = [path: preparedPath(params.virsorter2_db ?: "${params.dbdir}/virsorter2/db").toString()]
+    if( runCenotetaker3 ) prepared.cenotetaker3 = [path: preparedPath(params.ct3_db ?: "${params.dbdir}/cenotetaker3/ct3_DBs").toString(), hmm_version: params.ct3_hmm_db_version]
+    if( runDeep6 ) {
+        def installation = preparedPath(params.deep6_dir ?: "${params.dbdir}/deep6/Deep6")
+        prepared.deep6 = [path: installation.toString(), models: preparedPath(params.deep6_model ?: "${installation}/Models").toString()]
+    }
+    if( runDeepmicroclass2 ) prepared.deepmicroclass2 = [path: preparedPath(params.deepmicroclass2_dir ?: "${params.tooldir}/deepmicroclass2/DeepMicroClass2").toString()]
+    if( runVirbot ) prepared.virbot = [path: preparedPath(params.virbot_dir ?: "${params.dbdir}/virbot/VirBot").toString()]
+    if( runGianthunter ) prepared.gianthunter = [path: preparedPath(params.gianthunter_db ?: "${params.dbdir}/gianthunter/gianthunter_db_v1").toString()]
+    if( runVicat ) {
+        prepared.vicat = [path: preparedPath(params.vicat_db ?: params.vicat_managed_db ?: "${params.dbdir}/vicat/metavr5").toString()]
+        prepared.vicat_nonviral = [path: preparedPath(params.vicat_nonviral_db ?: "${params.dbdir}/vicat/nonviral_classaware_v1").toString()]
+    }
+    if( runCheckv ) prepared.checkv = [path: preparedPath(params.checkv_db ?: "${params.dbdir}/checkv/checkv_db").toString()]
+    if( runVitap ) prepared.vitap = [path: preparedPath(params.vitap_db ?: "${params.vitap_dir ?: params.dbdir + '/vitap'}/current").toString()]
+    if( runVcontact3 ) prepared.vcontact3 = preparedVcontact(params.vcontact3_db ?: "${params.vcontact3_dir ?: params.dbdir + '/vcontact3'}/current", vcontact3DbDomain)
+
+    // Collect sample records, not sequence data. Gate ALL scientific tasks on
+    // preflight so a bad row, duplicate prefix or missing asset fails early.
+    ch_preflight = ch_samples.toList().map { samples ->
+        def spec = [assets: prepared, samples: samples.collect { sample ->
+            [prefix: sample[0], type: sample[1], fasta: sample[2].toString()]
+        }]
+        tuple(samples, java.util.Base64.getEncoder().encodeToString(groovy.json.JsonOutput.toJson(spec).getBytes('UTF-8')))
+    }
+    VALIDATE_PREPARED_ASSETS(ch_preflight)
+    ch_ready_samples = VALIDATE_PREPARED_ASSETS.out.samples.flatMap { samples -> samples }
+    NORMALIZE_FASTA(ch_ready_samples)
 
     viewChannel(showChannelMessages, NORMALIZE_FASTA.out.normalized_records) { prefix, type, fasta, headerMap ->
         "NORMALIZED sample=${prefix} type=${type} fasta=${fasta.name} map=${headerMap.name}"
     }
 
     if( runGenomad ) {
-        def userSuppliedDatabase = params.genomad_db != null
-        def genomadDatabasePath = userSuppliedDatabase
-            ? file(params.genomad_db).toString()
-            : file("${params.dbdir}/genomad/genomad_db").toString()
-        def genomadDatabaseSource = userSuppliedDatabase
-            ? 'user-supplied'
-            : 'viSUM-managed'
-
-        ch_genomad_database_request = Channel.of(
-            tuple(
-                genomadDatabasePath,
-                genomadDatabaseSource,
-                params.genomad_auto_download
-            )
-        )
-
-        PREPARE_GENOMAD_DATABASE(ch_genomad_database_request)
-
-        viewChannel(showChannelMessages, PREPARE_GENOMAD_DATABASE.out.database) { database, metadata ->
-            "GENOMAD_DB database=${database} metadata=${metadata.name}"
-        }
-
-        ch_genomad_database = PREPARE_GENOMAD_DATABASE.out.database
-            .map { database, metadata -> database }
-            .first()
+        ch_genomad_database = Channel.value(file(prepared.genomad.path))
 
         RUN_GENOMAD(
             NORMALIZE_FASTA.out.normalized_records,
@@ -692,31 +754,7 @@ workflow {
     }
 
     if( runVirsorter2 ) {
-        def userSuppliedDatabase = params.virsorter2_db != null
-        def virsorter2DatabasePath = userSuppliedDatabase
-            ? file(params.virsorter2_db).toString()
-            : file("${params.dbdir}/virsorter2/db").toString()
-        def virsorter2DatabaseSource = userSuppliedDatabase
-            ? 'user-supplied'
-            : 'viSUM-managed'
-
-        ch_virsorter2_database_request = Channel.of(
-            tuple(
-                virsorter2DatabasePath,
-                virsorter2DatabaseSource,
-                params.virsorter2_auto_download
-            )
-        )
-
-        PREPARE_VIRSORTER2_DATABASE(ch_virsorter2_database_request)
-
-        viewChannel(showChannelMessages, PREPARE_VIRSORTER2_DATABASE.out.database) { database, metadata ->
-            "VIRSORTER2_DB database=${database} metadata=${metadata.name}"
-        }
-
-        ch_virsorter2_database = PREPARE_VIRSORTER2_DATABASE.out.database
-            .map { database, metadata -> database }
-            .first()
+        ch_virsorter2_database = Channel.value(file(prepared.virsorter2.path))
 
         RUN_VIRSORTER2(
             NORMALIZE_FASTA.out.normalized_records,
@@ -730,13 +768,13 @@ workflow {
 
         ch_virsorter2_for_standardizer = RUN_VIRSORTER2.out.results.map {
             prefix, type, review, score, boundary, viralFasta, metadata ->
-                tuple(prefix, type, score, boundary, metadata)
+                tuple(prefix, type, score, boundary, viralFasta, metadata)
         }
 
         ch_virsorter2_standardizer_input = ch_virsorter2_for_standardizer
             .join(
                 NORMALIZE_FASTA.out.normalized_records.map {
-                    prefix, type, fasta, headerMap -> tuple(prefix, headerMap)
+                    prefix, type, fasta, headerMap -> tuple(prefix, fasta, headerMap)
                 }
             )
 
@@ -755,32 +793,7 @@ workflow {
     }
 
     if( runCenotetaker3 ) {
-        def userSuppliedDatabase = params.ct3_db != null
-        def cenotetaker3DatabasePath = userSuppliedDatabase
-            ? file(params.ct3_db).toString()
-            : file("${params.dbdir}/cenotetaker3/ct3_DBs").toString()
-        def cenotetaker3DatabaseSource = userSuppliedDatabase
-            ? 'user-supplied'
-            : 'viSUM-managed'
-
-        ch_cenotetaker3_database_request = Channel.of(
-            tuple(
-                cenotetaker3DatabasePath,
-                cenotetaker3DatabaseSource,
-                params.ct3_auto_download,
-                params.ct3_hmm_db_version
-            )
-        )
-
-        PREPARE_CENOTETAKER3_DATABASE(ch_cenotetaker3_database_request)
-
-        viewChannel(showChannelMessages, PREPARE_CENOTETAKER3_DATABASE.out.database) { database, metadata ->
-            "CENOTETAKER3_DB database=${database} metadata=${metadata.name}"
-        }
-
-        ch_cenotetaker3_database = PREPARE_CENOTETAKER3_DATABASE.out.database
-            .map { database, metadata -> database }
-            .first()
+        ch_cenotetaker3_database = Channel.value(file(prepared.cenotetaker3.path))
 
         RUN_CENOTETAKER3(
             NORMALIZE_FASTA.out.normalized_records,
@@ -862,53 +875,10 @@ workflow {
             error "Invalid --deep6_median_multiplier '${params.deep6_median_multiplier}'. Use a number of at least 1."
         }
 
-        def userSuppliedInstallation = params.deep6_dir != null
-        def deep6InstallationPath = userSuppliedInstallation
-            ? file(params.deep6_dir).toString()
-            : file("${params.dbdir}/deep6/Deep6").toString()
-        def deep6InstallationSource = userSuppliedInstallation
-            ? 'user-supplied'
-            : 'viSUM-managed'
-
-        def userSuppliedModels = params.deep6_model != null
-        def deep6ModelPath = userSuppliedModels
-            ? file(params.deep6_model).toString()
-            : file("${deep6InstallationPath}/Models").toString()
-        def deep6ModelSource = userSuppliedModels
-            ? 'user-supplied'
-            : 'bundled-with-installation'
-
         ch_deep6_samples = NORMALIZE_FASTA.out.normalized_records.filter {
             prefix, type, fasta, headerMap -> type == 'rna'
         }
-
-        // Trigger one shared setup only when at least one RNA sample is present.
-        ch_deep6_database_request = ch_deep6_samples
-            .take(1)
-            .map { prefix, type, fasta, headerMap ->
-                tuple(
-                    deep6InstallationPath,
-                    deep6InstallationSource,
-                    deep6ModelPath,
-                    deep6ModelSource,
-                    params.deep6_auto_download,
-                    params.deep6_repository,
-                    params.deep6_revision
-                )
-            }
-
-        PREPARE_DEEP6_DATABASE(ch_deep6_database_request)
-
-        viewChannel(showChannelMessages, PREPARE_DEEP6_DATABASE.out.database) {
-            installation, models, metadata ->
-                "DEEP6_DB installation=${installation} models=${models} metadata=${metadata.name}"
-        }
-
-        ch_deep6_bundle = PREPARE_DEEP6_DATABASE.out.database
-            .map { installation, models, metadata ->
-                tuple(installation, models, metadata)
-            }
-            .first()
+        ch_deep6_bundle = Channel.value(tuple(file(prepared.deep6.path), file(prepared.deep6.models)))
 
         RUN_DEEP6(ch_deep6_samples, ch_deep6_bundle)
 
@@ -954,42 +924,10 @@ workflow {
             "(${deepmicroclass2ModelDescription})"
         )
 
-        def userSuppliedInstallation = params.deepmicroclass2_dir != null
-        def deepmicroclass2InstallationPath = userSuppliedInstallation
-            ? file(params.deepmicroclass2_dir).toString()
-            : file("${params.tooldir}/deepmicroclass2/DeepMicroClass2").toString()
-        def deepmicroclass2InstallationSource = userSuppliedInstallation
-            ? 'user-supplied'
-            : 'viSUM-managed'
-
         ch_deepmicroclass2_samples = NORMALIZE_FASTA.out.normalized_records.filter {
             prefix, type, fasta, headerMap -> type == 'dna'
         }
-
-        // Trigger one shared installation check only when at least one DNA
-        // sample is available for DeepMicroClass2.
-        ch_deepmicroclass2_installation_request = ch_deepmicroclass2_samples
-            .take(1)
-            .map { prefix, type, fasta, headerMap ->
-                tuple(
-                    deepmicroclass2InstallationPath,
-                    deepmicroclass2InstallationSource,
-                    params.deepmicroclass2_auto_download,
-                    params.deepmicroclass2_repository,
-                    params.deepmicroclass2_revision
-                )
-            }
-
-        PREPARE_DEEPMICROCLASS2(ch_deepmicroclass2_installation_request)
-
-        viewChannel(showChannelMessages, PREPARE_DEEPMICROCLASS2.out.installation) {
-            installation, metadata ->
-                "DEEPMICROCLASS2_INSTALL installation=${installation} metadata=${metadata.name}"
-        }
-
-        ch_deepmicroclass2_bundle = PREPARE_DEEPMICROCLASS2.out.installation
-            .map { installation, metadata -> tuple(installation, metadata) }
-            .first()
+        ch_deepmicroclass2_bundle = Channel.value(file(prepared.deepmicroclass2.path))
 
         RUN_DEEPMICROCLASS2(
             ch_deepmicroclass2_samples,
@@ -1033,49 +971,10 @@ workflow {
         if( !(virbotTaxaMode in ['TOP', 'LCA']) ) {
             error "Invalid --virbot_taxa '${params.virbot_taxa}'. Use TOP or LCA."
         }
-        def userSuppliedInstallation = params.virbot_dir != null
-        def virbotInstallationPath = userSuppliedInstallation
-            ? file(params.virbot_dir).toString()
-            : file("${params.dbdir}/virbot/VirBot").toString()
-        def virbotInstallationSource = userSuppliedInstallation
-            ? 'user-supplied'
-            : 'viSUM-managed'
-
         ch_virbot_samples = NORMALIZE_FASTA.out.normalized_records.filter {
             prefix, type, fasta, headerMap -> type == 'rna'
         }
-
-        // No RNA sample means no VirBot installation check or analysis task.
-        ch_virbot_installation_request = ch_virbot_samples
-            .take(1)
-            .map { prefix, type, fasta, headerMap ->
-                tuple(
-                    virbotInstallationPath,
-                    virbotInstallationSource,
-                    params.virbot_auto_download,
-                    params.virbot_repository,
-                    params.virbot_revision
-                )
-            }
-
-        PREPARE_VIRBOT_DATABASE(ch_virbot_installation_request)
-
-        viewChannel(showChannelMessages, PREPARE_VIRBOT_DATABASE.out.installation) {
-            installation, database, metadata ->
-                "VIRBOT_INSTALL installation=${installation} database=${database} metadata=${metadata.name}"
-        }
-
-        ch_virbot_bundle = PREPARE_VIRBOT_DATABASE.out.installation
-            .map { installation, database, metadata ->
-                tuple(
-                    installation,
-                    database,
-                    metadata,
-                    virbotSensitive,
-                    virbotTaxaMode
-                )
-            }
-            .first()
+        ch_virbot_bundle = Channel.value(tuple(file(prepared.virbot.path), file("${prepared.virbot.path}/virbot/data/ref"), virbotSensitive, virbotTaxaMode))
 
         RUN_VIRBOT(ch_virbot_samples, ch_virbot_bundle)
 
@@ -1144,41 +1043,10 @@ workflow {
             error "Invalid --gianthunter_query_cover '${params.gianthunter_query_cover}'. Use an integer from 0 to 100."
         }
 
-        def userSuppliedDatabase = params.gianthunter_db != null
-        def gianthunterDatabasePath = userSuppliedDatabase
-            ? file(params.gianthunter_db).toString()
-            : file("${params.dbdir}/gianthunter/gianthunter_db_v1").toString()
-        def gianthunterDatabaseSource = userSuppliedDatabase
-            ? 'user-supplied'
-            : 'viSUM-managed'
-
         ch_gianthunter_samples = NORMALIZE_FASTA.out.normalized_records.filter {
             prefix, type, fasta, headerMap -> type == 'dna'
         }
-
-        // No DNA sample means no GiantHunter database check or analysis task.
-        ch_gianthunter_database_request = ch_gianthunter_samples
-            .take(1)
-            .map { prefix, type, fasta, headerMap ->
-                tuple(
-                    gianthunterDatabasePath,
-                    gianthunterDatabaseSource,
-                    params.gianthunter_auto_download,
-                    params.gianthunter_database_release,
-                    params.gianthunter_database_url,
-                    params.gianthunter_database_sha256
-                )
-            }
-
-        PREPARE_GIANTHUNTER_DATABASE(ch_gianthunter_database_request)
-
-        viewChannel(showChannelMessages, PREPARE_GIANTHUNTER_DATABASE.out.database) { database, metadata ->
-            "GIANTHUNTER_DB database=${database} metadata=${metadata.name}"
-        }
-
-        ch_gianthunter_bundle = PREPARE_GIANTHUNTER_DATABASE.out.database
-            .map { database, metadata -> tuple(database, metadata) }
-            .first()
+        ch_gianthunter_bundle = Channel.value(file(prepared.gianthunter.path))
 
         RUN_GIANTHUNTER(
             ch_gianthunter_samples,
@@ -1279,103 +1147,8 @@ workflow {
             error '--vicat_index_chunks must be at least 1.'
         }
 
-        def vicatSourceProteins = params.vicat_metavr_proteins == null
-            ? ''
-            : file(params.vicat_metavr_proteins).toString()
-        def vicatSourceMetadata = params.vicat_metavr_metadata == null
-            ? ''
-            : file(params.vicat_metavr_metadata).toString()
-
-        if( (vicatSourceProteins && !vicatSourceMetadata) ||
-            (!vicatSourceProteins && vicatSourceMetadata) ) {
-            error 'A local viCAT build requires both --vicat_metavr_proteins and --vicat_metavr_metadata.'
-        }
-
-        def userSuppliedDatabase = params.vicat_db != null
-        if( userSuppliedDatabase && vicatSourceProteins ) {
-            error 'Choose --vicat_db OR the two MetaVR source files, not both.'
-        }
-        def vicatBaseDatabase = userSuppliedDatabase
-            ? file(params.vicat_db).toString()
-            : file(params.vicat_managed_db).toString()
-        def vicatDatabasePath = vicatBaseDatabase
-        def vicatDatabaseSource = userSuppliedDatabase
-            ? 'user-supplied'
-            : 'viSUM-managed'
-
-        // Resolve both sides before starting a potentially expensive viral build.
-        def vicatNonviralDatabasePath = file(params.vicat_nonviral_db).toString()
-        def nonviralRaw = [params.vicat_nonviral_manifest, params.vicat_nonviral_package_root, params.vicat_nonviral_metadata_root]
-        if( nonviralRaw.any { it != null } && !nonviralRaw.every { it != null } ) {
-            error 'A raw nonviral build requires manifest, package_root, and metadata_root together.'
-        }
-        if( params.vicat_nonviral_classified_dir != null && nonviralRaw.any { it != null } ) {
-            error 'Choose --vicat_nonviral_classified_dir OR the three raw NCBI source inputs, not both.'
-        }
-        def nonviralSources = ([params.vicat_nonviral_classified_dir] + nonviralRaw).collect {
-            it == null ? '' : file(it).toString()
-        }
-        nonviralSources.findAll { it }.each { source ->
-            if( !file(source).exists() ) { error "Nonviral source input does not exist: ${source}" }
-        }
-        if( !file(vicatNonviralDatabasePath).exists() && !nonviralSources.any { it } ) {
-            error 'No viCAT nonviral database or build inputs supplied. Set --vicat_nonviral_db to a completed database, or supply classified/raw NCBI inputs.'
-        }
-        parsePositiveIntegerParameter(params.vicat_nonviral_build_cpus, '--vicat_nonviral_build_cpus')
-        def nonviralHelpers = ['prepare_vicat_nonviral_build.py', 'classify_vicat_nonviral_references.py',
-            'build_vicat_nonviral_database.sh', 'prepare_vicat_nonviral_cluster_metadata.py',
-            'parse_diamond_dbinfo.py'].collect { file("${projectDir}/bin/${it}") }
-
-        ch_vicat_database_request = NORMALIZE_FASTA.out.normalized_records
-            .take(1)
-            .map { prefix, type, fasta, headerMap ->
-                tuple(
-                    vicatDatabasePath,
-                    vicatDatabaseSource,
-                    vicatBaseDatabase,
-                    '',
-                    vicatSourceProteins,
-                    vicatSourceMetadata,
-                    params.vicat_metavr_proteins_sha256,
-                    params.vicat_metavr_metadata_sha256,
-                    params.vicat_expected_uvigs,
-                    params.vicat_expected_proteins,
-                    params.vicat_expected_representatives,
-                    '',
-                    '',
-                    0.90,
-                    0.80,
-                    50
-                )
-            }
-
-        PREPARE_VICAT_DATABASE(ch_vicat_database_request)
-
-        viewChannel(showChannelMessages, PREPARE_VICAT_DATABASE.out.database) { database, metadata ->
-            "VICAT_DB database=${database} metadata=${metadata.name}"
-        }
-
-        ch_vicat_database = PREPARE_VICAT_DATABASE.out.database
-            .map { database, metadata -> tuple(database, metadata) }
-            .first()
-
-        // Serialize the two heavyweight builds; their memory requests add up.
-        ch_vicat_nonviral_database_request = PREPARE_VICAT_DATABASE.out.database
-            .take(1)
-            .map { viralDatabase, viralSetupMetadata ->
-                tuple(vicatNonviralDatabasePath, 'class-aware-nonviral',
-                    nonviralSources[0], nonviralSources[1], nonviralSources[2], nonviralSources[3], nonviralHelpers)
-            }
-
-        PREPARE_VICAT_NONVIRAL_DATABASE(ch_vicat_nonviral_database_request)
-
-        viewChannel(showChannelMessages, PREPARE_VICAT_NONVIRAL_DATABASE.out.database) { database, metadata ->
-            "VICAT_NONVIRAL_DB database=${database} metadata=${metadata.name}"
-        }
-
-        ch_vicat_nonviral_database = PREPARE_VICAT_NONVIRAL_DATABASE.out.database
-            .map { database, metadata -> tuple(database, metadata) }
-            .first()
+        ch_vicat_database = Channel.value(file(prepared.vicat.path))
+        ch_vicat_nonviral_database = Channel.value(file(prepared.vicat_nonviral.path))
 
         PREDICT_VICAT_ORFS(NORMALIZE_FASTA.out.normalized_records)
 
@@ -1479,108 +1252,11 @@ workflow {
         )
     }
 
-    // Prepare or validate the persistent VITAP database now. Taxonomic
-    // assignment runs later against the post-gate, provirus-refined FASTA.
-    if( runVitap ) {
-        def userSuppliedDatabase = params.vitap_db != null
-        if( userSuppliedDatabase && params.vitap_vmr != null ) {
-            error 'Use either --vitap_db PATH or --vitap_vmr PATH, not both.'
-        }
-
-        def vitapDatabasePath = userSuppliedDatabase
-            ? file(params.vitap_db).toString()
-            : file(params.vitap_dir).toString()
-        def vitapDatabaseSource = userSuppliedDatabase
-            ? 'user-supplied'
-            : 'viSUM-managed'
-        def vitapVmrSource = params.vitap_vmr == null
-            ? ''
-            : file(params.vitap_vmr).toString()
-        def vitapLabel = params.vitap_db_label == null
-            ? ''
-            : params.vitap_db_label.toString()
-        def vitapAutoDownload = parseBooleanParameter(
-            params.vitap_auto_download,
-            '--vitap_auto_download'
-        )
-        def vitapUpdateDatabase = parseBooleanParameter(
-            params.vitap_update_database,
-            '--vitap_update_database'
-        )
-        def vitapCleanupSource = parseBooleanParameter(
-            params.vitap_cleanup_source,
-            '--vitap_cleanup_source'
-        )
-
-        ch_vitap_database_request = Channel.of(
-            tuple(
-                vitapDatabasePath,
-                vitapDatabaseSource,
-                vitapVmrSource,
-                vitapLabel,
-                vitapAutoDownload,
-                vitapUpdateDatabase,
-                vitapCleanupSource,
-                file("${projectDir}/bin/prepare_vitap_vmr.py"),
-                file("${projectDir}/bin/run_vitap_update.py")
-            )
-        )
-
-        PREPARE_VITAP_DATABASE(ch_vitap_database_request)
-
-        viewChannel(showChannelMessages, PREPARE_VITAP_DATABASE.out.database) { database, metadata ->
-            "VITAP_DB database=${database} metadata=${metadata.name}"
-        }
-
-        // Database preparation emits once; convert that emission to a value
-        // so every sample can reuse it rather than consuming a one-shot item.
-        ch_vitap_database = PREPARE_VITAP_DATABASE.out.database
-            .map { database, metadata -> tuple(database, metadata) }
-            .first()
-    }
-
-    // Prepare or validate the persistent vConTACT3 reference database.
-    if( runVcontact3 ) {
-        def userSuppliedDatabase = params.vcontact3_db != null
-        def vcontact3DatabasePath = userSuppliedDatabase
-            ? file(params.vcontact3_db).toString()
-            : file(params.vcontact3_dir).toString()
-        def vcontact3DatabaseSource = userSuppliedDatabase
-            ? 'user-supplied'
-            : 'viSUM-managed'
-        def vcontact3AutoDownload = parseBooleanParameter(
-            params.vcontact3_auto_download,
-            '--vcontact3_auto_download'
-        )
-        def vcontact3UpdateDatabase = parseBooleanParameter(
-            params.vcontact3_update_database,
-            '--vcontact3_update_database'
-        )
-        def vcontact3CleanupArchive = parseBooleanParameter(
-            params.vcontact3_cleanup_archive,
-            '--vcontact3_cleanup_archive'
-        )
-
-        ch_vcontact3_database_request = Channel.of(
-            tuple(
-                vcontact3DatabasePath,
-                vcontact3DatabaseSource,
-                vcontact3AutoDownload,
-                vcontact3UpdateDatabase,
-                vcontact3CleanupArchive
-            )
-        )
-
-        PREPARE_VCONTACT3_DATABASE(ch_vcontact3_database_request)
-
-        viewChannel(showChannelMessages, PREPARE_VCONTACT3_DATABASE.out.database) { database, metadata ->
-            "VCONTACT3_DB database=${database} metadata=${metadata.name}"
-        }
-
-        ch_vcontact3_database = PREPARE_VCONTACT3_DATABASE.out.database
-            .map { database, metadata -> tuple(database, metadata) }
-            .first()
-    }
+    // Downloads and updates belong to --setup, never ordinary analysis.
+    if( runVitap ) ch_vitap_database = Channel.value(file(prepared.vitap.path))
+    if( runVcontact3 ) ch_vcontact3_database = Channel.value(tuple(
+        file(prepared.vcontact3.path), prepared.vcontact3.release
+    ))
 
     // A sized group key releases each sample as soon as all evidence expected
     // for that molecule type arrives. An unbounded groupTuple() would wait for
@@ -1649,35 +1325,7 @@ workflow {
     }
 
     if( runCheckv ) {
-        def userSuppliedDatabase = params.checkv_db != null
-        def checkvDatabasePath = userSuppliedDatabase
-            ? file(params.checkv_db).toString()
-            : file("${params.dbdir}/checkv/checkv_db").toString()
-        def checkvDatabaseSource = userSuppliedDatabase
-            ? 'user-supplied'
-            : 'viSUM-managed'
-        def checkvAutoDownload = parseBooleanParameter(
-            params.checkv_auto_download,
-            '--checkv_auto_download'
-        )
-
-        ch_checkv_database_request = Channel.of(
-            tuple(
-                checkvDatabasePath,
-                checkvDatabaseSource,
-                checkvAutoDownload
-            )
-        )
-
-        PREPARE_CHECKV_DATABASE(ch_checkv_database_request)
-
-        viewChannel(showChannelMessages, PREPARE_CHECKV_DATABASE.out.database) { database, metadata ->
-            "CHECKV_DB database=${database} metadata=${metadata.name}"
-        }
-
-        ch_checkv_database = PREPARE_CHECKV_DATABASE.out.database
-            .map { database, metadata -> tuple(database, metadata) }
-            .first()
+        ch_checkv_database = Channel.value(file(prepared.checkv.path))
 
         RUN_CHECKV(
             DISCOVERY_GATE.out.candidates,
@@ -1981,7 +1629,7 @@ workflow {
             tuple(
                 prefix, type, normalized, headerMap, discoveryAudit, refined,
                 regionMap, evidenceFileCount, evidenceFiles, groupCount,
-                groupFiles, ictvCsv, harmonizerAudit,
+                groupFiles, ictvCsv, ictvReconciliation, ictvReconciliationManifest, harmonizerAudit,
                 vcontact3MinTaxonomyLength
             )
         }
@@ -1991,7 +1639,7 @@ workflow {
     viewChannel(showChannelMessages, VIHARMONY.out.results) { prefix, normalizedFasta, originalFasta, metadata,
                                 reviewQueue, disposition, sequenceMap, manifest,
                                 databaseFasta, databaseMetadata, allCandidatesFasta,
-                                reviewCandidatesFasta, provisionalNormalizedFasta,
+                                provisionalNormalizedFasta,
                                 provisionalOriginalFasta, provisionalMetadata ->
         "VIHARMONY sample=${prefix} fasta=${normalizedFasta.name} metadata=${metadata.name}"
     }

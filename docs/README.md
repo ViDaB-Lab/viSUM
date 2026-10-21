@@ -1,21 +1,28 @@
-# viSUM documentation
+# viSUM user documentation
 
-The [main README](../README.md) introduces the four modules, programs and preliminary performance. Detailed operation and evidence interpretation live here.
+Start with [installation and usage](usage.md), then use the reference pages as
+needed. The [README](../README.md) explains the workflow and what's new.
 
-## Using viSUM
+| Task | Guide |
+| --- | --- |
+| Install; run one sample or a batch; resume | [Usage](usage.md) |
+| Download/build or reuse databases | [Database setup](database-setup.md) |
+| Prepare viCAT viral/nonviral references | [viCAT databases](vicat-database-preparation.md) |
+| Select or update a VITAP database | [VITAP databases](vitap-database-lifecycle.md) |
+| Set CPU/RAM budgets or use SLURM | [Resources and execution](resources.md) |
+| Understand viral/TE candidates and taxonomy | [Interpreting results](interpretation.md) |
+| Find output files and column definitions | [Reporting bundle](reporting-bundle.md) |
+| Understand TE flags | [TE evidence](te-candidate-routing.md) |
+| Interpret undetermined CheckV quality | [CheckV context](checkv-evidence-context.md) |
+| Understand extracted proviral regions | [Provirus boundaries](provirus-boundary-policy.md) |
+| Diagnose failed or unexpected runs | [Troubleshooting](troubleshooting.md) |
 
-- [Usage guide](usage.md): installation, single and batch inputs, resources, database locations, output files and troubleshooting.
-- [Preparation-only setup](database-setup.md): prepare databases without analysis inputs, installation checks and smoke-test scope.
-- [viCAT database preparation](vicat-database-preparation.md): viral and nonviral resources, local source builds and supplied databases.
-- [VITAP database lifecycle](vitap-database-lifecycle.md): database selection, reuse and explicit updates.
+Options not commonly needed are documented beside their defaults in
+`visum.config`. Display command-line help with:
 
-VITAP and vConTACT3 are enabled by default for taxonomy refinement. viCAT remains opt-in because it requires separately supplied or built viral and nonviral resources.
+```bash
+nextflow run visum_nextflow.nf --help
+```
 
-## Benchmarks and interpretation
-
-- [Preliminary all-tool comparison](benchmarks/preliminary-2026-09.md): positive sensitivity, nominal-negative retention and subgroup results.
-- [Retained-negative context](benchmarks/retained-negative-context.md): viral homologs, coherent phage-like modules, mixed content and limits of source labels.
-- [VirSorter2 evidence-policy follow-up](benchmarks/virsorter2-hallmark-followup.md): finalized review-only treatment of unscored native hallmark calls.
-- [Experimental policy comparison](benchmarks/retained-negative-context.md#experimental-policy-comparison): saved-result tests of mixed-content and replication-only review; neither changes the default retention policy.
-
-Benchmark documents are dated development records, not a substitute for run-specific configuration and provenance.
+Developer validation and release records have their own [index](development/README.md);
+they are not steps users need to perform to run viSUM.

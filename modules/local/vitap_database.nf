@@ -43,29 +43,13 @@ process PREPARE_VITAP_DATABASE {
 
     validate_database() {
         local candidate="\$1"
-        local gff_file db_base rank
-
-        [[ -d "\$candidate" && -r "\$candidate" ]] || return 1
-        mapfile -t GFF_FILES < <(find "\$candidate" -maxdepth 1 -type f \
+        local gff_file db_base
+        python "${projectDir}/bin/validate_reference_database.py" vitap \
+            "\$candidate" || return 1
+        mapfile -t GFF_FILES < <(find -L "\$candidate" -maxdepth 1 -type f \
             -name 'VMR_genome_*.gff' -size +0c | sort)
-        [[ "\${#GFF_FILES[@]}" -eq 1 ]] || return 1
         gff_file="\${GFF_FILES[0]}"
         db_base="\${gff_file%.gff}"
-
-        [[ -s "\${db_base}.fasta" ]] || return 1
-        [[ -s "\${db_base}.faa" ]] || return 1
-        [[ -s "\${db_base}.dmnd" ]] || return 1
-        [[ -s "\$candidate/uniref90.dmnd" ]] || return 1
-        [[ -s "\$candidate/uniref90.accession2taxid" ]] || return 1
-        [[ -s "\$candidate/taxdmp/nodes.dmp" ]] || return 1
-        [[ -s "\$candidate/taxdmp/names.dmp" ]] || return 1
-
-        for rank in Realm Kingdom Phylum Class Order Family Genus Species; do
-            [[ -s "\$candidate/\${rank}_genome.threshold" ]] || return 1
-        done
-
-        find "\$candidate" -maxdepth 1 -type f -name '*.csv' -size +0c \
-            | grep -q . || return 1
         diamond dbinfo --db "\${db_base}.dmnd" >/dev/null 2>&1 || return 1
         diamond dbinfo --db "\$candidate/uniref90.dmnd" >/dev/null 2>&1 || return 1
     }

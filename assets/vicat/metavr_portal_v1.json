@@ -1,0 +1,57 @@
+{
+  "schema": "visum-metavr-sources-v1",
+  "compatibility": "verified-full-source-equivalence",
+  "frozen": {
+    "protein_sha256": "e3a7b7826db5562b5a16c38f3033c0fa35a9b2d4a48ed25a4c37e516db471aa4",
+    "metadata_sha256": "df07af7f9364374d3726f75421d4ad29262a8cbdf97ad05237af2b01fc8a8a3d",
+    "uvigs": 24435662,
+    "proteins": 369319989
+  },
+  "files": {
+    "proteins": {
+      "name": "METAVR.faa.bgz",
+      "url": "https://portal.nersc.gov/cfs/m342/METAVR/METAVR.faa.bgz",
+      "bytes": 49996313962,
+      "sha256": "30ac6f74eceae3490ddd26e169d63efe66c1ae410775890ab029653afad49a8d"
+    },
+    "metadata": {
+      "name": "METAVR_main_table.parquet",
+      "url": "https://portal.nersc.gov/cfs/m342/METAVR/METAVR_main_table.parquet",
+      "bytes": 1087432195,
+      "sha256": "b1260bd415f0d09503e6e8c36c9f773b0c4411f53aecec449d6ed7db8e87dfb7"
+    }
+  },
+  "metadata_compatibility_patch": {
+    "manifest": "metavr_votu_frozen_v1/patch_manifest.json",
+    "patch": "metavr_votu_frozen_v1/votu_compatibility_patch.tsv",
+    "manifest_sha256": "619c7f835250ad8f81ee725d3cdf6f1c21560f30adf76a1d56f3a443c63f864c",
+    "validation": "native-linux-full-metadata-exact-match"
+  },
+  "note": "Approved from complete native Linux protein comparison and integrated metadata preparation/reuse evidence. Raw portal metadata is adapted using the checksum-pinned frozen-vOTU patch. No classification rules or frozen source identities changed. Fresh full database build remains a separate release gate.",
+  "comparison": {
+    "proteins": {
+      "ordered_id_sequence_sha256": "e232cea4760c028b1290d76d25f6cc04bf752523984895c17e3d05a994019a4b",
+      "records": 369319989
+    },
+    "metadata": {
+      "records": 24435662,
+      "prepared_metadata_sha256": "61e5e6f03409eb1bca942781e148a1c784191f8e0041e0534c46aa32d13900cf"
+    },
+    "metadata_compatibility_patch": {
+      "applied_rows": 1409,
+      "expected_changes": 1409,
+      "non_votu_changed_rows": 0,
+      "patch_sha256": "2dd0e1e172898655d6c0dfed8ab6937a6f5edbcc8a2c308946254416e8bf4d26",
+      "patched_metadata_sha256": "61e5e6f03409eb1bca942781e148a1c784191f8e0041e0534c46aa32d13900cf",
+      "purpose": "Restore frozen reference grouping, NOT declare portal assignments incorrect",
+      "raw_metadata_sha256": "9136964eb5fe77f5546b12074197c88c5022d78eb5093582c5869f2059d7f692",
+      "recipe_sha256": "619c7f835250ad8f81ee725d3cdf6f1c21560f30adf76a1d56f3a443c63f864c"
+    },
+    "scope": "All ordered protein IDs/exact sequences; all builder-consumed metadata after the pinned frozen-vOTU compatibility patch",
+    "database_build_performed": false
+  },
+  "validation_evidence": {
+    "path": "metavr_native_validation_v1.json",
+    "sha256": "2c2de96307659b2b5d81716082ea1e6dd3d76bd023818c0c5f69e9a0867ff91e"
+  }
+}

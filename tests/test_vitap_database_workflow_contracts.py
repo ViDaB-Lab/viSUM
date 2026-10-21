@@ -8,8 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 class VitapDatabaseWorkflowContractTests(unittest.TestCase):
     def test_setup_is_explicitly_gated_and_wired(self) -> None:
         workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
-        self.assertIn("include { PREPARE_VITAP_DATABASE }", workflow)
         self.assertIn("params.run_vitap", workflow)
+        self.assertNotIn("include { PREPARE_VITAP_DATABASE }", workflow)
+        workflow = (ROOT / 'workflows/database_setup.nf').read_text()
+        self.assertIn("include { PREPARE_VITAP_DATABASE }", workflow)
         self.assertIn("params.vitap_db", workflow)
         self.assertIn("params.vitap_vmr", workflow)
         self.assertIn("params.vitap_update_database", workflow)
@@ -35,10 +37,7 @@ class VitapDatabaseWorkflowContractTests(unittest.TestCase):
         for required in (
             "VMR_genome_*.gff",
             "uniref90.dmnd",
-            "uniref90.accession2taxid",
-            "taxdmp/nodes.dmp",
-            "taxdmp/names.dmp",
-            "Realm Kingdom Phylum Class Order Family Genus Species",
+            'validate_reference_database.py" vitap',
             "diamond dbinfo",
         ):
             self.assertIn(required, module)

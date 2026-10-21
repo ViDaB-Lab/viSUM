@@ -1,0 +1,481 @@
+assembly_accession	cellular_group	organism_name	taxid
+GCF_000002875.2	protozoa	Leishmania infantum JPCM5	435258
+GCF_000003225.4	protozoa	Theileria annulata	5874
+GCF_000004515.6	plant	Glycine max	3847
+GCF_000006355.2	protozoa	Plasmodium knowlesi strain H	5851
+GCF_000006765.1	bacteria	Pseudomonas aeruginosa PAO1	208964
+GCF_000006985.1	bacteria	Chlorobaculum tepidum TLS	194439
+GCF_000007205.1	bacteria	Chlamydia pneumoniae TW-183	182082
+GCF_000007225.1	archaea	Pyrobaculum aerophilum str. IM2	178306
+GCF_000011245.1	bacteria	Oceanobacillus iheyensis HTE831	221109
+GCF_000012665.1	bacteria	Oleidesulfovibrio alaskensis G20	207559
+GCF_000013165.1	bacteria	Ehrlichia sennetsu str. Miyayama	222891
+GCF_000013885.1	bacteria	Nitrobacter hamburgensis X14	323097
+GCF_000015225.1	archaea	Thermofilum pendens Hrk 5	368408
+GCF_000015345.1	bacteria	Dichelobacter nodosus VCS1703A	246195
+GCF_000015805.1	archaea	Pyrobaculum calidifontis JCM 11548	410359
+GCF_000015865.1	bacteria	Acetivibrio thermocellus ATCC 27405	203119
+GCF_000017165.1	archaea	Methanococcus vannielii SB	406327
+GCF_000017305.1	bacteria	Kineococcus radiotolerans SRS30216 = ATCC BAA-149	266940
+GCF_000018465.1	archaea	Nitrosopumilus maritimus SCM1	436308
+GCF_000019525.1	bacteria	Shewanella woodyi ATCC 51908	392500
+GCF_000019785.1	bacteria	Leptothrix cholodnii SP-6	395495
+GCF_000019805.1	archaea	Pyrobaculum neutrophilum V24Sta	444157
+GCF_000022205.1	archaea	Halorubrum lacusprofundi ATCC 49239	416348
+GCF_000022445.1	archaea	Saccharolobus islandicus M.16.4	426118
+GCF_000023545.1	bacteria	Musicola paradisiaca Ech703	579405
+GCF_000023965.1	archaea	Halomicrobium mukohataei DSM 12286	485914
+GCF_000024185.1	archaea	Methanobrevibacter ruminantium M1	634498
+GCF_000024425.1	bacteria	Meiothermus ruber DSM 1279	504728
+GCF_000025485.1	bacteria	Allochromatium vinosum DSM 180	572477
+GCF_000025505.1	archaea	Ferroglobus placidus DSM 10642	589924
+GCF_000026365.1	fungi	Zygosaccharomyces rouxii	4956
+GCF_000027005.1	fungi	Komagataella phaffii GS115	644223
+GCF_000091205.1	protozoa	Cyanidioschyzon merolae strain 10D	280699
+GCF_000092185.1	archaea	Thermosphaera aggregans DSM 11486	633148
+GCF_000142805.1	fungi	Lachancea thermotolerans CBS 6340	559295
+GCF_000145215.1	bacteria	Caldicellulosiruptor obsidiansis OB47	608506
+GCF_000147335.1	bacteria	Gloeothece verrucosa PCC 7822	497965
+GCF_000150955.2	protozoa	Phaeodactylum tricornutum CCAP 1055/1	556484
+GCF_000165345.1	protozoa	Cryptosporidium parvum Iowa II	353152
+GCF_000165365.1	protozoa	Theileria parva strain Muguga	333668
+GCF_000165395.2	protozoa	Babesia bovis T2Bo	484906
+GCF_000175295.2	bacteria	Thermoanaerobacter brockii subsp. finnii Ako-1	509193
+GCF_000183665.1	bacteria	Candidatus Liberibacter solanacearum CLso-ZC1	658172
+GCF_000184455.2	fungi	Aspergillus oryzae RIB40	510516
+GCF_000187245.1	fungi	Ogataea parapolymorpha DL-1	871575
+GCF_000190315.1	archaea	Vulcanisaeta moutnovskia 768-28	985053
+GCF_000192745.1	bacteria	Polymorphum gilvum SL003B-26A1	991905
+GCF_000195915.1	archaea	Thermoplasma acidophilum DSM 1728	273075
+GCF_000196555.1	bacteria	Bifidobacterium longum subsp. longum JCM 1217	565042
+GCF_000204415.1	archaea	Methanothrix soehngenii GP6	990316
+GCF_000204925.1	archaea	Metallosphaera cuprina Ar-4	1006006
+GCF_000208405.1	bacteria	Selenomonas sputigena ATCC 35185	546271
+GCF_000208745.1	plant	Theobroma cacao	3641
+GCF_000208865.1	protozoa	Neospora caninum	29176
+GCF_000214175.1	bacteria	Hoyosella subflava DQS3-9A1	443218
+GCF_000214415.1	archaea	Methanotorris igneus Kol 5	880724
+GCF_000214435.1	bacteria	Desulfotomaculum nigrificans CO-1-SRB	868595
+GCF_000215995.1	archaea	Pyrococcus yayanosii CH1	529709
+GCF_000223395.1	archaea	Pyrolobus fumarii 1A	694429
+GCF_000227115.2	fungi	Naumovozyma dairenensis CBS 421	1071378
+GCF_000227135.1	protozoa	Leishmania donovani	5661
+GCF_000230855.2	plant	Cajanus cajan	3821
+GCF_000234665.1	protozoa	Leishmania mexicana MHOM/GT/2001/U1103	929439
+GCF_000236925.1	bacteria	Staphylococcus argenteus	985002
+GCF_000237345.1	fungi	Naumovozyma castellii	27288
+GCF_000255115.2	bacteria	Desulfosporosinus acidiphilus SJ4	646529
+GCF_000265525.1	archaea	Thermococcus cleftensis	163003
+GCF_000275865.1	archaea	Methanofollis liminatans DSM 4140	28892
+GCF_000280035.1	fungi	Encephalitozoon romaleae SJ-2008	1178016
+GCF_000317375.1	vertebrate_mammalian	Microtus ochrogaster	79684
+GCF_000317475.1	bacteria	Phormidium nigroviride PCC 7112	179408
+GCF_000331145.2	plant	Cicer arietinum	3827
+GCF_000331735.1	bacteria	Myxococcus stipitatus DSM 14675	1278073
+GCF_000348985.1	fungi	Huiozyma naganishii CBS 8797	1071383
+GCF_000390325.3	plant	Nicotiana tomentosiformis	4098
+GCF_000412675.1	bacteria	Pseudomonas putida NBRC 14164	1211579
+GCF_000445445.2	bacteria	Sporomusa ovata DSM 2662	1123288
+GCF_000471025.2	bacteria	Chlamydia gallinacea 08-1274/3	1143323
+GCF_000512735.1	bacteria	Thermocrinis ruber	75906
+GCF_000565175.1	bacteria	Spiroplasma culicicola AES-1	1276246
+GCF_000582535.1	bacteria	Candidatus Hepatoplasma crinochetorum Av	1427984
+GCF_000585495.1	archaea	Thermococcus nautili	195522
+GCF_000591035.1	archaea	Aeropyrum camini SY1 = JCM 12091	1198449
+GCF_000687475.1	fungi	Ustilaginoidea virens	1159556
+GCF_000723205.1	bacteria	Formosa agariphila KMM 3901	1347342
+GCF_000725365.1	bacteria	Terribacillus saccharophilus	361277
+GCF_000725425.1	archaea	Palaeococcus pacificus DY20341	1343739
+GCF_000736415.1	bacteria	Campylobacter iguaniorum	1244531
+GCF_000737865.1	bacteria	Bifidobacterium coryneforme	1687
+GCF_000741045.1	plant	Vigna radiata var. radiata	3916
+GCF_000756715.1	bacteria	Jeotgalicoccus saudimassiliensis	1461582
+GCF_000816105.1	archaea	Thermococcus guaymasensis DSM 11113	1432656
+GCF_000836335.1	fungi	Cryptococcus bacillisporus CA1280	1296109
+GCF_000934545.1	bacteria	Rugosibacter aromaticivorans	1565605
+GCF_000948985.2	bacteria	Thalassomonas viridans	137584
+GCF_000961515.1	bacteria	Paraburkholderia fungorum	134537
+GCF_000968055.1	bacteria	Alteracholeplasma palmae J233	1318466
+GCF_000969885.1	archaea	Methanosarcina thermophila TM-1	523844
+GCF_000969905.1	archaea	Methanosarcina vacuolata Z-761	1434123
+GCF_000970025.1	archaea	Methanosarcina barkeri MS	1434108
+GCF_000970285.1	archaea	Methanosarcina horonobensis HB-1 = JCM 15518	1434110
+GCF_000981445.1	protozoa	Babesia bigemina	5866
+GCF_001007935.1	bacteria	Nitrosomonas communis	44574
+GCF_001011115.1	archaea	Halanaeroarchaeum sulfurireducens	1604004
+GCF_001187845.1	bacteria	Octadecabacter temperatus	1458307
+GCF_001281085.1	bacteria	Trueperella pyogenes	1661
+GCF_001298625.1	fungi	Saccharomyces eubayanus	1080349
+GCF_001406875.1	plant	Solanum pennellii	28526
+GCF_001444405.1	bacteria	Pseudoalteromonas phenolica	161398
+GCF_001488575.1	archaea	Halobacterium hubeiense	1407499
+GCF_001534645.1	bacteria	Flavobacterium covae	2906076
+GCF_001558255.2	bacteria	Grimontia hollisae	673
+GCF_001559015.1	bacteria	Sphingopyxis granuli	267128
+GCF_001577775.1	archaea	Pyrococcus kukulkanii	1609559
+GCF_001598055.1	bacteria	Cupriavidus nantongensis	1796606
+GCF_001636015.1	bacteria	Moraxella ovis	29433
+GCF_001642675.1	bacteria	Bradyrhizobium diazoefficiens USDA 110	224911
+GCF_001643015.1	bacteria	Corynebacterium crudilactis	1652495
+GCF_001672515.1	fungi	Colletotrichum higginsianum IMI 349063	759273
+GCF_001685355.1	bacteria	Streptomyces lincolnensis	1915
+GCF_001703515.1	bacteria	Brochothrix thermosphacta	2756
+GCF_001720195.1	fungi	Cryptococcus depauperatus CBS 7841	1295531
+GCF_001735765.2	bacteria	Clostridium taeniosporum	394958
+GCF_001741865.1	bacteria	Allobosea vaviloviae	1526658
+GCF_001870205.1	bacteria	Vagococcus teuberi	519472
+GCF_001887595.1	bacteria	Luteibacter rhizovicinus DSM 16549	1440763
+GCF_001889445.1	bacteria	Granulibacter bethesdensis	364410
+GCF_001908275.1	bacteria	Paenibacillus xylanexedens	528191
+GCF_001971745.1	bacteria	Lacinutrix venerupis	1486034
+GCF_001997385.1	bacteria	Sedimentisphaera cyanobacteriorum	1940790
+GCF_002056725.1	bacteria	Comamonas kerstersii	225992
+GCF_002081995.1	bacteria	Sporosarcina ureae	1571
+GCF_002105555.1	bacteria	Paracoccus contaminans	1945662
+GCF_002119765.1	bacteria	Pseudorhodoplanes sinuspersici	1235591
+GCF_002155265.1	bacteria	Corynebacterium pseudotuberculosis	1719
+GCF_002157895.1	bacteria	Oceanisphaera profunda	1416627
+GCF_002266435.3	bacteria	Bradyrhizobium amphicarpaeae	1404768
+GCF_002499975.2	bacteria	Alteromonas pelagimontana	1858656
+GCF_002795825.1	bacteria	Mariprofundus ferrinatatus	1921087
+GCF_002874775.1	bacteria	Monoglobus pectinilyticus	1981510
+GCF_003019675.1	bacteria	Fusobacterium ulcerans	861
+GCF_003058325.1	bacteria	Methylobacterium currus	2051553
+GCF_003058365.1	archaea	Halococcoides cellulosivorans	1679096
+GCF_003070865.1	bacteria	Corynebacterium liangguodongii	2079535
+GCF_003114835.2	bacteria	Leptospira kobayashii	1917830
+GCF_003171515.1	fungi	Pyrenophora tritici-repentis	45151
+GCF_003260975.1	bacteria	Echinicola strongylocentroti	1795355
+GCF_003346815.1	bacteria	Halarcobacter bivalviorum	663364
+GCF_003351765.1	bacteria	Ornithinimicrobium avium	2283195
+GCF_003391335.1	bacteria	Candidatus Purcelliella pentastirinorum	472834
+GCF_003574835.2	bacteria	Thermobifida halotolerans	483545
+GCF_003595195.1	bacteria	Paenisporosarcina cavernae	2320858
+GCF_003627755.1	bacteria	Martinezella jaguaris	1312183
+GCF_003667885.1	bacteria	Bacillus vallismortis	72361
+GCF_003812505.1	bacteria	Staphylococcus hominis	1290
+GCF_003952265.1	bacteria	Flaviflexus salsibiostraticola	1282737
+GCF_003963535.1	bacteria	Streptomyces cyaneochromogenes	2496836
+GCF_003966735.1	bacteria	Desulfovibrio ferrophilus	241368
+GCF_003971195.1	bacteria	Flaviflexus ciconiae	2496867
+GCF_004008975.1	bacteria	Bordetella pertussis	520
+GCF_004014775.2	bacteria	Acetobacter oryzoeni	2500548
+GCF_004102045.2	bacteria	Oenococcus sicerae	2203724
+GCF_004103735.1	bacteria	Aminipila luticellarii	2507160
+GCF_004114955.1	bacteria	Bradyrhizobium guangzhouense	1325095
+GCF_004208415.1	bacteria	Ktedonosporobacter rubrisoli	2509675
+GCF_004296515.1	bacteria	endosymbiont of Pachyrhynchus infernalis	1971488
+GCF_004359215.1	protozoa	Bremia lactucae	4779
+GCF_004379255.2	plant	Salvia splendens	180675
+GCF_004379335.1	bacteria	Spiroplasma gladiatoris	2143
+GCF_004421025.1	bacteria	Sphingobacterium psychroaquaticum	561061
+GCF_004519515.1	bacteria	Actinobacillus indolicus	51049
+GCF_004526345.1	bacteria	Ornithinimicrobium flavum	1288636
+GCF_004564355.1	bacteria	Microbacterium wangchenii	2541726
+GCF_004683865.2	bacteria	Paracoccus liaowanqingii	2560053
+GCF_004803715.2	bacteria	Luteimonas yindakuii	2565782
+GCF_004803795.1	bacteria	Campylobacter rectus	203
+GCF_006094395.1	bacteria	Staphylococcus haemolyticus	1283
+GCF_006542625.1	vertebrate_mammalian	Nomascus leucogenys	61853
+GCF_007748195.1	bacteria	Gimesia aquarii	2527964
+GCF_007993775.1	bacteria	Persicimonas caeni	2292766
+GCF_008000755.1	bacteria	Paradevosia tibetensis	1447062
+GCF_008152015.1	archaea	Thermococcus aciditolerans	2598455
+GCF_008153345.1	bacteria	Treponema phagedenis	162
+GCF_008370835.2	bacteria	Xanthomonas oryzae pv. oryzicola	129394
+GCF_008629635.2	fungi	Kwoniella shandongensis	1734106
+GCF_008692025.1	vertebrate_mammalian	Phocoena sinus	42100
+GCF_008704445.1	bacteria	Streptomyces prasinus	67345
+GCF_008704795.1	bacteria	Streptomyces spectabilis	68270
+GCF_008726475.3	bacteria	Aerococcus tenax	3078812
+GCF_009017415.1	fungi	Aspergillus flavus	5059
+GCF_009392895.1	archaea	Natronorubrum aibiense	348826
+GCF_009428965.1	bacteria	Limosilactobacillus pontis	35787
+GCF_009498275.1	bacteria	Streptomyces fagopyri	2662397
+GCF_009557235.1	bacteria	Acinetobacter wanghuae	2662362
+GCF_009727055.1	plant	Benincasa hispida	102211
+GCF_009731575.1	bacteria	Akkermansia muciniphila	239935
+GCF_010730955.1	bacteria	Mycolicibacterium aubagnense	319707
+GCF_011009015.1	bacteria	Spartinivicinus ruber	2683272
+GCF_011040435.1	bacteria	Pseudomonas psychrophila	122355
+GCF_011299095.1	bacteria	Jeotgalibaca porci	1868793
+GCF_011764505.1	bacteria	Legionella antarctica	2708020
+GCF_012571795.1	bacteria	Enterobacteriaceae endosymbiont of Neohaemonia nigricornis	2675792
+GCF_013201075.1	bacteria	Lichenicola cladoniae	1484109
+GCF_013201705.1	bacteria	Aliarcobacter faecis	1564138
+GCF_013284055.1	bacteria	Deefgea piscis	2739061
+GCF_013318015.2	bacteria	Agrobacterium tumefaciens	358
+GCF_013343295.1	archaea	Metallosphaera tengchongensis	1532350
+GCF_013358625.1	plant	Macadamia integrifolia	60698
+GCF_013364315.1	bacteria	Streptomyces microflavus	1919
+GCF_013365495.1	bacteria	Wolbachia endosymbiont of Dipetalonema caudispina	1812112
+GCF_013391105.1	archaea	Natronomonas salina	1710540
+GCF_013393365.1	bacteria	Veillonella nakazawae	2682456
+GCF_013402815.2	archaea	Natrinema halophilum	1699371
+GCF_013402915.1	fungi	Zygotorulaspora mrakii	42260
+GCF_013415885.1	archaea	Halosimplex rubrum	869889
+GCF_014054965.1	bacteria	Neisseria shayeganii	607712
+GCF_014133895.1	fungi	Torulaspora globosa	48254
+GCF_014217255.1	bacteria	Corynebacterium incognitum	2754725
+GCF_014268495.2	bacteria	Pseudomonas monsensis	2745509
+GCF_014297595.2	bacteria	Neisseria musculi	1815583
+GCF_014489595.1	bacteria	Paenacidovorax monticola	1926868
+GCF_014633365.1	plant	Diospyros lotus	55363
+GCF_014926385.1	bacteria	Trueperella pecoris	2733571
+GCF_015097455.1	bacteria	Faecalibacillus intestinalis	1982626
+GCF_015240255.1	bacteria	Kordiimonas pumila	2161677
+GCF_015277775.1	bacteria	Paludibaculum fermentans	1473598
+GCF_015476235.1	bacteria	Caldimonas thermodepolymerans	215580
+GCF_016028275.1	bacteria	Staphylococcus carnosus	1281
+GCF_016617805.1	invertebrate	Bactrocera tryoni	59916
+GCF_016861625.1	fungi	Aspergillus luchuensis	1069201
+GCF_016861865.1	fungi	Aspergillus puulaauensis	1220207
+GCF_016906535.1	fungi	Rhizoctonia solani	456999
+GCF_017161445.1	bacteria	Niveibacterium microcysteis	2811415
+GCF_017301775.1	bacteria	Xanthomonas translucens pv. undulosa	487909
+GCF_017357105.1	archaea	Natronosalvus caseinilyticus	2953747
+GCF_017638545.1	bacteria	Psychrosphaera ytuae	2820710
+GCF_017792025.1	bacteria	Sediminibacillus dalangtanensis	2729421
+GCF_017869285.1	bacteria	Wolbachia endosymbiont of Wiebesia pumilae	2742717
+GCF_017916305.1	protozoa	Leishmania enriettii	5663
+GCF_017916325.1	protozoa	Leishmania martiniquensis	1580590
+GCF_018138125.1	bacteria	Exiguobacterium alkaliphilum	1428684
+GCF_018141425.1	bacteria	Vallitalea guaymasensis	1185412
+GCF_018286635.1	bacteria	Sphingobium phenoxybenzoativorans	1592790
+GCF_018316795.1	bacteria	Nocardiopsis akebiae	2831968
+GCF_018398935.1	bacteria	Telmatocola sphagniphila	1123043
+GCF_018771645.1	bacteria	Thermus antranikianii	88190
+GCF_018802605.1	bacteria	Paludibacterium paludis	1225769
+GCF_018854495.2	bacteria	Acidithiobacillus ferruginosus	3063951
+GCF_018866245.1	bacteria	Novisyntrophococcus fermenticellae	2068655
+GCF_018972165.1	bacteria	Marinobacter adhaerens	1033846
+GCF_019139675.1	bacteria	Pseudomonas maumuensis	2842354
+GCF_019457515.1	bacteria	Shewanella mesophila	2864208
+GCF_019464535.1	bacteria	Horticoccus luteus	2862869
+GCF_019551435.1	bacteria	Lysobacter soyae	2764185
+GCF_019609905.1	fungi	Fusarium poae	36050
+GCF_019613795.1	bacteria	Flavobacterium litorale	2856519
+GCF_019722725.1	bacteria	Vreelandella profundi	2852117
+GCF_019844095.1	bacteria	Erwinia persicina	55211
+GCF_019884785.1	bacteria	Crassaminicella profunda	1286698
+GCF_019890955.1	bacteria	Pantoea dispersa	59814
+GCF_019915245.1	fungi	Fusarium musae	1042133
+GCF_019916025.1	bacteria	Paraclostridium bifermentans	1490
+GCF_019931045.1	bacteria	Cupriavidus pauculus	82633
+GCF_020150815.1	archaea	Haloprofundus salilacus	2876190
+GCF_020217425.1	archaea	Halomicrobium urmianum	1586233
+GCF_020405185.1	archaea	Halomicrobium salinisoli	2878391
+GCF_020510245.1	bacteria	Oenococcus oeni	1247
+GCF_020525665.1	bacteria	Klebsiella quasivariicola	2026240
+GCF_020614395.1	archaea	Salarchaeum japonicum	555573
+GCF_020616595.1	bacteria	Lentilactobacillus laojiaonis	2883998
+GCF_020886315.1	archaea	Saccharolobus caldissimus	1702097
+GCF_021018745.1	bacteria	Gloeobacter morelensis MG652769	2781736
+GCF_021130785.1	invertebrate	Homalodisca vitripennis	197043
+GCF_021901495.1	invertebrate	Neodiprion virginianus	2961670
+GCF_022014715.1	bacteria	Enterobacter mori	539813
+GCF_022221585.1	bacteria	Streptomyces inhibens	2293571
+GCF_022539405.1	bacteria	Natranaerofaba carboxydovora	2742683
+GCF_023115355.1	archaea	Halocatena salina	2934340
+GCF_023330585.1	bacteria	Pseudomonas bijieensis	2681983
+GCF_023509015.1	bacteria	Pseudomonas abieticivorans	2931382
+GCF_023558535.2	invertebrate	Drosophila nasuta	42062
+GCF_023614315.1	bacteria	Streptomyces sudanensis	436397
+GCF_023702125.1	archaea	Halorubrum hochsteinianum	2949307
+GCF_023703775.1	archaea	Haloplanus halophilus	2949993
+GCF_023973825.1	protozoa	Plasmodium brasilianum	5824
+GCF_024138125.1	archaea	Halorussus salilacus	2953750
+GCF_024172705.1	bacteria	Candidatus Comchoanobacter bicostacola	2919598
+GCF_024218775.1	archaea	Haloarcula marina	2961574
+GCF_024218795.1	archaea	Halorussus aquaticus	2953748
+GCF_024296685.1	archaea	Natrinema marinum	2961598
+GCF_024298885.1	archaea	Haloglomus halophilum	2962672
+GCF_024346605.1	bacteria	Rhizobium anhuiense bv. trifolii	2018689
+GCF_024347215.1	bacteria	Aliamphritea ceti	1524258
+GCF_024362695.1	invertebrate	Pectinophora gossypiella	13191
+GCF_024498335.1	archaea	Halobellus inordinatus	1126236
+GCF_024730625.1	archaea	Haloferax larsenii	302484
+GCF_024749185.1	bacteria	Pseudomonas wadenswilerensis	1785161
+GCF_025144665.1	bacteria	Alistipes ihumii AP11	1211813
+GCF_025148785.1	bacteria	Catenibacterium mitsuokai	100886
+GCF_025311515.1	bacteria	Limosilactobacillus vaginalis	1633
+GCF_025642155.1	bacteria	Streptomyces qianjiangensis	3447509
+GCF_025820815.1	bacteria	Halomonas qinghailakensis	2937790
+GCF_025854335.1	bacteria	Pelagibacterium flavum	2984530
+GCF_025979705.1	bacteria	Hymenobacter latericius	2987688
+GCF_026153355.1	bacteria	Streptomyces endophytica	2991496
+GCF_026248685.1	archaea	Haladaptatus caseinilyticus	2993314
+GCF_026250575.1	invertebrate	Diorhabda carinulata	1163345
+GCF_026914285.1	bacteria	Caldicellulosiruptor naganoensis	29324
+GCF_027887165.2	vertebrate_mammalian	Monodelphis domestica	13616
+GCF_027912835.1	bacteria	Paracoccus sediminicola	3017783
+GCF_027921745.1	fungi	Schizosaccharomyces osmophilus	2545709
+GCF_027943255.1	invertebrate	Anastrepha obliqua	95512
+GCF_028554725.1	invertebrate	Zeugodacus cucurbitae	28588
+GCF_028607105.1	bacteria	Novosphingobium humi	2282397
+GCF_028885435.1	bacteria	Mesomycoplasma ovipneumoniae ATCC 29419	743968
+GCF_029338255.1	archaea	Haloarcula halobia	3033388
+GCF_029338375.1	archaea	Halorussus lipolyticus	3034024
+GCF_029338395.1	archaea	Halorussus caseinilyticus	3034025
+GCF_029542785.1	fungi	Malassezia japonica	223818
+GCF_029581575.1	bacteria	Moraxella nasibovis	2904120
+GCF_029677425.1	plant	Wolffia australiana	161112
+GCF_029714545.1	bacteria	Bradyrhizobium pachyrhizi	280333
+GCF_029760955.1	bacteria	Streptomyces cathayae	3031124
+GCF_029814175.1	archaea	Halospeciosus flavus	3032283
+GCF_029867415.1	plant	Vicia villosa	3911
+GCF_029873635.1	plant	Malania oleifera	397392
+GCF_029958925.1	bacteria	Pacificoceanicola oceani	3058420
+GCF_030178475.1	bacteria	Curtobacterium citreum	2036
+GCF_030247195.1	invertebrate	Topomyia yanbarensis	2498891
+GCF_030252425.1	bacteria	Acidisoma cladoniae	3040935
+GCF_030253575.1	plant	Rhododendron vialii	182163
+GCF_030285665.1	bacteria	Amycolatopsis mongoliensis	715475
+GCF_030295685.1	bacteria	Halopseudomonas aestusnigri	857252
+GCF_030295915.1	bacteria	Thalassotalea sediminis	1759089
+GCF_030296715.1	archaea	Methanobacterium ferruginis	710191
+GCF_030322905.1	bacteria	Pseudoxanthomonas winnipegensis	2480810
+GCF_030389965.1	bacteria	Candidatus Chlorohelix allophototropha	3003348
+GCF_030408595.1	bacteria	Corynebacterium canis	679663
+GCF_030440425.1	bacteria	Microbulbifer spongiae	2944933
+GCF_030440595.1	bacteria	Corynebacterium glucuronolyticum DSM 44120	1121361
+GCF_030719275.1	bacteria	Streptomyces laculatispora	887464
+GCF_030845195.1	bacteria	Sanyastnella coralliicola	3069118
+GCF_031128465.2	bacteria	Mariniflexile litorale	3045158
+GCF_031583595.1	bacteria	Thalassotalea psychrophila	3065647
+GCF_031598375.1	bacteria	Temperatibacter marinus	1456591
+GCF_031755915.1	plant	Ziziphus jujuba	326968
+GCF_032051675.1	bacteria	Candidatus Nitrospira neomarina	3020899
+GCF_032594115.1	archaea	Methanolapillus millepedarum	3028296
+GCF_032594435.1	archaea	Methanimicrococcus stummii	3028294
+GCF_032922765.1	bacteria	Nonlabens ulvanivorans	906888
+GCF_033097485.1	archaea	Pyrofollis japonicus	3060460
+GCF_033406955.1	bacteria	Streptomyces violaceoruber	1935
+GCF_033547155.1	bacteria	Pseudomonas benzenivorans	556533
+GCF_033597815.3	bacteria	Staphylococcus halotolerans	3093634
+GCF_036251935.1	bacteria	Orbus wheelerorum	3074111
+GCF_036669935.1	invertebrate	Montipora foliosa	591990
+GCF_036810445.1	fungi	Kwoniella europaea PYCC6329	1423913
+GCF_036898095.1	invertebrate	Palaemon carinicauda	392227
+GCF_037043105.1	invertebrate	Vanessa tameamea	334116
+GCF_037076605.1	bacteria	Paludibacterium flexuosum	3112107
+GCF_037201915.1	archaea	Haloplanus salilacus	2949994
+GCF_037949505.1	bacteria	Tepidibacillus marianensis	3131995
+GCF_038069655.2	bacteria	Yoonia phaeophyticola	3137369
+GCF_039718975.1	bacteria	Enterobacter chuandaensis	2497875
+GCF_040256745.1	bacteria	Scrofimicrobium appendicitidis	3079930
+GCF_040256885.1	bacteria	Stenotrophomonas riyadhensis	2859893
+GCF_040412085.2	bacteria	Vibrio chaetopteri	3016528
+GCF_040515995.1	bacteria	Proteinivorax hydrogeniformans	1826727
+GCF_040536845.1	bacteria	Ruicaihuangia caeni	3042517
+GCF_040833995.1	bacteria	Leptospira cinconiae	3235173
+GCF_040955415.1	bacteria	Castellaniella ginsengisoli	546114
+GCF_041146395.1	vertebrate_mammalian	Eulemur rufifrons	859984
+GCF_041222865.1	bacteria	Cronobacter turicensis	413502
+GCF_041242975.1	bacteria	Xanthomonas medicagonis	3160841
+GCF_041505935.1	bacteria	Fervidobacterium thailandense	1008305
+GCF_042846195.1	bacteria	Faecalimonas umbilicata	1912855
+GCF_042846945.1	bacteria	Pseudomonas moorei	395599
+GCF_042853465.1	bacteria	Simiduia litorea	1435348
+GCF_044360475.1	bacteria	Archangium minus	83450
+GCF_044706935.1	plant	Curcuma longa	136217
+GCF_044813075.1	bacteria	Kytococcus sedentarius	1276
+GCF_045039555.1	bacteria	Streptomyces gougerotii	53448
+GCF_045055315.1	bacteria	Allobrachymonas wangyanguii	3130163
+GCF_045159795.1	bacteria	Peribacillus muralis	264697
+GCF_045843805.1	vertebrate_mammalian	Urocitellus parryii	9999
+GCF_046197875.1	archaea	Methanobrevibacter acididurans	120963
+GCF_046237605.1	bacteria	Paraperibacillus marinus	3115295
+GCF_046267975.1	bacteria	Streptomyces flavusporus	3385496
+GCF_046742065.1	invertebrate	Oratosquilla oratoria	337810
+GCF_047160095.1	bacteria	Rodentibacter abscessus	3381777
+GCF_048319815.1	bacteria	Bacteroides difficilis	2763021
+GCF_049676565.1	bacteria	Elusimicrobium posterum	3116653
+GCF_050516475.1	bacteria	Paenibacillus ottowii	2315729
+GCF_050571805.1	bacteria	Halodesulfovibrio aestuarii	126333
+GCF_050908995.1	invertebrate	Andrena cerasifolii	2819439
+GCF_050947815.1	fungi	Fusarium sambucinum	5128
+GCF_051020955.1	invertebrate	Megalopta genalis	115081
+GCF_051122705.1	bacteria	Streptomyces ipomoeae	103232
+GCF_051201715.1	bacteria	Clavibacter quasicaliforniensis	2783811
+GCF_051307045.1	bacteria	Dryocola mayonis	3133271
+GCF_051622035.1	invertebrate	Arctopsyche grandis	121162
+GCF_051628075.1	bacteria	Bacillus siamensis	659243
+GCF_052043865.1	archaea	Halococcus salifodinae	36738
+GCF_052055875.1	archaea	Methanosphaerula subterraneus	3350244
+GCF_052344095.1	bacteria	Pedobacter paludisoli	3383027
+GCF_052540725.1	bacteria	Robiginitalea rubriflava	3459121
+GCF_054072135.1	bacteria	Streptomyces kryoterrae	3477385
+GCF_054515435.1	bacteria	Paenibacillus chondroitinus	59842
+GCF_054733335.1	bacteria	Clostridium tertium	1559
+GCF_055378175.1	archaea	Halovenus rubra	869890
+GCF_055379315.1	archaea	Natronobiforma cellulositropha	1679076
+GCF_055379655.1	bacteria	Microbacterium imperiale	33884
+GCF_055380345.1	archaea	Halorubrum pallidum	1526114
+GCF_055381305.1	archaea	Methanobacterium kanagiense	483896
+GCF_055381565.1	archaea	Haloparvum alkalitolerans	1042953
+GCF_055381745.1	bacteria	Thermoanaerobacterium calidifontis	715028
+GCF_055386385.1	bacteria	Afipia dichlorophenoxyacetatis	3116917
+GCF_055387835.1	bacteria	Desulfovibrio simplex	54565
+GCF_055389385.1	archaea	Caldococcus noboribetus	57174
+GCF_055391705.1	bacteria	Desulfovectis peckii	1236215
+GCF_055392585.1	archaea	Thermococcus coalescens	227597
+GCF_055394095.1	archaea	Methanosarcina baltica	109046
+GCF_055396005.1	bacteria	Pleomorphochaeta naphthae	1895020
+GCF_055398025.1	archaea	Halopelagius fulvigenes	1198324
+GCF_055398265.1	bacteria	Desulfogranum aggregans	1825660
+GCF_056341115.1	bacteria	Geothermobacter ehrlichii	213224
+GCF_056494125.1	bacteria	Njordella calcicola	3720778
+GCF_056494185.1	bacteria	Rania fehmarnensis	3720779
+GCF_059934925.1	bacteria	Blochmannia endosymbiont of Camponotus pudorosus	1664297
+GCF_900002375.2	protozoa	Plasmodium berghei ANKA	5823
+GCF_900002385.2	protozoa	Plasmodium yoelii	5861
+GCF_900079805.1	fungi	Fusarium fujikuroi IMI 58289	1279085
+GCF_900083515.1	archaea	Cuniculiplasma divulgatum	1673428
+GCF_900090045.1	protozoa	Plasmodium malariae	5858
+GCF_900091425.1	bacteria	Micromonospora krabiensis	307121
+GCF_900095795.1	bacteria	Petrimonas mucosa	1642646
+GCF_900105445.1	bacteria	Paraoerskovia marina	545619
+GCF_900105785.1	bacteria	Microlunatus sagamiharensis	546874
+GCF_900130075.1	bacteria	Herminiimonas arsenitoxidans	1809410
+GCF_900167475.1	bacteria	Aeromicrobium choanae	1736691
+GCF_900184295.1	bacteria	Pseudomonas viridiflava	33069
+GCF_900198835.1	archaea	Thermococcus henrietii	2016361
+GCF_900240005.1	bacteria	Burkholderia stabilis	95485
+GCF_900476035.1	bacteria	Aggregatibacter segnis ATCC 33393	888057
+GCF_900478035.1	bacteria	Corynebacterium renale	1724
+GCF_900637975.1	bacteria	Actinomyces viscosus	1656
+GCF_900660495.1	bacteria	Mycoplasmopsis gallinacea	29556
+GCF_900660525.1	bacteria	Mycoplasmopsis bovigenitalium	2112
+GCF_900681995.1	protozoa	Plasmodium vinckei vinckei	54757
+GCF_902383905.1	archaea	Candidatus Methanomassiliicoccus intestinalis	1406512
+GCF_902729405.1	bacteria	Acididesulfobacillus acetoxydans	1561005
+GCF_903989455.1	bacteria	Xanthomonas euroxanthea	2259622
+GCF_903995435.1	vertebrate_mammalian	Acomys russatus	60746
+GCF_905163445.1	invertebrate	Pararge aegeria	116150
+GCF_905331265.2	bacteria	Enterobacter cloacae	550
+GCF_907165135.1	invertebrate	Oikopleura dioica	34765
+GCF_937425535.1	bacteria	Rhodovastum atsumiense	504468
+GCF_943734635.1	invertebrate	Anopheles cruzii	68878
+GCF_946995915.1	bacteria	Aminobacter niigataensis	83265
+GCF_947179165.1	plant	Solanum dulcamara	45834
+GCF_947242115.1	invertebrate	Biomphalaria glabrata	6526
+GCF_947243775.1	fungi	Saccharomyces kudriavzevii IFO 1802	226230
+GCF_947250765.1	bacteria	Wolbachia endosymbiont (group A) of Gymnosoma rotundatum	2954016
+GCF_947251915.1	bacteria	Wolbachia endosymbiont (group A) of Hylaeus communis	2954018
+GCF_948465745.1	plant	Chenopodium album	3559
+GCF_958298935.1	plant	Phragmites australis	29695
+GCF_964026795.1	bacteria	Wolbachia endosymbiont (group B) of Yponomeuta malinellus	3066186
+GCF_964026875.1	bacteria	Wolbachia endosymbiont (group A) of Pherbina coryleti	3066153
+GCF_964028415.1	bacteria	Wolbachia endosymbiont (group A) of Andrena helvola	3066192
+GCF_964030775.1	bacteria	Rickettsia endosymbiont of Aspidapion aeneum	3066247
+GCF_964059235.1	bacteria	Candidatus Tisiphia endosymbiont of Nedyus quadrimaculatus	3139332
+GCF_964062635.1	bacteria	Pediococcus ethanolidurans	319653
+GCF_964271855.1	vertebrate_mammalian	Acomys minous	83528
+GCF_964374135.1	vertebrate_mammalian	Grampus griseus	83653
+GCF_965194805.1	vertebrate_mammalian	Balaenoptera borealis	9768
+GCF_965211115.1	bacteria	Microbacterium paulum	2707006
+GCF_965233825.1	bacteria	Roseibium album	311410
+GCF_976997665.1	bacteria	Pseudomonas kilonensis	132476
+GCF_978021855.1	bacteria	Wolbachia endosymbiont of Halictus nicosiae	3473539
+GCF_982554035.1	bacteria	Carnobacterium mobile	2750

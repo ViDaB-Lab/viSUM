@@ -2,7 +2,10 @@ process PREPARE_DEEP6_DATABASE {
 
     tag 'deep6_database'
 
-    conda 'conda-forge::git'
+    // Use the same pinned inference environment as analysis, not Git-only setup.
+    conda "${projectDir}/envs/deep6.yml"
+    cpus 1
+    memory params.deep6_memory
 
     publishDir "${params.outdir}/database_setup",
         mode: 'copy',
@@ -26,6 +29,12 @@ process PREPARE_DEEP6_DATABASE {
     script:
     """
     set -euo pipefail
+    export PYTHONDONTWRITEBYTECODE=1
+    export OMP_NUM_THREADS=1
+    export TF_NUM_INTEROP_THREADS=1
+    export TF_NUM_INTRAOP_THREADS=1
+    # Import smoke check only: no inference, training or modification of models.
+    python -c 'import tensorflow, keras, h5py, numpy, pandas, sklearn, Bio'
 
     INSTALL_DEST="${installation_path}"
     INSTALL_SOURCE="${installation_source}"
@@ -41,24 +50,7 @@ process PREPARE_DEEP6_DATABASE {
 
     validate_installation() {
         local candidate="\$1"
-        local report_errors="\${2:-false}"
-        local required_file
-
-        if [[ ! -d "\$candidate" || ! -r "\$candidate" ]]; then
-            [[ "\$report_errors" == 'true' ]] && \
-                report_error "Deep6 installation is missing or unreadable: \$candidate"
-            return 1
-        fi
-
-        for required_file in \
-            "\$candidate/Master/deep6.py" \
-            "\$candidate/Master/deep6_functions.py"; do
-            if [[ ! -s "\$required_file" ]]; then
-                [[ "\$report_errors" == 'true' ]] && \
-                    report_error "missing or empty required file: \$required_file"
-                return 1
-            fi
-        done
+        python "${projectDir}/bin/validate_reference_database.py" deep6_installation "\$candidate"
     }
 
     model_for_length() {
@@ -70,43 +62,9 @@ process PREPARE_DEEP6_DATABASE {
             | sort
     }
 
-    validate_hdf5_signature() {
-        local model_file="\$1"
-        local signature
-
-        signature=\$(head -c 8 "\$model_file" | od -An -tx1 | tr -d '[:space:]')
-        [[ "\$signature" == '894844460d0a1a0a' ]]
-    }
-
     validate_models() {
         local candidate="\$1"
-        local report_errors="\${2:-false}"
-        local model_length
-        local model_count
-        local model_file
-
-        if [[ ! -d "\$candidate" || ! -r "\$candidate" ]]; then
-            [[ "\$report_errors" == 'true' ]] && \
-                report_error "Deep6 model directory is missing or unreadable: \$candidate"
-            return 1
-        fi
-
-        for model_length in 250 500 1000 1500; do
-            model_count=\$(model_for_length "\$candidate" "\$model_length" | wc -l)
-            if [[ "\$model_count" -ne 1 ]]; then
-                if [[ "\$report_errors" == 'true' ]]; then
-                    report_error "expected exactly one non-empty model_\${model_length}_*.h5 file in \$candidate; found \$model_count"
-                fi
-                return 1
-            fi
-
-            model_file=\$(model_for_length "\$candidate" "\$model_length")
-            if ! validate_hdf5_signature "\$model_file"; then
-                [[ "\$report_errors" == 'true' ]] && \
-                    report_error "model does not have a valid HDF5 signature: \$model_file"
-                return 1
-            fi
-        done
+        python "${projectDir}/bin/validate_reference_database.py" deep6_models "\$candidate"
     }
 
     validate_bundle() {
@@ -145,9 +103,9 @@ process PREPARE_DEEP6_DATABASE {
         model_1000=\$(basename "\$(model_for_length "\$MODEL_DEST" 1000)")
         model_1500=\$(basename "\$(model_for_length "\$MODEL_DEST" 1500)")
 
-        printf 'installation_path\tinstallation_source\tmodel_path\tmodel_source\tvalidation\tinstallation_action\trepository\trequested_revision\tinstalled_revision\tmodel_250\tmodel_500\tmodel_1000\tmodel_1500\n' \
+        printf 'installation_path\tinstallation_source\tmodel_path\tmodel_source\tvalidation\tinstallation_action\trepository\trequested_revision\tinstalled_revision\tmodel_250\tmodel_500\tmodel_1000\tmodel_1500\truntime_validation\n' \
             > deep6_database_metadata.tsv
-        printf '%s\t%s\t%s\t%s\tpassed\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf '%s\t%s\t%s\t%s\tpassed\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\timports-passed-not-inference-tested\n' \
             "\$INSTALL_DEST" "\$INSTALL_SOURCE" "\$MODEL_DEST" "\$MODEL_SOURCE" \
             "\$action" "\$REPOSITORY" "\$REQUESTED_REVISION" "\$installed_revision" \
             "\$model_250" "\$model_500" "\$model_1000" "\$model_1500" \

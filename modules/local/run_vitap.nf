@@ -22,7 +22,7 @@ process RUN_VITAP {
           path(provirus_region_map),
           path(provirus_boundary_audit),
           path(provirus_refinement_summary)
-    tuple path(vitap_database), path(vitap_database_metadata)
+    path vitap_database
     val include_low_confidence
 
     output:
@@ -120,8 +120,8 @@ process RUN_VITAP {
     ALL_COUNT=\$(awk 'NR > 1 { count++ } END { print count + 0 }' "\$ALL_FILE")
     FALLBACK_COUNT=\$(awk 'NR > 1 { count++ } END { print count + 0 }' "\$FALLBACK_FILE")
     VITAP_VERSION=\$(python -c "from importlib.metadata import version; print(version('VITAP'))")
-    DATABASE_RELEASE=\$(awk -F '\t' 'NR == 2 { print \$5 }' "${vitap_database_metadata}")
     RESOLVED_DATABASE_PATH=\$(readlink -f "${vitap_database}")
+    DATABASE_RELEASE=\$(basename "\$RESOLVED_DATABASE_PATH" | sed 's/^DB_//')
     if [[ -z "\$RESOLVED_DATABASE_PATH" || ! -d "\$RESOLVED_DATABASE_PATH" ]]; then
         echo "ERROR: Could not resolve VITAP database path from '${vitap_database}'." >&2
         exit 1

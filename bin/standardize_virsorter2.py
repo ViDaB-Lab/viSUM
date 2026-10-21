@@ -4,6 +4,7 @@
 
 import argparse
 import csv
+import hashlib
 import re
 from pathlib import Path
 
@@ -18,6 +19,18 @@ OUTPUT_COLUMNS = CORE_EVIDENCE_COLUMNS + [
     "max_score_group",
     "evidence_strength",
     "strength_basis",
+]
+
+BOUNDARY_AUDIT_COLUMNS = [
+    "sample_id",
+    "sequence_id",
+    "parent_sequence_id",
+    "boundary_status",
+    "native_coordinates",
+    "parent_length",
+    "score_length",
+    "topology",
+    "verified_sequence_sha256",
 ]
 
 SCORE_REQUIRED = {
@@ -55,8 +68,42 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--score-table", required=True, type=Path)
     parser.add_argument("--boundary-table", required=True, type=Path)
     parser.add_argument("--run-metadata", required=True, type=Path)
+    parser.add_argument("--normalized-fasta", type=Path)
+    parser.add_argument("--viral-fasta", type=Path)
+    parser.add_argument("--boundary-audit", type=Path)
     parser.add_argument("--output", required=True, type=Path)
     return parser.parse_args()
+
+
+def selected_fasta_sequences(path: Path, wanted: set[str]) -> dict[str, str]:
+    """Read only requested records, retaining no other sequence in memory."""
+    found: dict[str, str] = {}
+    sequence_id: str | None = None
+    parts: list[str] = []
+
+    def finish_record() -> None:
+        if sequence_id in wanted:
+            if sequence_id in found:
+                raise ValueError(f"Duplicate FASTA record in {path}: {sequence_id}")
+            sequence = "".join(parts)
+            if not sequence:
+                raise ValueError(f"Empty FASTA record in {path}: {sequence_id}")
+            found[sequence_id] = sequence
+
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if line.startswith(">"):
+                finish_record()
+                sequence_id = line[1:].split(maxsplit=1)[0]
+                parts = []
+            elif sequence_id in wanted:
+                parts.append("".join(line.split()))
+        finish_record()
+
+    missing = wanted.difference(found)
+    if missing:
+        raise ValueError(f"Missing FASTA record(s) in {path}: {sorted(missing)}")
+    return found
 
 
 def read_tsv(path: Path, required_columns: set[str]) -> tuple[list[str], list[dict[str, str]]]:
@@ -242,7 +289,8 @@ def boundary_fields(
     if boundary is None:
         if call_type != "lt2gene":
             raise ValueError(f"Missing VirSorter2 boundary row for {sequence_id}")
-        return {"coordinates": "", "topology": "", "n_genes": ""}
+        return {"coordinates": "", "topology": "", "n_genes": "",
+                "boundary_status": "no_native_boundary", "native_coordinates": ""}
 
     if boundary["seqname"].strip() != parent_id:
         raise ValueError(f"Boundary parent mismatch for {sequence_id}")
@@ -254,9 +302,10 @@ def boundary_fields(
         call_type == "full"
         and topology.lower() == "circular"
         and end > parent_length
-        and end - parent_length <= start
     )
-    if end < start or (end > parent_length and not circular_full_wrap):
+    if (start > parent_length or end < start
+            or (end > parent_length and not circular_full_wrap)
+            or (circular_full_wrap and end > 2 * parent_length)):
         raise ValueError(f"Invalid boundary coordinates for {sequence_id}: {start}-{end}")
     # VirSorter2 may trim ``||full`` calls at terminal gene overhangs, during
     # circular-sequence correction, or while optimizing the end boundary.
@@ -293,9 +342,17 @@ def boundary_fields(
         raise ValueError(f"Call suffix and boundary partial flag disagree for {sequence_id}")
 
     return {
-        "coordinates": f"{start}-{end}",
+        # Circular wrapped native coordinates cannot be represented as one
+        # linear interval on the input. Their full-call score is verified
+        # separately; these coordinates have no trimming authority.
+        "coordinates": "" if circular_full_wrap else f"{start}-{end}",
         "topology": topology,
         "n_genes": str(orf_end - orf_start + 1),
+        "boundary_status": (
+            "circular_full_boundary_unresolved" if circular_full_wrap
+            else "linear_coordinates_validated"
+        ),
+        "native_coordinates": f"{start}-{end}",
     }
 
 
@@ -336,6 +393,7 @@ def main() -> None:
         raise ValueError("VirSorter2 metadata status disagrees with the score table")
 
     evidence_rows: list[dict[str, str]] = []
+    boundary_audit_rows: list[dict[str, str]] = []
     for sequence_id, row in score_records.items():
         parent_id, call_type, record_type = parse_prediction_id(sequence_id)
         if parent_id not in header_records:
@@ -385,6 +443,18 @@ def main() -> None:
             boundary_records.get(sequence_id),
             parent_length,
         )
+        if region["boundary_status"] == "circular_full_boundary_unresolved":
+            boundary_audit_rows.append({
+                "sample_id": args.sample_id,
+                "sequence_id": sequence_id,
+                "parent_sequence_id": parent_id,
+                "boundary_status": region["boundary_status"],
+                "native_coordinates": region["native_coordinates"],
+                "parent_length": str(parent_length),
+                "score_length": str(region_length),
+                "topology": region["topology"],
+                "verified_sequence_sha256": "",
+            })
 
         output = {
             "sample_id": args.sample_id,
@@ -415,6 +485,26 @@ def main() -> None:
         output.update(unclassified_taxonomy("virus"))
         evidence_rows.append(output)
 
+    if boundary_audit_rows:
+        if args.normalized_fasta is None or args.viral_fasta is None:
+            raise ValueError(
+                "Out-of-range circular full calls require --normalized-fasta "
+                "and --viral-fasta for sequence-identity verification"
+            )
+        parent_ids = {row["parent_sequence_id"] for row in boundary_audit_rows}
+        prediction_ids = {row["sequence_id"] for row in boundary_audit_rows}
+        parent_sequences = selected_fasta_sequences(args.normalized_fasta, parent_ids)
+        viral_sequences = selected_fasta_sequences(args.viral_fasta, prediction_ids)
+        for row in boundary_audit_rows:
+            parent = parent_sequences[row["parent_sequence_id"]]
+            viral = viral_sequences[row["sequence_id"]]
+            if len(parent) != int(row["parent_length"]) or viral != parent:
+                raise ValueError(
+                    "Out-of-range circular full call does not match its "
+                    f"normalized parent sequence: {row['sequence_id']}"
+                )
+            row["verified_sequence_sha256"] = hashlib.sha256(parent.encode()).hexdigest()
+
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(
@@ -425,6 +515,16 @@ def main() -> None:
         )
         writer.writeheader()
         writer.writerows(evidence_rows)
+
+    if args.boundary_audit is not None:
+        args.boundary_audit.parent.mkdir(parents=True, exist_ok=True)
+        with args.boundary_audit.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(
+                handle, fieldnames=BOUNDARY_AUDIT_COLUMNS,
+                delimiter="\t", lineterminator="\n",
+            )
+            writer.writeheader()
+            writer.writerows(boundary_audit_rows)
 
     print(f"Wrote {args.output}: {len(evidence_rows)} virus calls")
 

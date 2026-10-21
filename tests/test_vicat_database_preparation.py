@@ -84,10 +84,13 @@ class NonviralSourcePreparationTests(unittest.TestCase):
 
 class PreparationWorkflowTests(unittest.TestCase):
     def test_both_databases_connected_and_builds_serialized(self):
-        workflow = (ROOT / 'visum_nextflow.nf').read_text()
-        self.assertIn('ch_vicat_nonviral_database_request = PREPARE_VICAT_DATABASE.out.database', workflow)
-        self.assertIn('PREPARE_VICAT_NONVIRAL_DATABASE(ch_vicat_nonviral_database_request)', workflow)
-        self.assertIn('Choose --vicat_db OR the two MetaVR source files', workflow)
+        setup = (ROOT / 'workflows/database_setup.nf').read_text()
+        analysis = (ROOT / 'visum_nextflow.nf').read_text()
+        self.assertIn('ch_vicat_nonviral_database_request = PREPARE_VICAT_DATABASE.out.database', setup)
+        self.assertIn('PREPARE_VICAT_NONVIRAL_DATABASE(ch_vicat_nonviral_database_request)', setup)
+        self.assertIn('Choose --vicat_db OR the two MetaVR source files', setup)
+        for process in ('PREPARE_VICAT_DATABASE', 'PREPARE_VICAT_NONVIRAL_DATABASE'):
+            self.assertNotIn(process + '(', analysis)
         module = (ROOT / 'modules/local/vicat_nonviral_database.nf').read_text()
         for text in ('flock 9', 'prepare_vicat_nonviral_build.py', 'cache false', 'path(build_helpers)',
                      'IS DISTINCT FROM', 'reference_class IS NULL', 'sha256sum --check'):

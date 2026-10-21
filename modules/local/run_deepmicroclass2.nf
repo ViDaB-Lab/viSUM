@@ -13,8 +13,7 @@ process RUN_DEEPMICROCLASS2 {
 
     input:
     tuple val(prefix), val(type), path(normalized_fasta), path(header_map)
-    tuple path(deepmicroclass2_installation),
-          path(deepmicroclass2_installation_metadata)
+    path deepmicroclass2_installation
 
     output:
     tuple val(prefix),
@@ -103,7 +102,7 @@ process RUN_DEEPMICROCLASS2 {
     fi
 
     INSTALLED_REVISION=\$(
-        awk -F '\t' 'NR == 2 { print \$8 }' "${deepmicroclass2_installation_metadata}"
+        git -C "${deepmicroclass2_installation}" rev-parse HEAD 2>/dev/null || true
     )
     [[ -n "\$INSTALLED_REVISION" ]] || INSTALLED_REVISION='unknown'
 

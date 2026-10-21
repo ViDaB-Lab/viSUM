@@ -15,7 +15,6 @@ process RUN_VIRBOT {
     tuple val(prefix), val(type), path(normalized_fasta), path(header_map)
     tuple path(virbot_installation),
           path(virbot_database),
-          path(virbot_installation_metadata),
           val(sensitive_mode),
           val(taxa_mode)
 
@@ -103,10 +102,10 @@ process RUN_VIRBOT {
         exit 1
     fi
     INSTALLED_REVISION=\$(
-        awk -F '\t' 'NR == 2 { print \$8 }' "${virbot_installation_metadata}"
+        git -C "${virbot_installation}" rev-parse HEAD 2>/dev/null || true
     )
     VIRBOT_VERSION=\$(
-        awk -F '\t' 'NR == 2 { print \$9 }' "${virbot_installation_metadata}"
+        awk -F '"' '/^__version__/ { print \$2; exit }' "${virbot_installation}/virbot/__init__.py"
     )
     [[ -n "\$INSTALLED_REVISION" ]] || INSTALLED_REVISION='unknown'
     [[ -n "\$VIRBOT_VERSION" ]] || VIRBOT_VERSION='unknown'

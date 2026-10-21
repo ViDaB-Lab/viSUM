@@ -45,6 +45,7 @@ process PREPARE_VCONTACT3_DATABASE {
 
     require_compatible_runtime() {
         python -c "from importlib.metadata import version; from packaging.version import Version; current=Version(version('vcontact3')); assert current >= Version('3.2.0'), f'vConTACT3 {current} is incompatible with the current v232+ database; version 3.2.0 or newer is required'"
+        python -B "!{projectDir}/bin/check_vcontact3_parquet.py"
         command -v mmseqs >/dev/null 2>&1 || {
             echo 'ERROR: The vConTACT3 environment does not provide MMseqs2.' >&2
             exit 1
@@ -59,7 +60,7 @@ process PREPARE_VCONTACT3_DATABASE {
             return
         fi
         [[ -d "$candidate" ]] || return 1
-        find "$candidate" -maxdepth 1 -type f -name '???.json' -size +0c \
+        find -L "$candidate" -maxdepth 1 -type f -name '???.json' -size +0c \
             | sort \
             | tail -n 1
     }

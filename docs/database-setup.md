@@ -1,103 +1,88 @@
-# Preparation-only setup
+# Prepare and reuse databases
 
-Run from the repository on Linux with the same config and database paths that
-will be used for analysis:
+[Documentation](README.md) · [viCAT databases](vicat-database-preparation.md)
 
-```bash
-bash ./visum -c visum.config --setup \
-  --dbdir /shared/visum/databases \
-  --tooldir /shared/visum/tools \
-  --outdir setup_results
-```
+## Default setup
 
-`--setup` prepares enabled database-bearing tools using the existing `--run_*`
-flags. There is no FASTA, sample normalization, discovery, classification,
-refinement or harmonization. Supplying input/prefix/type/prefix_many/indir is
-rejected. It does not run viCAT's sample-specific reference-subset/hit preparation.
-At least one database-bearing tool must be enabled.
-
-VITAP and vConTACT3 are enabled by default; viCAT remains opt-in. DNA-only and RNA-only preparations both run if their
-tool flags are enabled, since setup has no sample type. Disable unwanted tools
-with the same `--run_<tool> false` settings used in analysis.
-
-For a full-profile setup add `--run_vicat true` and supply both viCAT databases or their build inputs as
-described in [viCAT preparation](vicat-database-preparation.md). Large local
-builds require explicitly adequate `--max_memory`, disk and time limits; the
-default 48 GB ceiling is not sufficient for the configured 350 GB viral build.
-
-Preparations run sequentially to avoid overlapping their memory-intensive builds.
-They use the same prepare modules, destinations, installers and validation as
-analysis, and write per-tool records under `<outdir>/database_setup/`. A failed
-preparation stops the dependency chain. Existing valid assets are reused.
-Setup tasks are not restored from the Nextflow task cache, even with `-resume`:
-the persistent installation is validated again without automatically rebuilding.
-
-Update flags remain explicit. Setup does not enable VITAP/vConTACT3 updates or
-check for newer releases by itself. See [VITAP selection](vitap-database-lifecycle.md).
-No database is published/uploaded by this workflow.
-
-## Limits of setup success
-
-TEsorter has no separate database preparation process; setup prints a warning
-when it is enabled. Its packaged references and runtime still require the small
-analysis smoke test. Preparing the other databases also does not necessarily
-create every distinct analysis Conda environment (notably Deep6).
-
-The Conda cache remains configured separately from `dbdir` and `tooldir`. For
-shared installations, set `conda.cacheDir` to a shared absolute path in your own
-config. Use the same config for subsequent analyses. Paths should remain stable.
-
-## Stronger completeness validation
-
-geNomad validation checks the version, marker metadata, taxonomy files and all
-three required MMseqs databases, including headers, indexes, nonempty data and
-readability via `mmseqs dbtype`.
-
-vConTACT3 validation follows the selected release's manifest for the requested
-domains (`both` means prokaryotes and eukaryotes). It checks reference sequences,
-gene/genome tables, all five runtime identity levels, their MMseqs databases and
-cluster mappings, and the VOGDB profile database. Paths must stay within the
-release directory. Missing domains, mismatched release keys, missing/empty files
-and unsafe paths are rejected. Split MMseqs data files are supported.
-
-These are structural/readability checks, not proof of biological accuracy or
-cryptographic authenticity of every asset. Full-size upstream database tests
-remain necessary.
-
-Source contracts: [geNomad v1.12.0](https://github.com/apcamargo/genomad/blob/v1.12.0/genomad/database.py)
-and [pinned vConTACT3](https://bitbucket.org/MAVERICLab/vcontact3/src/d57ae81e0be5ab57a8a14692a4cb8ab255ce2d52/vcontact3/databases.py).
-
-## Routing regression test (no database downloads)
-
-On Linux with Nextflow on PATH:
+From the viSUM installation directory:
 
 ```bash
-python -m unittest discover -s tests -p 'test_setup_nextflow_integration.py' -v
+nextflow run visum_nextflow.nf --setup
 ```
 
-This uses temporary fake prepare implementations and verifies the trace contains
-exactly the twelve selected preparation processes and no analyses. It tests
-Nextflow routing, not the real installers. Then test a real clean setup, repeat
-setup to verify reuse, and run small DNA/RNA analyses against those installations.
+Setup prepares enabled database-bearing programs sequentially, including the
+DNA- and RNA-specific tools. Do not supply FASTA, prefix or molecule-type options.
+It creates the required preparation environments and validates the assets.
+Ordinary analysis only reads prepared assets; it never runs global installers.
 
-## Isolated Linux installation test
+Locations are already configured:
+
+| Contents | Default location |
+| --- | --- |
+| Managed databases | `<installation>/databases/` |
+| Software/model bundles | `<installation>/tools/` |
+| Conda environments | `<installation>/.conda/` |
+| Setup metadata | `<outdir>/database_setup/` (`outdir` defaults to `results`) |
+
+Override `--dbdir` or `--tooldir` only when using another storage location.
+For an alternative Conda cache, set `conda.cacheDir` in your site config.
+Use the same asset configuration for setup and analysis.
+
+## Include optional viCAT
+
+All default programs are enabled except viCAT. To prepare those defaults plus
+the viCAT viral and nonviral databases:
 
 ```bash
-NEXTFLOW_BIN=/absolute/path/to/nextflow bash bin/smoke_database_setup.sh
+nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build
 ```
 
-This runs the routing test first, then installs the ten non-viCAT preparations
-(including VITAP and vConTACT3) in a new `visum-clean-setup.*` directory beside
-the repository. Databases, tool installations, Conda environments, Nextflow work
-and outputs are isolated from the production installation. It performs a second
-setup invocation against the same assets and checks both traces contain exactly
-those ten preparations, with no analysis processes. Inspect the reuse log and
-per-tool provenance to confirm existing assets were reused, not rebuilt.
+The approved MetaVR sources and the packaged nonviral assembly selection can be
+downloaded automatically. No manually collected source files are required for
+that route. **Check available memory and disk first:** the current viral build
+requests 350 GB, and the profile budgets up to 32 CPUs/400 GB. This is a
+configured allocation, not a measured minimum RAM requirement. The large build
+does not describe the resources needed to use an already-prepared database.
+See [viCAT preparation](vicat-database-preparation.md) for inputs and alternatives.
 
-Defaults are 16 CPUs and a 128 GB per-task memory ceiling; override with
-`SETUP_CPUS` and `SETUP_MEMORY`. Set `SETUP_TEST_PARENT` to an existing directory
-on a filesystem with room for these large downloads and builds. This is a real,
-potentially long and disk-intensive installation test, not a small fixture test.
-Conda must be on PATH. viCAT source builds require separate explicit inputs and
-are excluded; TEsorter's analysis runtime is also not tested. On failure, preserve
-the printed test directory and logs for diagnosis. The runner never deletes it.
+## Select tools and reuse existing assets
+
+Use the normal `--run_<tool>` switches in setup, for example
+`--run_virsorter2 false` to omit VirSorter2. If disabled during setup, prepare its
+assets before enabling it in analysis.
+
+To use an existing database outside the managed root, pass its per-tool path,
+such as `--genomad_db /shared/genomad/genomad_db` or
+`--vicat_db /shared/vicat/viral`. viCAT also needs `--vicat_nonviral_db`.
+The same paths must be available from every execution host, including cluster nodes.
+
+Rerunning the setup command validates and reuses valid installations. You do not
+need a separate recovery launcher or `-resume` to reuse a completed database.
+Preparation checks still execute even with `-resume`; an invalid database is not
+silently overwritten. Interrupted work may be reused when its source/build
+identity matches. Keep the existing private build files until a failure is understood.
+
+## Updates are explicit
+
+Setup does not automatically replace a valid database with a newer release.
+VITAP and vCONTACT3 have explicit update options:
+`--vitap_update_database true` and `--vcontact3_update_database true`.
+Perform updates in setup, not analysis. For reproducibility, keep previously
+used references and use a new destination/release label for changed inputs.
+See [VITAP selection](vitap-database-lifecycle.md).
+
+The ICTV rank table and reconciliation bundle shipped with viSUM are pinned
+separately. A VITAP or vCONTACT3 reference update does not automatically update
+that target taxonomy or its reconciliation bundle.
+
+## What successful setup means
+
+Setup checks required structure, identities and native readability where
+implemented. It is not proof that every reference is biologically correct or
+that all analysis runtimes work on a new machine. Run a small DNA/RNA analysis
+before committing a large dataset.
+
+TEsorter has no standalone database preparation task. Its packaged references
+are checked when its analysis environment runs. This warning alone is not a setup
+failure. viSUM imposes no task wall-time limits, but cluster queues may impose
+or require one. See [resources](resources.md) and [troubleshooting](troubleshooting.md).

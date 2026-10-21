@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "bin"))
 import run_viharmony
 import reconcile_benchmark_truth
 import replay_viharmony_taxonomy
+from reporting_test_paths import artifact
 
 
 def write_tsv(path: Path, columns: list[str], rows: list[dict[str, str]]) -> None:
@@ -26,7 +27,7 @@ def write_tsv(path: Path, columns: list[str], rows: list[dict[str, str]]) -> Non
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
-    with path.open("r", encoding="utf-8", newline="") as handle:
+    with artifact(path).open("r", encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle, delimiter="\t"))
 
 
@@ -260,12 +261,12 @@ class ViharmonyTests(unittest.TestCase):
                 "provisional_disputed_ct3_vicat_boundary",
             )
             self.assertEqual(
-                (directory / "sample.final.normalized.fasta").read_text(encoding="utf-8"),
+                artifact(directory / "sample.final.normalized.fasta").read_text(encoding="utf-8"),
                 "",
             )
             self.assertIn(
                 final_id,
-                (directory / "sample.provisional.normalized.fasta").read_text(
+                artifact(directory / "sample.provisional.normalized.fasta").read_text(
                     encoding="utf-8"
                 ),
             )
@@ -509,12 +510,12 @@ class ViharmonyTests(unittest.TestCase):
                 "genus:novel_genus_7_of_Chiyouviridae",
                 metadata[1]["vcontact3_groups"],
             )
-            primary_fasta = (directory / "sample.final.original_ids.fasta").read_text(
+            primary_fasta = artifact(directory / "sample.final.original_ids.fasta").read_text(
                 encoding="utf-8"
             )
             self.assertIn(">original-one", primary_fasta)
             self.assertNotIn(">original-two|provirus_11_80", primary_fasta)
-            provisional_fasta = (
+            provisional_fasta = artifact(
                 directory / "sample.provisional.original_ids.fasta"
             ).read_text(encoding="utf-8")
             self.assertIn(">original-two|provirus_11_80", provisional_fasta)
@@ -525,12 +526,14 @@ class ViharmonyTests(unittest.TestCase):
                 provisional_metadata[0]["viral_decision"],
                 "provisional_provirus",
             )
-            review_fasta = (directory / "sample.review_candidates.fasta").read_text(
-                encoding="utf-8"
-            )
-            self.assertIn(">sample__c000001", review_fasta)
-            self.assertTrue((directory / "sample.evidence_audit.tsv.gz").exists())
-            with gzip.open(directory / "sample.evidence_audit.tsv.gz", "rt", encoding="utf-8", newline="") as handle:
+            if (directory / "audit").is_dir():
+                self.assertFalse(list(directory.rglob("*.review_candidates.fasta")))
+                self.assertTrue((directory / "review/sample.review.tsv").is_file())
+            else:  # Historical frozen scripts retain their original flat layout.
+                review_fasta = (directory / "sample.review_candidates.fasta").read_text(encoding="utf-8")
+                self.assertIn(">sample__c000001", review_fasta)
+            self.assertTrue(artifact(directory / "sample.evidence_audit.tsv.gz").exists())
+            with gzip.open(artifact(directory / "sample.evidence_audit.tsv.gz"), "rt", encoding="utf-8", newline="") as handle:
                 audit = list(csv.DictReader(handle, delimiter="\t"))
             deep6 = next(row for row in audit if row["tool"] == "deep6")
             self.assertEqual(deep6["evidence_strength"], "qualified")
@@ -542,7 +545,7 @@ class ViharmonyTests(unittest.TestCase):
             self.assertEqual(
                 parent_cellular["evidence_application"], "parent_context_only"
             )
-            manifest = json.loads((directory / "sample.harmonizer_manifest.json").read_text(encoding="utf-8"))
+            manifest = json.loads(artifact(directory / "sample.harmonizer_manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["schema_version"], "viharmony-1.0")
             self.assertIn(
                 "parent-only cellular/plasmid calls are retained as context",

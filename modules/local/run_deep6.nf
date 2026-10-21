@@ -14,8 +14,7 @@ process RUN_DEEP6 {
     input:
     tuple val(prefix), val(type), path(normalized_fasta), path(header_map)
     tuple path(deep6_installation),
-          path(deep6_models),
-          path(deep6_database_metadata)
+          path(deep6_models)
 
     output:
     tuple val(prefix),
@@ -83,7 +82,7 @@ process RUN_DEEP6 {
             "\$FINAL_SCORE_FILE"
     )
     DEEP6_REVISION=\$(
-        awk -F '\t' 'NR == 2 { print \$9 }' "${deep6_database_metadata}"
+        git -C "${deep6_installation}" rev-parse HEAD 2>/dev/null || true
     )
     [[ -n "\$DEEP6_REVISION" ]] || DEEP6_REVISION='unknown'
 

@@ -10,25 +10,21 @@ class CheckVDatabaseWorkflowContractTests(unittest.TestCase):
         workflow = (REPOSITORY_ROOT / "visum_nextflow.nf").read_text(
             encoding="utf-8"
         )
-        self.assertIn("PREPARE_CHECKV_DATABASE", workflow)
+        self.assertNotIn("PREPARE_CHECKV_DATABASE", workflow)
+        setup = (REPOSITORY_ROOT / 'workflows/database_setup.nf').read_text()
+        self.assertIn("PREPARE_CHECKV_DATABASE(ch_checkv_database_request)", setup)
         self.assertIn("params.run_checkv", workflow)
         self.assertIn("params.checkv_db", workflow)
-        self.assertIn("params.checkv_auto_download", workflow)
+        self.assertIn("params.checkv_auto_download", setup)
 
     def test_database_module_validates_both_database_components(self) -> None:
         module = (REPOSITORY_ROOT / "modules/local/checkv_database.nf").read_text(
             encoding="utf-8"
         )
-        for required_path in (
-            "genome_db/checkv_reps.faa",
-            "genome_db/checkv_reps.fna",
-            "genome_db/checkv_reps.tsv",
-            "genome_db/checkv_reps.dmnd",
-            "hmm_db/checkv_hmms.tsv",
-            "hmm_db/genome_lengths.tsv",
-            "hmm_db/checkv_hmms",
-        ):
-            self.assertIn(required_path, module)
+        self.assertIn('validate_reference_database.py" checkv', module)
+        # Requirements are exercised with complete/corrupt assets in the shared
+        # validator tests, rather than duplicated as strings in this module.
+        self.assertNotIn('hmm_file_count', module)
         self.assertIn("diamond dbinfo", module)
 
     def test_database_install_is_staged_locked_and_reusable(self) -> None:
@@ -52,14 +48,8 @@ class CheckVDatabaseWorkflowContractTests(unittest.TestCase):
         workflow = (REPOSITORY_ROOT / "visum_nextflow.nf").read_text(
             encoding="utf-8"
         )
-        assignment = workflow.index(
-            "ch_checkv_database = PREPARE_CHECKV_DATABASE.out.database"
-        )
-        invocation = workflow.index("RUN_CHECKV(", assignment)
-        database_block = workflow[assignment:invocation]
-
-        self.assertIn("tuple(database, metadata)", database_block)
-        self.assertIn(".first()", database_block)
+        self.assertIn("ch_checkv_database = Channel.value(file(prepared.checkv.path))", workflow)
+        self.assertIn("path checkv_database", (REPOSITORY_ROOT / 'modules/local/run_checkv.nf').read_text())
         self.assertIn("sharedProvirusTools << 'checkv'", workflow)
         self.assertIn("sharedProvirusTools << 'virsorter2'", workflow)
         self.assertIn("sharedProvirusTools << 'vicat_boundary'", workflow)

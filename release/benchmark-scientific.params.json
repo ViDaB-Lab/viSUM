@@ -1,0 +1,22 @@
+{
+  "run_genomad": true,
+  "run_virsorter2": true,
+  "run_cenotetaker3": true,
+  "run_deep6": true,
+  "run_deepmicroclass2": true,
+  "run_virbot": true,
+  "run_gianthunter": true,
+  "run_vicat": true,
+  "run_checkv": true,
+  "run_tesorter": true,
+  "run_vitap": true,
+  "run_vcontact3": true,
+  "genomad_score_calibration": true,
+  "genomad_composition": "metagenome",
+  "genomad_cleanup": false,
+  "allow_ct3_only_refinement": false,
+  "vicat_provirus_min_overlap": 0.5,
+  "harmonizer_audit": "full",
+  "rna_pair_homology_floor": true,
+  "harmonizer_max_rank": "family"
+}

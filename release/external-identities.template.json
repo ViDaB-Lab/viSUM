@@ -1,0 +1,22 @@
+{
+  "status": "REQUIRED_BEFORE_BENCHMARK",
+  "claim": "External databases, installed package builds, and prepared FASTAs are not included or reverified in the local code freeze.",
+  "prepared_inputs": {"preparation_summary_sha256": null, "checksums_sha256": null, "verification_report_sha256": null},
+  "external_databases": {
+    "genomad": null,
+    "virsorter2": null,
+    "cenotetaker3": null,
+    "checkv": null,
+    "deep6": null,
+    "virbot": null,
+    "deepmicroclass2": null,
+    "gianthunter": null,
+    "vicat_viral": null,
+    "vicat_nonviral": null,
+    "vitap": null,
+    "vcontact3": null,
+    "tesorter_database": null
+  },
+  "per_resource_required": ["resolved_path", "release_or_build_id", "preparation_manifest_sha256", "content_checksums_or_immutable_download_identity", "provenance_limits"],
+  "runtime_required": ["nextflow_version", "java_version", "resolved_environment_package_builds", "full_launch_command", "resolved_run_config", "hardware_and_resource_budget"]
+}

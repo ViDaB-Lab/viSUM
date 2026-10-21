@@ -1,0 +1,5 @@
+          Database type  Diamond database
+Database format version  3
+          Diamond build  185
+              Sequences  2708478
+                Letters  1170251384

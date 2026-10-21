@@ -24,14 +24,8 @@ class VitapAnalysisWorkflowContractTests(unittest.TestCase):
 
     def test_database_output_is_a_reusable_value_for_analysis_and_standardization(self) -> None:
         workflow = (ROOT / "visum_nextflow.nf").read_text(encoding="utf-8")
-        assignment = workflow.index(
-            "ch_vitap_database = PREPARE_VITAP_DATABASE.out.database"
-        )
-        invocation = workflow.index("RUN_VITAP(", assignment)
-        database_block = workflow[assignment:invocation]
-
-        self.assertIn("tuple(database, metadata)", database_block)
-        self.assertIn(".first()", database_block)
+        self.assertIn("ch_vitap_database = Channel.value(file(prepared.vitap.path))", workflow)
+        self.assertNotIn("PREPARE_VITAP_DATABASE", workflow)
         self.assertIn("if( runVitap ) harmonyOnlyTools << 'vitap'", workflow)
 
     def test_module_uses_refined_fasta_and_enforces_task_cpu_budget(self) -> None:
@@ -62,6 +56,8 @@ class VitapAnalysisWorkflowContractTests(unittest.TestCase):
     def test_standardizer_uses_refinement_map_and_vmr_taxonomy(self) -> None:
         module = (ROOT / "modules/local/standardize_vitap.nf").read_text(encoding="utf-8")
 
+        self.assertIn("    path vitap_database", module)
+        self.assertNotIn("vitap_database_metadata", module)
         self.assertIn("path(provirus_region_map)", module)
         self.assertIn("--region-map", module)
         self.assertIn("--best-lineages", module)

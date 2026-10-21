@@ -4,6 +4,12 @@ process RUN_TESORTER {
 
     conda "${projectDir}/envs/tesorter.yml"
 
+    beforeScript '''
+        # Python forkserver sockets can exceed AF_UNIX's path limit under a
+        # deeply nested inherited temp directory. Scope the short root here.
+        export TMPDIR=/tmp TEMP=/tmp TMP=/tmp
+    '''
+
     cpus { Math.min(params.tesorter_cpus as int, params.max_cpus as int) }
     memory params.tesorter_memory
     time params.tesorter_time

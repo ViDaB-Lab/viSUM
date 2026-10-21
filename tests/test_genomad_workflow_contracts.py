@@ -6,6 +6,17 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class GenomadWorkflowContractTests(unittest.TestCase):
+    def test_composition_option_is_validated_and_audited(self):
+        config=(REPOSITORY_ROOT/'visum.config').read_text()
+        module=(REPOSITORY_ROOT/'modules/local/run_genomad.nf').read_text()
+        workflow=(REPOSITORY_ROOT/'visum_nextflow.nf').read_text()
+        self.assertIn("genomad_composition = 'auto'",config)
+        self.assertIn("['auto', 'metagenome', 'virome']",module)
+        self.assertIn("['auto', 'metagenome', 'virome']",workflow)
+        self.assertIn('--composition ${composition}',module)
+        self.assertIn('score_calibration_composition_requested',module)
+        self.assertIn('${compositionFlag}',module)
+
     def test_score_calibration_is_enabled_by_default_and_audited(self) -> None:
         config = (REPOSITORY_ROOT / "visum.config").read_text(encoding="utf-8")
         module = (REPOSITORY_ROOT / "modules/local/run_genomad.nf").read_text(
