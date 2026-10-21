@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.0-beta.2 — local review candidate
+## 0.9.0-beta.2 — development candidate
 
 This candidate promotes the approved RC3 implementation for the next testing
 beta. It has not been tagged or published. Changes below are relative to beta.1;
@@ -31,10 +31,13 @@ the release-cleanup pass itself does not change RC3 biological decisions.
 ### Documentation and packaging
 
 - User guides focus on setup, single/batch runs, resume, configuration and interpretation.
-- Historical evaluation and release records have a separate maintainer index.
+- The runtime branch excludes test suites, benchmark/replay tools, historical
+  development notes and release-validation records. Earlier committed versions
+  remain available in Git history.
 - Existing public MIT license, motivation and beta.1 citation are preserved.
 - Version/help metadata identifies beta.2; no beta.2 DOI is invented.
-- Student-specific recovery and unused legacy helper files are excluded from the package.
+- Only helpers used by setup and analysis are shipped, alongside user guides,
+  required reference inputs, provenance and license information.
 
 ### Migration and limitations
 

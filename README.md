@@ -11,7 +11,7 @@ their origin, taxonomy, quality and conflicting evidence. viHARMONY integrates
 those results into sequence-level calls, with the detailed evidence retained for
 inspection. Support categories describe evidence, not calibrated probabilities.
 
-Version `0.9.0-beta.2` is currently a **local review candidate**, not a published
+Version `0.9.0-beta.2` is currently a **development candidate**, not a published
 release. Use for research; it is not validated for clinical diagnosis.
 
 ## What's changed since beta.1
@@ -43,10 +43,12 @@ with beta.2 results. See the [changelog](CHANGELOG.md).
 
 ## Get started
 
-Use Linux with Java, Nextflow, Conda and Mamba on `PATH`. From the installation
-directory, prepare the default tools once:
+Use Linux with Java, Nextflow, Conda and Mamba on `PATH`. Clone the candidate
+branch and prepare the default tools once:
 
 ```bash
+git clone --branch dev/beta.2-release https://github.com/ViDaB-Lab/viSUM.git
+cd viSUM
 nextflow run visum_nextflow.nf --setup
 ```
 
@@ -184,4 +186,3 @@ Report issues with your version, input type, redacted command and relevant
 logs. Do not upload private sequences or credentials. Complete fresh-install
 validation and the full release benchmark are still in progress; historical
 development results are not beta.2 performance measurements.
-Maintainer records are separate from the user guides: [development documentation](docs/development/README.md).

@@ -9,23 +9,18 @@ Nextflow to create each tool's Conda environment. Native Windows execution is
 not supported by this release's validation. The development runtime is Nextflow
 26.04.6; use that version when reproducing the tested configuration.
 
-The current beta.2 review archive can be extracted directly:
+Clone the beta.2 candidate branch:
 
 ```bash
-tar -xzf viSUM-v0.9.0-beta.2-review.tar.gz
-cd viSUM-v0.9.0-beta.2
+git clone --branch dev/beta.2-release https://github.com/ViDaB-Lab/viSUM.git
+cd viSUM
 nextflow run visum_nextflow.nf --help
 ```
 
-After the beta.2 tag is published, the equivalent repository installation is:
-
-```bash
-git clone --branch viSUMv0.9.0-beta.2 https://github.com/ViDaB-Lab/viSUM.git
-cd viSUM
-```
-
-That tag is not created by the local review package. Keep the installation in
-a stable directory with enough disk space for references and environments.
+This is a development branch, not a published beta.2 tag. Keep the installation
+in a stable directory with enough disk space for references and environments.
+The repository supplies the setup/analysis code, pinned reference inputs and
+user documentation; large databases and tool environments are prepared locally.
 
 ## Prepare databases once
 

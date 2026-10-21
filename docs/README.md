@@ -24,5 +24,5 @@ Options not commonly needed are documented beside their defaults in
 nextflow run visum_nextflow.nf --help
 ```
 
-Developer validation and release records have their own [index](development/README.md);
-they are not steps users need to perform to run viSUM.
+This branch contains runtime code and user documentation. Test suites and
+development records are not required for installation and are not shipped here.
