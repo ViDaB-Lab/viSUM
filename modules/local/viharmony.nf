@@ -10,7 +10,7 @@ process VIHARMONY {
     // Referenced task.ext values are native Nextflow cache dependencies.
     // A script-local computed value alone is NOT a dependency fingerprint.
     ext harmonizer_source_digest: {
-        def sources = ['run_viharmony.py', 'evidence_schema.py', 'ictv_reconciliation.py', 'te_routing.py', 'reporting_bundle.py']
+        def sources = ['run_viharmony.py', 'evidence_store.py', 'evidence_schema.py', 'ictv_reconciliation.py', 'te_routing.py', 'reporting_bundle.py']
         def sourceBytes = sources.collect { name -> file("${projectDir}/bin/${name}").text }.join('\n').getBytes('UTF-8')
         java.security.MessageDigest.getInstance('SHA-256').digest(sourceBytes).encodeHex().toString()
     }

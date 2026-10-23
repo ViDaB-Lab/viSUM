@@ -17,6 +17,10 @@ the release-cleanup pass itself does not change RC3 biological decisions.
   aligned Deep6 preparation/analysis environment.
 - No shipped task wall-time limits; viHARMONY defaults to a 32-GB request.
 - Bounded viHARMONY multiprocessing, configurable with `--harmonizer_cpus`.
+- Compact parent-side evidence storage and ordered row-reference indexes reduce
+  viHARMONY memory use without changing retention, taxonomy, TE routing or output
+  content in saved-data validation. The new helper participates in Nextflow's
+  cache fingerprint; existing completed searches need not be rerun for this change.
 
 ### Taxonomy, TE interpretation and output
 

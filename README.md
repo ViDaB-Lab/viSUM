@@ -20,6 +20,9 @@ release. Use for research; it is not validated for clinical diagnosis.
   preparation is separate from analysis; valid installed assets are reused.
 - **Faster viHARMONY.** Bounded multiprocessing is available through
   `--harmonizer_cpus`; the default remains one worker.
+- **Lower viHARMONY memory use.** Compact evidence storage reduces parent-side
+  memory without changing decision rules or output content. Large datasets can
+  still exceed the default 32-GB request; see [resource settings](docs/resources.md).
 - **Automatic viCAT source acquisition.** Setup can download the pinned MetaVR
   sources and the nonviral references selected by the packaged assembly list.
 - **Consistent taxonomy names.** A pinned ICTV reconciliation bundle translates

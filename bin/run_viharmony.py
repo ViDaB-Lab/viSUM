@@ -16,11 +16,12 @@ from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass, field
 from functools import lru_cache
 from heapq import merge
-from itertools import islice
+from itertools import chain, islice
 from pathlib import Path
 from typing import Iterable, TextIO
 
 from evidence_schema import is_review_only_evidence
+from evidence_store import EvidenceIndex, EvidenceTable
 from ictv_reconciliation import Reconciler
 import te_routing
 import reporting_bundle
@@ -300,8 +301,8 @@ def evidence_applies_to_final(
     return parent_id == final_parent or exact_id == final_parent
 
 
-def index_evidence_by_final(evidence_rows, final_to_parent, regions, refined):
-    """Narrow the search without changing applicability or evidence-row order."""
+def iter_evidence_by_final(evidence_rows, final_to_parent, regions, refined):
+    """Yield matches in original row/final order, without retaining row copies."""
     finals_by_parent = defaultdict(list)
     final_order = {}
     final_properties = {}
@@ -314,7 +315,6 @@ def index_evidence_by_final(evidence_rows, final_to_parent, regions, refined):
             len(refined[final_id]),
         )
     known_final_ids = set(final_to_parent)
-    rows_by_final = defaultdict(list)
     for row in evidence_rows:
         exact = row.get("sequence_id", "").strip()
         parent = row.get("parent_sequence_id", "").strip() or exact
@@ -340,7 +340,14 @@ def index_evidence_by_final(evidence_rows, final_to_parent, regions, refined):
                 final_id, final_to_parent[final_id], record_type, interval,
                 length, known_final_ids,
             ):
-                rows_by_final[final_id].append(row)
+                yield final_id, row
+
+
+def index_evidence_by_final(evidence_rows, final_to_parent, regions, refined):
+    """Dictionary index retained for callers needing original row identities."""
+    rows_by_final = defaultdict(list)
+    for final_id, row in iter_evidence_by_final(evidence_rows, final_to_parent, regions, refined):
+        rows_by_final[final_id].append(row)
     return rows_by_final
 
 
@@ -1818,36 +1825,41 @@ def run(args: argparse.Namespace) -> None:
         raise ValueError("Refined FASTA and provirus-region map contain different sequence IDs")
 
     final_to_parent = {sequence_id: row["parent_sequence_id"].strip() or sequence_id for sequence_id, row in regions.items()}
-    evidence_rows: list[dict[str, str]] = []
+    evidence_tables: list[EvidenceTable] = []
+    tools_present: set[str] = set()
     evidence_columns: list[str] = []
-    pair_loci_by_parent = defaultdict(list)
+    pair_loci_by_parent = EvidenceIndex()
     pair_floor = getattr(args, "rna_pair_homology_floor", False)
     for path in args.evidence:
-        columns, rows = read_tsv(path)
-        if path.name.endswith(".vicat_orf_evidence.tsv"):
+        locus_file = path.name.endswith(".vicat_orf_evidence.tsv")
+        rows = EvidenceTable(path, source_file=None if locus_file else path.name)
+        columns = rows.fieldnames
+        if locus_file:
             require(columns, {"sample_id", "sequence_id", "coordinates", "locus_classification",
                               "protein_length", "best_bitscore", "best_query_coverage", "best_subject_coverage"}, path)
             if any(row["sample_id"] != args.sample_id for row in rows):
                 raise ValueError(f"Locus sample mismatch in {path}")
             for row in rows:
                 # Keep exact ID matching and original locus order.
-                pair_loci_by_parent[row["sequence_id"]].append(row)
+                pair_loci_by_parent.add(row["sequence_id"], row)
             continue
         require(columns, {"sample_id", "sequence_id", "parent_sequence_id", "tool", "classification"}, path)
         evidence_columns.extend(column for column in columns if column not in evidence_columns)
         for row in rows:
             if row["sample_id"] != args.sample_id:
                 raise ValueError(f"Evidence sample mismatch in {path}: {row['sample_id']}")
-            row["_source_file"] = path.name
-            evidence_rows.append(row)
+            if row.get("tool"):
+                tools_present.add(row["tool"])
+        evidence_tables.append(rows)
 
-    groups_by_sequence: dict[str, list[dict[str, str]]] = defaultdict(list)
+    groups_by_sequence = EvidenceIndex()
     for path in args.vcontact3_groups:
-        columns, rows = read_tsv(path)
+        rows = EvidenceTable(path)
+        columns = rows.fieldnames
         if "sequence_id" not in columns:
             continue
         for row in rows:
-            groups_by_sequence[row["sequence_id"]].append(row)
+            groups_by_sequence.add(row["sequence_id"], row)
 
     msl, msl_release = load_msl(args.ictv_msl)
     reconciliation_bundle = getattr(args, "ictv_reconciliation", None)
@@ -1870,9 +1882,12 @@ def run(args: argparse.Namespace) -> None:
             "scope": "taxonomy-only copies; original evidence used for viral retention",
             "source_release_handling": "unknown per-tool release; exact current names retain current meaning",
             "audit_scope": "all named eligible calls" if args.audit_mode == "full" else "changed or unresolved named eligible calls"}
-    rows_by_final = index_evidence_by_final(
-        evidence_rows, final_to_parent, regions, refined
-    )
+    rows_by_final = EvidenceIndex.from_pairs(iter_evidence_by_final(
+        chain.from_iterable(evidence_tables), final_to_parent, regions, refined
+    ))
+    # Indexes own the tables still needed for decisions/reports. No flat list
+    # of row views or per-row dictionaries remains resident in the parent.
+    del evidence_tables
 
     metadata_rows: list[dict[str, object]] = []
     pair_floor_demoted_ids = []
@@ -2096,7 +2111,7 @@ def run(args: argparse.Namespace) -> None:
         "audit_mode": args.audit_mode,
         "reporting_bundle": {"schema_version": reporting_bundle.VERSION, "output_root": "..",
                              "missing_values": "NA", "review_fasta": False},
-        "tools_present": sorted({row.get("tool", "") for row in evidence_rows if row.get("tool")}),
+        "tools_present": sorted(tools_present),
         "policy": {
             "rna_checkv_conflict_exception": bool(args.input_type == "rna" and not getattr(args, "disable_rna_checkv_exception", False)),
             "rna_checkv_exception_ids": sorted(rna_checkv_exception_ids),

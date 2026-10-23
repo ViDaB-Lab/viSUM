@@ -43,6 +43,23 @@ For example, when available, request `--harmonizer_memory '48 GB'` within a
 `--max_memory '64 GB'` or larger local budget. These examples do not guarantee
 that every dataset fits.
 
+viHARMONY uses compact evidence storage, but its memory demand still grows with
+the inputs and accumulated outputs. One saved RNA dataset with 1,759,634 final
+records and eight workers used 68.7 GiB peak parent RAM, compared with 104.7 GiB
+before this storage change; elapsed time was similar. These are measurements on
+one dataset, not a memory bound or a general performance guarantee. Worker and
+other process memory require additional headroom. For a run of that scale, a
+128-GB task request and scheduling budget are a reasonable starting point if
+the machine can provide them:
+
+```text
+--harmonizer_cpus 8 --harmonizer_memory '128 GB' --max_memory '128 GB'
+```
+
+The default remains a 32-GB request, not a promise that every run fits in 32 GB.
+Monitor your own run and adjust requests, particularly on SLURM where exceeding
+the allocated memory may terminate a task.
+
 ## Wall-time limits
 
 viSUM does not impose task wall-time limits by default, including setup.
