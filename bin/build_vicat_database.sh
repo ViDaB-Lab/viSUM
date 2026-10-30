@@ -176,9 +176,26 @@ fi
 MEMBERS="$WORK_DIR/dedup/IMGVR5_UViG_clusters100.members.tsv.gz"
 if ! checkpoint_done cluster_members; then
     rm -f "$MEMBERS"
-    mmseqs createtsv "$SEQ_DB" "$SEQ_DB" "$CLUSTER_DB" /dev/stdout \
-        | pigz -p "$THREADS" > "$MEMBERS"
-    gzip -t "$MEMBERS"
+    # MMseqs may create numbered output shards; /dev/stdout.0 is not writable.
+    # Keep all shards/raw/compressed intermediates inside a private directory.
+    # Publish only a completed, validated gzip; never checkpoint a partial export.
+    (
+        export_dir=$(mktemp -d "$WORK_DIR/dedup/.members-export.XXXXXXXX")
+        case "$export_dir" in
+            "$WORK_DIR"/dedup/.members-export.*) ;;
+            *) echo 'ERROR: Unexpected membership staging path.' >&2; exit 1 ;;
+        esac
+        trap 'rm -f -- "$export_dir"/*; rmdir -- "$export_dir"' EXIT
+        mmseqs createtsv "$SEQ_DB" "$SEQ_DB" "$CLUSTER_DB" \
+            "$export_dir/members.tsv" --threads "$THREADS"
+        [[ -s "$export_dir/members.tsv" ]] || {
+            echo 'ERROR: MMseqs exported an empty membership table.' >&2
+            exit 1
+        }
+        pigz -p "$THREADS" -c "$export_dir/members.tsv" > "$export_dir/members.tsv.gz"
+        gzip -t "$export_dir/members.tsv.gz"
+        mv -- "$export_dir/members.tsv.gz" "$MEMBERS"
+    )
     mark_complete cluster_members
 fi
 

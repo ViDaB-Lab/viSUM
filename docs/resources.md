@@ -23,11 +23,32 @@ other users or independent Nextflow runs.
 | `local_safe` | 8 | 64 GB | Explicit conservative local preset |
 | `local_full` | 32 | 128 GB | Larger dedicated local budget |
 | `vicat_build` | 32 | 400 GB | Large viCAT source construction |
+| `vicat_build_low_memory` | 8 | 192 GB | Opt-in smaller viCAT build; full fresh-build validation pending |
 
 CLI overrides still apply. A profile is a configuration preset, not evidence
 that the machine has those resources. The viral viCAT build currently requests
 350 GB; this is a configurable allocation, not an established minimum. Its
 reference-building allocation is separate from sample-analysis requests.
+
+The lower-memory profile requests 8 CPUs/160 GB for the viral build task and
+sets `--vicat_taxonomy_memory '96 GB'` independently. This is DuckDB's buffer
+setting, not a total process cap. Without an explicit setting, it follows
+`--vicat_build_memory`, preserving existing behavior. CLI overrides remain
+available for all three build settings. The preset changes no clustering,
+taxonomy rules, reference identities or analysis resource defaults.
+
+The full-input taxonomy replay used 113.8 GiB peak RAM and took about 2h 5m,
+with all output values unchanged. The historical run used 310.2 GiB and took
+23m 40s, but used different threads/runtime settings; this is not a controlled
+performance comparison. Full-sized MMseqs stages historically exceeded 100 GiB.
+Do not interpret the 96-GB DuckDB setting as a 96-GB machine requirement or
+claim that the entire build fits on a 128-GB server. Complete fresh-build
+validation of the lower-memory preset remains pending. Allow substantial
+scratch space for DuckDB spill and the temporary uncompressed membership TSV.
+
+For SLURM, combine `-profile vicat_build_low_memory,slurm` with your site config.
+The low-memory profile does not force local execution. The local 192-GB budget
+is not a cluster reservation; the viral build's task request is 160 GB.
 
 ## viHARMONY workers
 

@@ -48,7 +48,7 @@ process PREPARE_VICAT_DATABASE {
           emit: database
 
     script:
-    def taxonomyMemory = params.vicat_build_memory.toString().replaceAll('\\s+', '')
+    def taxonomyMemory = (params.vicat_taxonomy_memory ?: params.vicat_build_memory).toString().replaceAll('\\s+', '')
     def autoMetavr = params.vicat_metavr_auto_download.toString().trim().toLowerCase() == 'true'
     """
     set -euo pipefail

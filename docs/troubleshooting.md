@@ -26,6 +26,9 @@ A scheduling budget cannot create RAM. viCAT's full viral reference build is
 configured to request 350 GB, whereas ordinary analysis uses separate requests.
 Check the selected profile, per-tool memory and actual machine/queue capacity.
 Do not merely lower a setting and assume the same full build will fit.
+The opt-in `vicat_build_low_memory` preset requests 160 GB and uses a separate
+96-GB DuckDB buffer setting. Taxonomy parity passed; complete fresh-build
+validation remains pending. See [viCAT resources](vicat-database-preparation.md#resources).
 
 ## Resume does not reuse expected tasks
 

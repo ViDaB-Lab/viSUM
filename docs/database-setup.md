@@ -45,6 +45,13 @@ configured allocation, not a measured minimum RAM requirement. The large build
 does not describe the resources needed to use an already-prepared database.
 See [viCAT preparation](vicat-database-preparation.md) for inputs and alternatives.
 
+For the opt-in smaller preset, replace `-profile vicat_build` with
+`-profile vicat_build_low_memory`: 8 viral-build threads, 160-GB task request,
+96-GB DuckDB buffer setting and a 192-GB local budget. Full-input taxonomy
+parity passed; complete fresh source-build validation of this preset is pending.
+This is not a 96-GB or 128-GB machine-support claim. Both presets reuse valid
+databases without reconstruction.
+
 ## Select tools and reuse existing assets
 
 Use the normal `--run_<tool>` switches in setup, for example

@@ -25,6 +25,10 @@ release. Use for research; it is not validated for clinical diagnosis.
   still exceed the default 32-GB request; see [resource settings](docs/resources.md).
 - **Automatic viCAT source acquisition.** Setup can download the pinned MetaVR
   sources and the nonviral references selected by the packaged assembly list.
+- **Safer viCAT membership export and optional lower-memory builds.** Named-file
+  export avoids MMseqs `/dev/stdout` failures. The opt-in
+  `vicat_build_low_memory` profile separates the task RAM request from DuckDB's
+  buffer setting; full source-build validation of this preset is still pending.
 - **Consistent taxonomy names.** A pinned ICTV reconciliation bundle translates
   supported names for taxonomy voting while preserving the original evidence.
 - **Family-default reporting.** `--harmonizer_max_rank family` limits reported
@@ -78,10 +82,20 @@ databases:
 nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build
 ```
 
-The full viCAT viral build is large: its current allocation is **350 GB RAM**,
-within the profile's 400-GB scheduling budget. This is not a measured minimum;
-check your server before starting. Building is separate from using an existing
-database. Enable viCAT during analysis with `--run_vicat true` as well.
+The default viral build requests **350 GB RAM**, within that profile's 400-GB
+scheduling budget. An opt-in lower-memory setup command is:
+
+```bash
+nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build_low_memory
+```
+
+This requests 8 build threads/160 GB and sets DuckDB's buffer to 96 GB within a
+192-GB local budget. The full-input taxonomy step passed at 113.8 GiB peak RAM
+with unchanged outputs; the complete fresh source build has not yet been tested
+with this preset. Neither profile establishes a minimum or guarantees fit.
+See [viCAT resources](docs/vicat-database-preparation.md#resources). Building is
+separate from using an existing database. Enable viCAT during analysis with
+`--run_vicat true` as well.
 
 - [Installation, single/batch runs and resume](docs/usage.md)
 - [Database setup and reuse](docs/database-setup.md)

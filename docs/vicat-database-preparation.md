@@ -67,12 +67,36 @@ annotation bytes. Record the finished database identity when reporting results.
 
 ## Resources
 
-The viral build requests **32 CPUs and 350 GB RAM**, capped by `max_cpus` for
-CPU allocation. The `vicat_build` profile provides a 32-CPU/400-GB local budget.
-The nonviral build requests 16 CPUs/64 GB by default. These are configurable
-allocations, not measured minimums or guarantees; lowering them is not known
-to make the full build fit on a smaller machine. Verify RAM and disk before
-starting. viSUM sets no build wall-time limit; queue policies still apply.
+The default viral build requests **32 CPUs and 350 GB RAM**, capped by
+`max_cpus` for CPU allocation. The `vicat_build` profile provides a
+32-CPU/400-GB local budget. Defaults are unchanged. To opt into smaller settings:
+
+```bash
+nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build_low_memory
+```
+
+This profile sets `vicat_build_cpus = 8`, `vicat_build_memory = '160 GB'`,
+`vicat_taxonomy_memory = '96 GB'`, and an 8-CPU/192-GB local scheduling budget.
+`vicat_build_memory` is the task RAM request; `vicat_taxonomy_memory` is only
+DuckDB's buffer setting and is not a process-wide RAM cap. When null (default),
+the DuckDB setting follows `vicat_build_memory` as before. All can be overridden
+explicitly without changing biological rules or source/reference identities.
+The profile does not force an executor; on HPC combine it with `slurm` and your
+site configuration. Analysis resource defaults are unchanged.
+
+Full-input taxonomy reconstruction with 8 threads/96GB DuckDB passed with
+**113.8 GiB peak RSS in about 2h 5m**. Every column and duplicate multiplicity
+in both taxonomy tables matched the original, as did all summary metrics.
+That validates this taxonomy setting, not an entire fresh installation or a
+minimum RAM requirement. Historical MMseqs stages exceeded 100 GiB. Complete
+fresh-build validation of the lower-memory preset remains pending; do not
+advertise support for 96-GB or 128-GB machines based on this result.
+
+The nonviral build requests 16 CPUs/64 GB by default (CPU allocation is capped
+by `max_cpus`, so at most 8 with the low-memory profile). No build wall-time
+limit is imposed; queue policies still apply. Allow ample disk for DuckDB spill
+and the temporary uncompressed membership TSV. Membership export now uses a
+private named file before compression/validation, rather than `/dev/stdout`.
 
 Use of an already-built database does not require the full build allocation.
 Analysis has its own resource settings. See [resources](resources.md).
@@ -139,6 +163,12 @@ Rerun setup with the same sources, destination and settings. Managed installatio
 locks prevent overlapping builders, and matching checkpoints may be reused.
 Do not remove installation markers or incomplete data just to bypass validation.
 Keep failed logs and build files for diagnosis.
+
+Builder code, thread and memory changes can invalidate an incomplete build's
+checkpoint fingerprint. Do not edit that fingerprint to force reuse or replace
+code beneath an active builder. Finish the original build with its original
+installation/settings, or use a separate new build destination. Valid completed
+databases are still reused without rebuilding when selecting the smaller preset.
 
 Use new destination paths to build changed references. A source option is not
 an instruction to overwrite a completed database. Keep versioned databases for

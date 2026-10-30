@@ -11,6 +11,12 @@ the release-cleanup pass itself does not change RC3 biological decisions.
 - Ordinary Nextflow entrypoint/config discovery and native resume.
 - Database preparation is a separate `--setup` command; analysis reads prepared assets.
 - Automatic, checksum-pinned MetaVR acquisition and frozen-vOTU metadata adaptation.
+- Atomic named-file MMseqs membership export avoids `/dev/stdout` shard failures;
+  failed export/compression does not publish an incomplete membership file.
+- Opt-in `vicat_build_low_memory`: 8 viral-build threads, 160-GB task request,
+  independent 96-GB DuckDB buffer setting, 192-GB local budget. Default build
+  resources are unchanged. Full-input taxonomy parity passed at 113.8 GiB peak
+  RSS; complete fresh source-build validation of this preset remains pending.
 - Nonviral reference acquisition from the packaged 480-assembly list.
 - Shared structural readiness checks and clearer failures for incomplete installations.
 - TEsorter short temporary root, vCONTACT3 Parquet dependency/runtime check, and

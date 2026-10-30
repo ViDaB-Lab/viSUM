@@ -347,6 +347,11 @@ PER-TOOL RESOURCE OVERRIDES
   --tesorter_cpus INT
   --vitap_cpus INT             --vcontact3_cpus INT
 
+  --vicat_build_cpus INT       Viral reference build threads (default: 32)
+  --vicat_build_memory SIZE    Viral build task RAM request (default: '350 GB')
+  --vicat_taxonomy_memory SIZE DuckDB buffer setting, not total RAM
+                              (default: follows vicat_build_memory)
+
   Each tool also has a corresponding --*_memory and --*_time option in
   visum.config. Tool CPU requests are capped by --max_cpus.
 
@@ -355,11 +360,14 @@ NOTES
   Setup installs/prepares assets; analysis only reads prepared assets.
   Setup reuses valid databases; it is not a command to force a rebuild/update.
   The vicat_build profile budgets 32 CPUs/400 GB; its viral build requests 350 GB.
-  Those are configurable allocations, not a measured minimum RAM requirement.
+  Opt-in vicat_build_low_memory: 8 build CPUs, 160-GB request, 96-GB DuckDB;
+  192-GB local budget. Taxonomy parity validated; full source-build test pending.
+  These are configurable allocations, not minimum RAM requirements or OS caps.
   No shipped task wall-time limits; cluster queue limits still apply.
   Preserve the launch .nextflow directory and work directory for resume.
   Use a new work/output directory when changing viSUM versions.
-  Profiles: local (default), local_safe, local_full, vicat_build, slurm.
+  Profiles: local (default), local_safe, local_full, vicat_build,
+            vicat_build_low_memory, slurm.
   SLURM users must supply their site's queue/account settings with -c site.config.
   Read docs/usage.md for examples and docs/reporting-bundle.md for output fields.
   Advanced version pins, download URLs, checksums, and database-build controls
