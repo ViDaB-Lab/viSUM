@@ -173,7 +173,7 @@ process PREPARE_VITAP_DATABASE {
         SOURCE_URL=\$(curl --fail --location --retry 5 --continue-at - \
             --output "\$DOWNLOAD_TMP" --write-out '%{url_effective}' \
             "\$ICTV_CURRENT_URL")
-        SOURCE_NAME=\$(basename "\${SOURCE_URL%%\?*}")
+        SOURCE_NAME=\$(basename "\${SOURCE_URL%%[?]*}")
         [[ "\$SOURCE_NAME" == *.xlsx ]] || {
             echo "ERROR: ICTV current-VMR URL resolved to an unexpected file: \$SOURCE_URL" >&2
             exit 1

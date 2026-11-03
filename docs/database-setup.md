@@ -28,6 +28,11 @@ Override `--dbdir` or `--tooldir` only when using another storage location.
 For an alternative Conda cache, set `conda.cacheDir` in your site config.
 Use the same asset configuration for setup and analysis.
 
+Conda is the default Nextflow environment backend; Mamba is optional. Process
+environments are stored in `<installation>/.conda/` unless explicitly overridden.
+See [Conda and optional Mamba](usage.md#conda-and-optional-mamba). There is no
+custom environment manager or automatic manager installation.
+
 ## Include optional viCAT
 
 All default programs are enabled except viCAT. To prepare those defaults plus

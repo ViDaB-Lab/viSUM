@@ -8,9 +8,18 @@ the release-cleanup pass itself does not change RC3 biological decisions.
 
 ### Usage and installation
 
+- Native Conda is now the default Nextflow environment backend; Mamba is an
+  explicit optional site setting. Environment prefixes remain in the
+  installation's `.conda` directory unless overridden. No custom manager,
+  backend auto-detection, shell-profile edits or manager installation is added.
+
 - Ordinary Nextflow entrypoint/config discovery and native resume.
 - Database preparation is a separate `--setup` command; analysis reads prepared assets.
 - Automatic, checksum-pinned MetaVR acquisition and frozen-vOTU metadata adaptation.
+- Portable VITAP URL query stripping avoids an invalid string escape rejected
+  by Nextflow 26.10.2 before setup starts; URL interpretation is unchanged.
+- Explicit help/setup/analysis branches replace workflow-level returns rejected
+  by Nextflow 26.10.2, without changing analysis rules or cancelling setup tasks.
 - Atomic named-file MMseqs membership export avoids `/dev/stdout` shard failures;
   failed export/compression does not publish an incomplete membership file.
 - Opt-in `vicat_build_low_memory`: 8 viral-build threads, 160-GB task request,

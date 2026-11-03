@@ -384,8 +384,7 @@ workflow {
         params.help?.toString()?.trim()?.toLowerCase() == 'true'
     if( helpRequested ) {
         println visumHelp()
-        return
-    }
+    } else {
 
     if( params.threads != null ) {
         error '--threads is no longer used because it could not distinguish a total workflow budget from per-tool threads. Use --max_cpus and, when needed, a tool-specific --*_cpus option.'
@@ -449,8 +448,7 @@ workflow {
             error '--setup does not accept analysis input parameters. Remove input/prefix/type/prefix_many/indir.'
         }
         DATABASE_SETUP()
-        return
-    }
+    } else {
 
     def singleMode = params.input != null
     def multiMode  = params.prefix_many != null
@@ -1651,4 +1649,6 @@ workflow {
                                 provisionalOriginalFasta, provisionalMetadata ->
         "VIHARMONY sample=${prefix} fasta=${normalizedFasta.name} metadata=${metadata.name}"
     }
+    } // analysis branch: never entered by --setup
+    } // non-help branch
 }

@@ -4,7 +4,8 @@
 
 ## Requirements and installation
 
-Use Linux with Java, Nextflow, Conda and Mamba available on `PATH`. viSUM uses
+Use Linux with Java, Nextflow and Conda available on `PATH`. Mamba is optional.
+viSUM uses
 Nextflow to create each tool's Conda environment. Native Windows execution is
 not supported by this release's validation. The development runtime is Nextflow
 26.04.6; use that version when reproducing the tested configuration.
@@ -21,6 +22,47 @@ This is a development branch, not a published beta.2 tag. Keep the installation
 in a stable directory with enough disk space for references and environments.
 The repository supplies the setup/analysis code, pinned reference inputs and
 user documentation; large databases and tool environments are prepared locally.
+
+## Conda and optional Mamba
+
+viSUM uses Nextflow's native Conda support. Nextflow creates, activates and
+reuses the process environments; viSUM does not install a package manager,
+modify the base environment or edit shell startup files. The default is:
+
+```groovy
+conda.enabled = true
+conda.useMamba = false
+conda.cacheDir = "${projectDir}/.conda"
+```
+
+Created environments live in `<installation>/.conda/env-<hash>/`, even when
+launched from another analysis directory. A site `conda.cacheDir` override is
+respected. The package manager itself and its package-download cache may live
+elsewhere; `conda.cacheDir` controls the process environment prefixes only.
+
+To check that Conda is visible from the noninteractive shell Nextflow uses:
+
+```bash
+bash -c 'command -v conda && conda --version'
+```
+
+If this fails, make the installed Conda executable available on the launch
+`PATH` or load the appropriate site module. An interactive alias alone is not
+sufficient. Nextflow will report environment-creation/activation failures and
+the environment prefix in its logs; no custom backend auto-detection is used.
+
+For optional Mamba, put this in `site.config`:
+
+```groovy
+conda.useMamba = true
+```
+
+Pass `-c site.config` to the normal setup/analysis command. Conda must still
+be available for activation, and Mamba must be available for creation. This is
+an explicit choice: an unavailable selected Mamba is not silently replaced.
+On HPC, executables and shared environment paths must be available from the
+relevant launch/compute nodes. Keep the same site configuration for setup and
+analysis. No changes to global Conda solver/channel settings are required by viSUM.
 
 ## Prepare databases once
 
