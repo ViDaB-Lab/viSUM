@@ -85,10 +85,11 @@ viCAT is off by default. To prepare its references too, see the large-build
 resource warning in [viCAT setup](vicat-database-preparation.md), then use:
 
 ```bash
-nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build
+nextflow run visum_nextflow.nf --setup --run_vicat true
 ```
 
-Use the same enabled tools and database paths during setup and analysis.
+On a larger server, add `-profile vicat_build_high_power` for a larger build
+allocation. Use the same enabled tools and database paths during setup and analysis.
 Existing valid databases are reused. Analysis does not download, build or
 automatically update databases. TEsorter has no separate database setup task;
 its packaged references are used when its analysis environment is created.

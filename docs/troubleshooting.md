@@ -33,13 +33,11 @@ failure. Use a new destination for genuinely changed source/reference identities
 
 ## Task memory exceeds available resources
 
-A scheduling budget cannot create RAM. viCAT's full viral reference build is
-configured to request 350 GB, whereas ordinary analysis uses separate requests.
-Check the selected profile, per-tool memory and actual machine/queue capacity.
-Do not merely lower a setting and assume the same full build will fit.
-The opt-in `vicat_build_low_memory` preset requests 160 GB and uses a separate
-96-GB DuckDB buffer setting. Taxonomy parity passed; complete fresh-build
-validation remains pending. See [viCAT resources](vicat-database-preparation.md#resources).
+The default viCAT viral reference build requests 160 GB of task memory and
+uses a 96 GB DuckDB buffer setting. The `vicat_build_high_power` profile
+requests 350 GB. Check the selected profile, task memory, and actual machine
+or queue capacity. Taxonomy parity passed with the default settings. Complete
+fresh-build validation remains pending. See [viCAT resources](vicat-database-preparation.md#resources).
 
 ## Resume does not reuse expected tasks
 

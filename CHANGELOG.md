@@ -22,10 +22,11 @@ the release-cleanup pass itself does not change RC3 biological decisions.
   by Nextflow 26.10.2, without changing analysis rules or cancelling setup tasks.
 - Atomic named-file MMseqs membership export avoids `/dev/stdout` shard failures;
   failed export/compression does not publish an incomplete membership file.
-- Opt-in `vicat_build_low_memory`: 8 viral-build threads, 160-GB task request,
-  independent 96-GB DuckDB buffer setting, 192-GB local budget. Default build
-  resources are unchanged. Full-input taxonomy parity passed at 113.8 GiB peak
-  RSS; complete fresh source-build validation of this preset remains pending.
+- Default viCAT setup uses 8 build threads, a 160 GB task request, a 96 GB
+  DuckDB buffer setting and a 192 GB local budget. The opt-in
+  `vicat_build_high_power` profile supplies the larger allocation. Full-input
+  taxonomy parity passed at 113.8 GiB peak RSS. Complete fresh-build validation
+  remains pending.
 - Nonviral reference acquisition from the packaged 480-assembly list.
 - Shared structural readiness checks and clearer failures for incomplete installations.
 - TEsorter short temporary root, vCONTACT3 Parquet dependency/runtime check, and
@@ -66,8 +67,9 @@ code or mutate environments under active runs. Results and TE destinations may
 legitimately differ from beta.1, and old filenames are not the new primary interface.
 
 Full fresh installation, assembled native real-tool smoke/resume, site-specific
-SLURM use and the complete benchmark remain separate checks. The large viral
-viCAT build still has a configurable 350-GB allocation, not a measured minimum.
+SLURM use and the complete benchmark remain separate checks. The viCAT build
+memory requests are configurable allocations. The minimum for a full build
+has yet to be measured.
 
 ## 0.9.0-beta.1
 

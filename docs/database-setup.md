@@ -30,7 +30,7 @@ Use the same asset configuration for setup and analysis.
 
 Conda is the default Nextflow environment backend; Mamba is optional. Process
 environments are stored in `<installation>/.conda/` unless explicitly overridden.
-See [Conda and optional Mamba](usage.md#conda-and-optional-mamba). There is no
+See [Environment settings](usage.md#conda-mamba-and-micromamba). There is no
 custom environment manager or automatic manager installation.
 
 ## Include optional viCAT
@@ -39,23 +39,17 @@ All default programs are enabled except viCAT. To prepare those defaults plus
 the viCAT viral and nonviral databases:
 
 ```bash
-nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build
+nextflow run visum_nextflow.nf --setup --run_vicat true
 ```
 
-The approved MetaVR sources and the packaged nonviral assembly selection can be
-downloaded automatically. No manually collected source files are required for
-that route. **Check available memory and disk first:** the current viral build
-requests 350 GB, and the profile budgets up to 32 CPUs/400 GB. This is a
-configured allocation, not a measured minimum RAM requirement. The large build
-does not describe the resources needed to use an already-prepared database.
-See [viCAT preparation](vicat-database-preparation.md) for inputs and alternatives.
-
-For the opt-in smaller preset, replace `-profile vicat_build` with
-`-profile vicat_build_low_memory`: 8 viral-build threads, 160-GB task request,
-96-GB DuckDB buffer setting and a 192-GB local budget. Full-input taxonomy
-parity passed; complete fresh source-build validation of this preset is pending.
-This is not a 96-GB or 128-GB machine-support claim. Both presets reuse valid
-databases without reconstruction.
+Setup can download the approved MetaVR sources and packaged nonviral assembly
+selection automatically. The default viral build requests 8 threads and
+160 GB RAM, with a 96 GB DuckDB buffer setting and a 192 GB local scheduling
+budget. For a larger server, add `-profile vicat_build_high_power` to request
+32 build threads and 350 GB RAM within a 400 GB local budget. Both settings
+reuse valid databases. Full-input taxonomy parity passed on the default
+settings, and the complete fresh build remains to be validated.
+See [viCAT preparation](vicat-database-preparation.md) for resource details.
 
 ## Select tools and reuse existing assets
 

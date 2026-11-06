@@ -25,10 +25,9 @@ release. Use for research; it is not validated for clinical diagnosis.
   still exceed the default 32-GB request; see [resource settings](docs/resources.md).
 - **Automatic viCAT source acquisition.** Setup can download the pinned MetaVR
   sources and the nonviral references selected by the packaged assembly list.
-- **Safer viCAT membership export and optional lower-memory builds.** Named-file
-  export avoids MMseqs `/dev/stdout` failures. The opt-in
-  `vicat_build_low_memory` profile separates the task RAM request from DuckDB's
-  buffer setting; full source-build validation of this preset is still pending.
+- **Safer viCAT export and lower-memory builds by default.** Named-file export
+  avoids MMseqs `/dev/stdout` failures. The optional `vicat_build_high_power`
+  profile increases the build resources for larger servers.
 - **Consistent taxonomy names.** A pinned ICTV reconciliation bundle translates
   supported names for taxonomy voting while preserving the original evidence.
 - **Family-default reporting.** `--harmonizer_max_rank family` limits reported
@@ -85,23 +84,16 @@ viCAT is optional and off by default. To also prepare its viral and nonviral
 databases:
 
 ```bash
-nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build
+nextflow run visum_nextflow.nf --setup --run_vicat true
 ```
 
-The default viral build requests **350 GB RAM**, within that profile's 400-GB
-scheduling budget. An opt-in lower-memory setup command is:
-
-```bash
-nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build_low_memory
-```
-
-This requests 8 build threads/160 GB and sets DuckDB's buffer to 96 GB within a
-192-GB local budget. The full-input taxonomy step passed at 113.8 GiB peak RAM
-with unchanged outputs; the complete fresh source build has not yet been tested
-with this preset. Neither profile establishes a minimum or guarantees fit.
-See [viCAT resources](docs/vicat-database-preparation.md#resources). Building is
-separate from using an existing database. Enable viCAT during analysis with
-`--run_vicat true` as well.
+The viral build defaults to 8 threads and a 160 GB task request, with a 96 GB
+DuckDB buffer setting and a 192 GB local scheduling budget. Add
+`-profile vicat_build_high_power` to request 32 build threads and 350 GB RAM
+within a 400 GB local budget. Full-input taxonomy parity passed with the
+lower-memory settings. Complete fresh source-build validation is pending.
+See [viCAT resources](docs/vicat-database-preparation.md#resources). Enable viCAT
+during analysis with `--run_vicat true` to use its prepared databases.
 
 - [Installation, single/batch runs and resume](docs/usage.md)
 - [Database setup and reuse](docs/database-setup.md)

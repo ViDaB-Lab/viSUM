@@ -4,7 +4,8 @@
 
 ## Local execution
 
-The default local scheduling budget is 8 CPUs and 64 GB. Set `--max_cpus` and
+The default local scheduling budget is 8 CPUs and 64 GB. For setup with viral
+viCAT enabled, the default memory budget is 192 GB. Set `--max_cpus` and
 `--max_memory` to the resources available for this invocation, for example:
 
 ```text
@@ -19,23 +20,19 @@ other users or independent Nextflow runs.
 
 | Profile | CPU budget | Memory budget | Purpose |
 | --- | --- | --- | --- |
-| `local` / default | 8 | 64 GB | Default local settings |
+| `local` / default | 8 | 64 GB | Ordinary setup and analysis |
+| `local` / default with viCAT setup | 8 | 192 GB | Lower-memory viCAT source build |
 | `local_safe` | 8 | 64 GB | Explicit conservative local preset |
 | `local_full` | 32 | 128 GB | Larger dedicated local budget |
-| `vicat_build` | 32 | 400 GB | Large viCAT source construction |
-| `vicat_build_low_memory` | 8 | 192 GB | Opt-in smaller viCAT build; full fresh-build validation pending |
+| `vicat_build_high_power` | 32 | 400 GB | Opt-in larger viCAT source build |
 
-CLI overrides still apply. A profile is a configuration preset, not evidence
-that the machine has those resources. The viral viCAT build currently requests
-350 GB; this is a configurable allocation, not an established minimum. Its
-reference-building allocation is separate from sample-analysis requests.
-
-The lower-memory profile requests 8 CPUs/160 GB for the viral build task and
-sets `--vicat_taxonomy_memory '96 GB'` independently. This is DuckDB's buffer
-setting, not a total process cap. Without an explicit setting, it follows
-`--vicat_build_memory`, preserving existing behavior. CLI overrides remain
-available for all three build settings. The preset changes no clustering,
-taxonomy rules, reference identities or analysis resource defaults.
+The default viral build task requests 8 CPUs and 160 GB RAM, with a separate
+96 GB DuckDB buffer setting. The high-power profile requests 32 CPUs and
+350 GB RAM. Its DuckDB buffer follows the task request unless overridden.
+The buffer setting covers DuckDB-managed memory. Peak process RAM can be
+higher. Override the build settings with `--vicat_build_cpus`,
+`--vicat_build_memory` or `--vicat_taxonomy_memory`. These build resources
+are separate from viCAT sample-analysis requests.
 
 The full-input taxonomy replay used 113.8 GiB peak RAM and took about 2h 5m,
 with all output values unchanged. The historical run used 310.2 GiB and took
@@ -46,9 +43,9 @@ claim that the entire build fits on a 128-GB server. Complete fresh-build
 validation of the lower-memory preset remains pending. Allow substantial
 scratch space for DuckDB spill and the temporary uncompressed membership TSV.
 
-For SLURM, combine `-profile vicat_build_low_memory,slurm` with your site config.
-The low-memory profile does not force local execution. The local 192-GB budget
-is not a cluster reservation; the viral build's task request is 160 GB.
+For SLURM, use `-profile slurm` with your site's settings. Combine it with
+`vicat_build_high_power` for the larger task request. The local scheduling
+budget applies to local execution.
 
 ## viHARMONY workers
 

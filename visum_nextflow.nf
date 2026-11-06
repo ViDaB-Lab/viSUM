@@ -201,8 +201,8 @@ USAGE
   Prepare the default tools before the first analysis:
     nextflow run visum_nextflow.nf --setup
 
-  Also build optional viCAT databases (large-memory build profile):
-    nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build
+  Also build optional viCAT databases:
+    nextflow run visum_nextflow.nf --setup --run_vicat true
 
   Single FASTA:
     nextflow run visum_nextflow.nf \\
@@ -235,7 +235,7 @@ OUTPUT AND RESOURCES
   --tooldir PATH               Override tool/model bundles [installation/tools].
   --max_cpus INT               Native local scheduling CPU budget and per-task
                                CPU ceiling [8]. Not an OS or cross-run quota.
-  --max_memory MEMORY          Native local scheduling memory budget [64 GB].
+  --max_memory MEMORY          Local scheduling budget [64 GB; 192 GB for viCAT setup].
   --harmonizer_audit MODE      none, compact, or full [compact].
   --harmonizer_max_rank RANK   Maximum reported taxonomy depth [family]; deeper calls stay in audits.
   --harmonizer_cpus INT        Bounded viHARMONY candidate workers [1]; decisions unchanged.
@@ -347,10 +347,9 @@ PER-TOOL RESOURCE OVERRIDES
   --tesorter_cpus INT
   --vitap_cpus INT             --vcontact3_cpus INT
 
-  --vicat_build_cpus INT       Viral reference build threads (default: 32)
-  --vicat_build_memory SIZE    Viral build task RAM request (default: '350 GB')
-  --vicat_taxonomy_memory SIZE DuckDB buffer setting, not total RAM
-                              (default: follows vicat_build_memory)
+  --vicat_build_cpus INT       Viral reference build threads [8].
+  --vicat_build_memory SIZE    Viral build task RAM request [160 GB].
+  --vicat_taxonomy_memory SIZE DuckDB buffer setting [96 GB]. Peak RAM can be higher.
 
   Each tool also has a corresponding --*_memory and --*_time option in
   visum.config. Tool CPU requests are capped by --max_cpus.
@@ -359,15 +358,15 @@ NOTES
   BOOL values must be true or false. Use -resume to reuse completed work.
   Setup installs/prepares assets; analysis only reads prepared assets.
   Setup reuses valid databases; it is not a command to force a rebuild/update.
-  The vicat_build profile budgets 32 CPUs/400 GB; its viral build requests 350 GB.
-  Opt-in vicat_build_low_memory: 8 build CPUs, 160-GB request, 96-GB DuckDB;
-  192-GB local budget. Taxonomy parity validated; full source-build test pending.
+  viCAT setup defaults to 8 build CPUs, a 160-GB task request and a 96-GB
+  DuckDB buffer setting within a 192-GB local budget. Full source-build test pending.
+  Opt-in vicat_build_high_power: 32 build CPUs, a 350-GB task request and a
+  400-GB local budget. DuckDB follows the task request unless overridden.
   These are configurable allocations, not minimum RAM requirements or OS caps.
   No shipped task wall-time limits; cluster queue limits still apply.
   Preserve the launch .nextflow directory and work directory for resume.
   Use a new work/output directory when changing viSUM versions.
-  Profiles: local (default), local_safe, local_full, vicat_build,
-            vicat_build_low_memory, slurm.
+  Profiles: local (default), local_safe, local_full, vicat_build_high_power, slurm.
   SLURM users must supply their site's queue/account settings with -c site.config.
   Read docs/usage.md for examples and docs/reporting-bundle.md for output fields.
   Advanced version pins, download URLs, checksums, and database-build controls

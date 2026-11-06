@@ -12,7 +12,7 @@ and analysis when you want its evidence.
 From the installation directory, after checking available resources:
 
 ```bash
-nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build
+nextflow run visum_nextflow.nf --setup --run_vicat true
 ```
 
 Default destinations are:
@@ -67,22 +67,19 @@ annotation bytes. Record the finished database identity when reporting results.
 
 ## Resources
 
-The default viral build requests **32 CPUs and 350 GB RAM**, capped by
-`max_cpus` for CPU allocation. The `vicat_build` profile provides a
-32-CPU/400-GB local budget. Defaults are unchanged. To opt into smaller settings:
+Viral viCAT setup defaults to 8 build threads and a 160 GB task RAM request
+within a 192 GB local scheduling budget. DuckDB uses a separate 96 GB buffer
+setting. For a larger server, select the high-resource profile:
 
 ```bash
-nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build_low_memory
+nextflow run visum_nextflow.nf --setup --run_vicat true -profile vicat_build_high_power
 ```
 
-This profile sets `vicat_build_cpus = 8`, `vicat_build_memory = '160 GB'`,
-`vicat_taxonomy_memory = '96 GB'`, and an 8-CPU/192-GB local scheduling budget.
-`vicat_build_memory` is the task RAM request; `vicat_taxonomy_memory` is only
-DuckDB's buffer setting and is not a process-wide RAM cap. When null (default),
-the DuckDB setting follows `vicat_build_memory` as before. All can be overridden
-explicitly without changing biological rules or source/reference identities.
-The profile does not force an executor; on HPC combine it with `slurm` and your
-site configuration. Analysis resource defaults are unchanged.
+This profile requests 32 build threads and 350 GB RAM within a 32-CPU, 400 GB
+local scheduling budget. DuckDB follows the task memory request unless
+`--vicat_taxonomy_memory` is set explicitly. Both settings support explicit
+resource overrides. For HPC, use `-profile slurm` or combine it with
+`vicat_build_high_power` for the larger allocation.
 
 Full-input taxonomy reconstruction with 8 threads/96GB DuckDB passed with
 **113.8 GiB peak RSS in about 2h 5m**. Every column and duplicate multiplicity
@@ -92,8 +89,8 @@ minimum RAM requirement. Historical MMseqs stages exceeded 100 GiB. Complete
 fresh-build validation of the lower-memory preset remains pending; do not
 advertise support for 96-GB or 128-GB machines based on this result.
 
-The nonviral build requests 16 CPUs/64 GB by default (CPU allocation is capped
-by `max_cpus`, so at most 8 with the low-memory profile). No build wall-time
+The nonviral build requests 16 CPUs/64 GB by default. The default CPU
+budget caps the allocation at 8. No build wall-time
 limit is imposed; queue policies still apply. Allow ample disk for DuckDB spill
 and the temporary uncompressed membership TSV. Membership export now uses a
 private named file before compression/validation, rather than `/dev/stdout`.
