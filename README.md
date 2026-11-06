@@ -50,8 +50,8 @@ with beta.2 results. See the [changelog](CHANGELOG.md).
 
 ## Get started
 
-Use Linux with Java, Nextflow and Conda on `PATH`. Mamba is optional; Nextflow
-uses Conda by default and manages environment creation, activation and reuse.
+Use Linux with Java, Nextflow and a supported package manager on `PATH`.
+Nextflow uses Conda by default and manages environment creation, activation and reuse.
 Clone the candidate
 branch and prepare the default tools once:
 
@@ -77,9 +77,9 @@ Databases default to `<installation>/databases`, tool/model bundles to
 `<installation>/tools`, and Conda environments to `<installation>/.conda`.
 You do not need to set those paths unless you want different locations.
 
-To use Mamba instead, set `conda.useMamba = true` in a site configuration and
-pass it with `-c site.config`. Both Conda and Mamba must then be available on
-the launch/task `PATH`. See [environment settings](docs/usage.md#conda-and-optional-mamba).
+Mamba and Micromamba are available through native Nextflow settings in
+`-c site.config`. See [environment settings](docs/usage.md#conda-mamba-and-micromamba)
+for the settings and required executables for each backend.
 
 viCAT is optional and off by default. To also prepare its viral and nonviral
 databases:

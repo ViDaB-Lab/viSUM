@@ -1,0 +1,12 @@
+name: visum-virsorter2
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python=3.10
+  - bioconda::virsorter=2.2.4=pyhdfd78af_2
+  # VirSorter2's internal Snakemake uses both commands. This Bioconda build
+  # requires conda-package-handling <=1.9, which these versions support.
+  - conda=23.3.1
+  - mamba=1.4.2

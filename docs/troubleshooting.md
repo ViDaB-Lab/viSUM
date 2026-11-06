@@ -9,20 +9,16 @@ contains `.command.sh`, `.command.out`, `.command.err` and `.command.log` where
 available. The launch directory has `.nextflow.log`; `<outdir>/reports/trace.txt`
 records task status. Preserve these files before changing or cleaning anything.
 
-## Conda/Mamba executable is not found
+## Conda, Mamba or Micromamba executable is not found
 
-The default backend is Conda, not Mamba. Check the same noninteractive shell
-used by Nextflow with `bash -c 'command -v conda && conda --version'`. Make the
-installed executable available on the launch `PATH` or load the site's module;
-viSUM does not install managers or modify shell startup files. If an existing
-site configuration selects `conda.useMamba = true`, both Mamba (creation) and
-Conda (activation) must be available. Remove that explicit selection to use the
-default Conda backend, or correct the installed Mamba path.
+Use `bash -c 'conda --version'` to check the default backend from the same
+shell that launches Nextflow. For `conda.useMamba = true`, check both `mamba`
+and `conda`. For `conda.useMicromamba = true`, check `micromamba`. Make the
+selected executable available on `PATH` or load the appropriate site module.
 
-Inspect Nextflow's environment-creation error and cache path in the launch log.
 `conda.cacheDir` defaults to `<installation>/.conda`; ensure that directory is
 writable and, on HPC, visible from the compute nodes. Do not delete environments
-that may be used by an active run. See [environment settings](usage.md#conda-and-optional-mamba).
+that may be used by an active run. See [environment settings](usage.md#conda-mamba-and-micromamba).
 
 ## Missing or incomplete databases
 

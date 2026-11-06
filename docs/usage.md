@@ -4,9 +4,8 @@
 
 ## Requirements and installation
 
-Use Linux with Java, Nextflow and Conda available on `PATH`. Mamba is optional.
-viSUM uses
-Nextflow to create each tool's Conda environment. Native Windows execution is
+Use Linux with Java, Nextflow and a supported package manager available on
+`PATH`. viSUM uses Nextflow to create each tool's Conda environment. Native Windows execution is
 not supported by this release's validation. The development runtime is Nextflow
 26.04.6; use that version when reproducing the tested configuration.
 
@@ -23,7 +22,7 @@ in a stable directory with enough disk space for references and environments.
 The repository supplies the setup/analysis code, pinned reference inputs and
 user documentation; large databases and tool environments are prepared locally.
 
-## Conda and optional Mamba
+## Conda, Mamba and Micromamba
 
 viSUM uses Nextflow's native Conda support. Nextflow creates, activates and
 reuses the process environments; viSUM does not install a package manager,
@@ -51,15 +50,22 @@ If this fails, make the installed Conda executable available on the launch
 sufficient. Nextflow will report environment-creation/activation failures and
 the environment prefix in its logs; no custom backend auto-detection is used.
 
-For optional Mamba, put this in `site.config`:
+To select a different backend, add its settings to `site.config` and pass
+`-c site.config` to both setup and analysis.
 
-```groovy
-conda.useMamba = true
-```
+| Backend | `conda.useMamba` | `conda.useMicromamba` | Commands required on `PATH` |
+| --- | --- | --- | --- |
+| Conda (default) | `false` | `false` | `conda` |
+| Mamba | `true` | `false` | `mamba` for creation and `conda` for activation |
+| Micromamba | `false` | `true` | `micromamba` |
 
-Pass `-c site.config` to the normal setup/analysis command. Conda must still
-be available for activation, and Mamba must be available for creation. This is
-an explicit choice: an unavailable selected Mamba is not silently replaced.
+For example, check Micromamba with `bash -c 'micromamba --version'`. For
+Mamba mode, check `bash -c 'mamba --version && conda --version'`.
+
+VirSorter2 uses the same pinned environment during database setup and analysis.
+That environment supplies Conda and Mamba for VirSorter2's internal Snakemake
+workflow independently of the backend Nextflow uses.
+
 On HPC, executables and shared environment paths must be available from the
 relevant launch/compute nodes. Keep the same site configuration for setup and
 analysis. No changes to global Conda solver/channel settings are required by viSUM.

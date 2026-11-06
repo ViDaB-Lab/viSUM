@@ -2,7 +2,7 @@ process PREPARE_VIRSORTER2_DATABASE {
 
     tag 'virsorter2_database'
 
-    conda "bioconda::virsorter=${params.virsorter2_version}"
+    conda "${projectDir}/envs/virsorter2.yml"
 
     cpus { Math.min(params.virsorter2_cpus as int, params.max_cpus as int) }
     memory params.virsorter2_memory
