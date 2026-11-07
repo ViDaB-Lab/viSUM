@@ -34,14 +34,14 @@ process PREDICT_VICAT_ORFS {
     LOG="${prefix}.vicat_orf_prediction.log"
     : > "\$LOG"
 
-    pyrodigal-gv -p meta -i "${normalized_fasta}" \
-        -a gv.faa -f gff -o gv.gff -j "${task.cpus}" \
+    python "${projectDir}/bin/predict_vicat_orfs_batched.py" --caller gv --input "${normalized_fasta}" \
+        --proteins gv.faa --gff gv.gff --threads "${task.cpus}" \
         >> "\$LOG" 2>&1
 
     rv_args=()
     if [[ "${type}" == 'rna' ]]; then
-        pyrodigal-rv -p meta -i "${normalized_fasta}" \
-            -a rv.faa -f gff -o rv.gff -j "${task.cpus}" \
+        python "${projectDir}/bin/predict_vicat_orfs_batched.py" --caller rv --input "${normalized_fasta}" \
+            --proteins rv.faa --gff rv.gff --threads "${task.cpus}" \
             >> "\$LOG" 2>&1
         rv_args=(--rv-proteins rv.faa --rv-gff rv.gff)
     fi
