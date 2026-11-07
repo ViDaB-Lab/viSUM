@@ -15,7 +15,8 @@ def check_parquet_runtime():
         pandas = importlib.import_module('pandas')
     except ImportError as exc:
         raise RuntimeError('vConTACT3 requires a working pandas/pyarrow Parquet runtime; '
-                           'repair or recreate only the selected vConTACT3 environment.') from exc
+                           'repair or recreate only the selected vConTACT3 environment. '
+                           'Import error: ' + str(exc)) from exc
     expected = pandas.DataFrame({
         'gene_id': ['test_gene_1', 'test_gene_2'],
         'genome_id': ['test_genome_1', 'test_genome_1'],

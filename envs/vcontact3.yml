@@ -14,11 +14,16 @@ dependencies:
   # subsequently stores string labels in it. Pandas 3 rejects that implicit
   # dtype change; 2.1.4 is within vConTACT3's declared >=2.1.1 requirement and
   # retains the behavior expected by the released implementation.
+  - numpy=1.26.4
   - pandas=2.1.4
   # vConTACT3 reads its gene/genome mapping with pandas.read_parquet.
   # Pandas does not install a Parquet engine by itself.
   - pyarrow=15.0.2
   - pip:
+      # Keep pip from replacing the compatible Conda-installed runtime.
+      - numpy==1.26.4
+      - pandas==2.1.4
+      - pyarrow==15.0.2
       # Official release 3.2.4. Pinning its resolved commit prevents a future
       # upstream tag or default-branch change from altering this environment.
       - git+https://bitbucket.org/MAVERICLab/vcontact3.git@d57ae81e0be5ab57a8a14692a4cb8ab255ce2d52
