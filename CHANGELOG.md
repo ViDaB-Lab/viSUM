@@ -40,6 +40,11 @@ the release-cleanup pass itself does not change RC3 biological decisions.
 
 ### Taxonomy, TE interpretation and output
 
+- Reporting retains unselected CheckV regional assessments as explicit aggregate
+  context, without changing whole-contig/child votes or completeness flags.
+- vCONTACT3's raw default value is labeled as an unassigned placeholder in the
+  detail view. These reporting corrections do not change retention or taxonomy.
+
 - Pinned ICTV name reconciliation with original/reconciled evidence kept in audits.
 - Family-default reporting ceiling with configurable maximum rank and uncapped audits.
 - Reviewed TE-specific routing and distinct partial/mixed/localized evidence flags.

@@ -1829,6 +1829,7 @@ def run(args: argparse.Namespace) -> None:
     tools_present: set[str] = set()
     evidence_columns: list[str] = []
     pair_loci_by_parent = EvidenceIndex()
+    checkv_reporting_context = EvidenceIndex()
     pair_floor = getattr(args, "rna_pair_homology_floor", False)
     for path in args.evidence:
         locus_file = path.name.endswith(".vicat_orf_evidence.tsv")
@@ -1850,6 +1851,16 @@ def run(args: argparse.Namespace) -> None:
                 raise ValueError(f"Evidence sample mismatch in {path}: {row['sample_id']}")
             if row.get("tool"):
                 tools_present.add(row["tool"])
+            if row.get("tool", "").strip().lower() == "checkv":
+                parent = row.get("parent_sequence_id", "").strip()
+                if (parent in regions and regions[parent].get("record_type") == "input_contig"
+                    and row.get("record_type") in {"provirus", "viral_region"}
+                    and row.get("sequence_id") != parent
+                    and parse_optional_interval(row.get("coordinates", "")) not in
+                        (None, (1, len(refined[parent])))):
+                    # Reporting-only context: never add an unselected partial
+                    # region to rows_by_final or to any worker's evidence.
+                    checkv_reporting_context.add(parent, row)
         evidence_tables.append(rows)
 
     groups_by_sequence = EvidenceIndex()
@@ -2100,6 +2111,7 @@ def run(args: argparse.Namespace) -> None:
     outputs = reporting_bundle.finalize(
         prefix, args.sample_id, metadata_rows, review_rows,
         rows_by_final, groups_by_sequence, outputs,
+        checkv_context_by_final=checkv_reporting_context,
     )
     manifest_path = prefix.parent / "audit" / f"{prefix.name}.harmonizer_manifest.json"
     manifest = {

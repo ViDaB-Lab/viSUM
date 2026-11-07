@@ -10,7 +10,7 @@ import re
 from contextlib import ExitStack
 from pathlib import Path
 
-VERSION = "reporting-bundle-v1"
+VERSION = "reporting-bundle-v1.1"
 RANKS = ("domain", "realm", "kingdom", "phylum", "class", "order", "family", "genus", "species")
 GROUP_RANKS = ("realm", "kingdom", "phylum", "class", "order", "family", "subfamily", "genus")
 SUMMARY_COLUMNS = [
@@ -75,7 +75,7 @@ def complete_call(quality, scope):
     return "NA"
 
 
-def quality_rows(sample, metadata, evidence):
+def quality_rows(sample, metadata, evidence, unselected_regions=()):
     final = metadata["final_sequence_id"]
     found = False
     for source in evidence:
@@ -97,6 +97,18 @@ def quality_rows(sample, metadata, evidence):
                       assessment_coordinates=(cell(source.get("coordinates")) if scope == "exact_candidate" else "NA"),
                       checkv_complete_call=complete_call(source.get("checkv_quality"), scope))
         yield result
+    for source in unselected_regions:
+        # These rows never enter candidate evaluation. CheckV's aggregate
+        # assessment exists, but the proposed region was not selected.
+        found = True
+        result = {key: cell(source.get(QUALITY_MAP.get(key, key))) for key in QUALITY_COLUMNS}
+        result.update(sample_id=sample, final_sequence_id=final,
+                      checkv_sequence_id=cell(source.get("sequence_id")),
+                      assessment_status="context_only",
+                      assessment_scope="unselected_proviral_aggregate_context",
+                      assessment_coordinates=cell(source.get("coordinates")),
+                      checkv_complete_call="NA")
+        yield result
     if not found:
         yield {**dict.fromkeys(QUALITY_COLUMNS, "NA"), "sample_id": sample,
                "final_sequence_id": final, "assessment_status": "no_matching_record"}
@@ -116,7 +128,8 @@ def group_rows(sample, final, sources):
             if not raw or raw.lower() in {"na", "nan", "none", "singleton", "unclassified", "-"}:
                 continue
             populated = True
-            kind = ("novel_group" if raw.startswith("novel_") else
+            kind = ("unassigned_placeholder" if raw.lower() == "default" else
+                    "novel_group" if raw.startswith("novel_") else
                     "unplaced_group" if raw.startswith("unplaced_") else
                     "unresolved" if "|" in raw else "named_prediction")
             yield {**base, "rank": rank, "raw_prediction": raw, "prediction_type": kind,
@@ -163,7 +176,8 @@ def taxonomy_row(metadata):
                for rank, name in zip(RANKS, names, strict=True)}}
 
 
-def finalize(prefix, sample, metadata_rows, reviews, evidence_by_final, groups_by_final, outputs):
+def finalize(prefix, sample, metadata_rows, reviews, evidence_by_final, groups_by_final, outputs,
+             checkv_context_by_final=None):
     """Write presentation tables, then relocate unmodified scientific artifacts."""
     prefix = Path(prefix)
     root, name = prefix.parent, prefix.name
@@ -188,7 +202,10 @@ def finalize(prefix, sample, metadata_rows, reviews, evidence_by_final, groups_b
             if review is not None and review["final_sequence_id"] == final:
                 reasons = str(review["review_reasons"]).split(",")
                 review = next(review_iter, None)
-            quality = list(quality_rows(sample, metadata, evidence_by_final.get(final, ())))
+            quality = list(quality_rows(
+                sample, metadata, evidence_by_final.get(final, ()),
+                checkv_context_by_final.get(final, ()) if checkv_context_by_final is not None else (),
+            ))
             checkv.writerows(quality)
             groups.writerows(group_rows(sample, final, groups_by_final.get(final, ())))
             summary = summary_row(sample, metadata, reasons, quality)

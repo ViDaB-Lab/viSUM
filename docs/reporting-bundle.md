@@ -1,6 +1,6 @@
 # viHARMONY reporting bundle
 
-`reporting-bundle-v1` organizes the completed viHARMONY results. The summary,
+`reporting-bundle-v1.1` organizes the completed viHARMONY results. The summary,
 quality, group and review views describe existing decisions; they do not
 independently reclassify candidates. Start with the viral summary and matching
 FASTA, then consult the detail tables below. See [interpreting results](interpretation.md).
@@ -81,7 +81,20 @@ The current standardizer copies original CheckV aggregate values onto proviral
 rows. An exact provirus ID is therefore labeled `proviral_aggregate_context`,
 not treated as independent child completeness. Parent-only rows are labeled
 `parent_context`; neither supplies a child's complete flag or fabricated
-assessment coordinates. Complete calls do not establish viral identity,
+assessment coordinates.
+
+When a partial CheckV region is not selected and the full input contig remains,
+its assessment is still shown with assessment_status=context_only and
+assessment_scope=unselected_proviral_aggregate_context. assessment_coordinates
+preserves the proposed region coordinates; checkv_record_length_nt preserves the
+source region length. The quality/completeness values are the original aggregate
+CheckV assessment, not an independent assessment of that region or the full final
+contig. Such context always has checkv_complete_call=NA, does not populate the
+summary's exact-candidate quality, and never supplies a retention/taxonomy vote.
+Multiple proposed regions may therefore have rows carrying the same aggregate
+assessment; do not count them as independent completeness measurements.
+
+Complete calls do not establish viral identity,
 infectivity, or complete representation of a segmented viral genome.
 
 vCONTACT3 table (14 columns):
@@ -93,8 +106,10 @@ standardization_decision host_domain vog_host_domain
 ```
 
 Each candidate/database/rank prediction is a separate row, including subfamily.
-Prediction types are `named_prediction`, `novel_group`, `unplaced_group` and
-`unresolved`. Missing predictions remain explicit singleton/no-matching rows;
+Prediction types are `named_prediction`, `novel_group`, `unplaced_group`,
+`unresolved` and `unassigned_placeholder`. The raw value `default` is preserved
+but labeled `unassigned_placeholder`; it is not an ICTV name. Missing predictions
+remain explicit singleton/no-matching rows;
 `singleton` is never presented as an assigned realm. Raw prediction spelling,
 reference/VOG/novel evidence and zero-valued supports are preserved, not re-scored.
 Database domain identifies the searched database, not a host assignment.

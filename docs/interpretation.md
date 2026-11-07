@@ -71,6 +71,10 @@ Missing, undetermined or non-direct assessments give `NA`.
 Check the assessment scope. Parent-only or proviral aggregate context does not
 establish completeness of an extracted child. A complete call does not prove
 infectivity or complete recovery of every segment of a segmented viral genome.
+Unselected partial CheckV regions remain visible as context_only /
+unselected_proviral_aggregate_context in the detail table. Proposed coordinates
+are preserved, but aggregate completeness is not promoted to a whole-contig or
+child assessment and the summary retains NA for non-direct quality.
 See [CheckV context](checkv-evidence-context.md).
 
 ## vCONTACT3 groups
@@ -82,6 +86,7 @@ singletons are not interchangeable:
 - A named tool prediction is evidence, not automatically the accepted consensus.
 - A novel group is local gene-sharing context, not a formally named ICTV taxon.
 - A singleton or missing match does not establish a new species or assigned realm.
+- The raw value default is an unassigned_placeholder, not a named ICTV prediction.
 - Database domain identifies which reference subset was searched, not a host call.
 
 Raw predictions can be deeper than the final reporting cap. Consult taxonomy
