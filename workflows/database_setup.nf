@@ -47,8 +47,9 @@ workflow DATABASE_SETUP {
         log.warn('TEsorter has no standalone database preparation process; its environment/reference runtime must be checked in the analysis smoke test.')
     }
     println "viSUM setup-only selection: ${flags.findAll { key, enabled -> enabled }.keySet().join(', ')}"
-    // A completion token serializes installations across different process types.
-    ready = Channel.value(true)
+    // Independent installers are scheduled by Nextflow's native resource budgets.
+    start = Channel.value(true)
+    completed = Channel.empty()
     if( flags.genomad ) {
         def userSuppliedDatabase = params.genomad_db != null
         def genomadDatabasePath = userSuppliedDatabase
@@ -58,7 +59,7 @@ workflow DATABASE_SETUP {
             ? 'user-supplied'
             : 'viSUM-managed'
 
-        ch_genomad_database_request = ready.map { ignored ->
+        ch_genomad_database_request = start.map { ignored ->
             tuple(
                 genomadDatabasePath,
                 genomadDatabaseSource,
@@ -68,7 +69,7 @@ workflow DATABASE_SETUP {
 
         PREPARE_GENOMAD_DATABASE(ch_genomad_database_request)
 
-        ready = PREPARE_GENOMAD_DATABASE.out.database.map { result -> true }.first()
+        completed = completed.mix(PREPARE_GENOMAD_DATABASE.out.database.map { result -> 'genomad' })
     }
     if( flags.virsorter2 ) {
         def userSuppliedDatabase = params.virsorter2_db != null
@@ -79,7 +80,7 @@ workflow DATABASE_SETUP {
             ? 'user-supplied'
             : 'viSUM-managed'
 
-        ch_virsorter2_database_request = ready.map { ignored ->
+        ch_virsorter2_database_request = start.map { ignored ->
             tuple(
                 virsorter2DatabasePath,
                 virsorter2DatabaseSource,
@@ -89,7 +90,7 @@ workflow DATABASE_SETUP {
 
         PREPARE_VIRSORTER2_DATABASE(ch_virsorter2_database_request)
 
-        ready = PREPARE_VIRSORTER2_DATABASE.out.database.map { result -> true }.first()
+        completed = completed.mix(PREPARE_VIRSORTER2_DATABASE.out.database.map { result -> 'virsorter2' })
     }
     if( flags.cenotetaker3 ) {
         def userSuppliedDatabase = params.ct3_db != null
@@ -100,7 +101,7 @@ workflow DATABASE_SETUP {
             ? 'user-supplied'
             : 'viSUM-managed'
 
-        ch_cenotetaker3_database_request = ready.map { ignored ->
+        ch_cenotetaker3_database_request = start.map { ignored ->
             tuple(
                 cenotetaker3DatabasePath,
                 cenotetaker3DatabaseSource,
@@ -111,7 +112,7 @@ workflow DATABASE_SETUP {
 
         PREPARE_CENOTETAKER3_DATABASE(ch_cenotetaker3_database_request)
 
-        ready = PREPARE_CENOTETAKER3_DATABASE.out.database.map { result -> true }.first()
+        completed = completed.mix(PREPARE_CENOTETAKER3_DATABASE.out.database.map { result -> 'cenotetaker3' })
     }
     if( flags.deep6 ) {
         def userSuppliedInstallation = params.deep6_dir != null
@@ -131,7 +132,7 @@ workflow DATABASE_SETUP {
             : 'bundled-with-installation'
 
 
-        ch_deep6_database_request = ready.map { ignored ->
+        ch_deep6_database_request = start.map { ignored ->
                 tuple(
                     deep6InstallationPath,
                     deep6InstallationSource,
@@ -145,7 +146,7 @@ workflow DATABASE_SETUP {
 
         PREPARE_DEEP6_DATABASE(ch_deep6_database_request)
 
-        ready = PREPARE_DEEP6_DATABASE.out.database.map { result -> true }.first()
+        completed = completed.mix(PREPARE_DEEP6_DATABASE.out.database.map { result -> 'deep6' })
     }
     if( flags.deepmicroclass2 ) {
         def userSuppliedInstallation = params.deepmicroclass2_dir != null
@@ -157,7 +158,7 @@ workflow DATABASE_SETUP {
             : 'viSUM-managed'
 
 
-        ch_deepmicroclass2_installation_request = ready.map { ignored ->
+        ch_deepmicroclass2_installation_request = start.map { ignored ->
                 tuple(
                     deepmicroclass2InstallationPath,
                     deepmicroclass2InstallationSource,
@@ -169,7 +170,7 @@ workflow DATABASE_SETUP {
 
         PREPARE_DEEPMICROCLASS2(ch_deepmicroclass2_installation_request)
 
-        ready = PREPARE_DEEPMICROCLASS2.out.installation.map { result -> true }.first()
+        completed = completed.mix(PREPARE_DEEPMICROCLASS2.out.installation.map { result -> 'deepmicroclass2' })
     }
     if( flags.virbot ) {
         def userSuppliedInstallation = params.virbot_dir != null
@@ -181,7 +182,7 @@ workflow DATABASE_SETUP {
             : 'viSUM-managed'
 
 
-        ch_virbot_installation_request = ready.map { ignored ->
+        ch_virbot_installation_request = start.map { ignored ->
                 tuple(
                     virbotInstallationPath,
                     virbotInstallationSource,
@@ -193,7 +194,7 @@ workflow DATABASE_SETUP {
 
         PREPARE_VIRBOT_DATABASE(ch_virbot_installation_request)
 
-        ready = PREPARE_VIRBOT_DATABASE.out.installation.map { result -> true }.first()
+        completed = completed.mix(PREPARE_VIRBOT_DATABASE.out.installation.map { result -> 'virbot' })
     }
     if( flags.gianthunter ) {
         def userSuppliedDatabase = params.gianthunter_db != null
@@ -205,7 +206,7 @@ workflow DATABASE_SETUP {
             : 'viSUM-managed'
 
 
-        ch_gianthunter_database_request = ready.map { ignored ->
+        ch_gianthunter_database_request = start.map { ignored ->
                 tuple(
                     gianthunterDatabasePath,
                     gianthunterDatabaseSource,
@@ -218,7 +219,7 @@ workflow DATABASE_SETUP {
 
         PREPARE_GIANTHUNTER_DATABASE(ch_gianthunter_database_request)
 
-        ready = PREPARE_GIANTHUNTER_DATABASE.out.database.map { result -> true }.first()
+        completed = completed.mix(PREPARE_GIANTHUNTER_DATABASE.out.database.map { result -> 'gianthunter' })
     }
     if( flags.vicat ) {
         def vicatSourceProteins = params.vicat_metavr_proteins == null
@@ -277,7 +278,7 @@ workflow DATABASE_SETUP {
             'download_vicat_nonviral_sources.py', 'download_vicat_refseq_metadata.py',
             'parse_diamond_dbinfo.py'].collect { file("${projectDir}/bin/${it}") }
 
-        ch_vicat_database_request = ready.map { ignored ->
+        ch_vicat_database_request = start.map { ignored ->
                 tuple(
                     vicatDatabasePath,
                     vicatDatabaseSource,
@@ -315,7 +316,7 @@ workflow DATABASE_SETUP {
 
 
 
-        ready = PREPARE_VICAT_NONVIRAL_DATABASE.out.database.map { result -> true }.first()
+        completed = completed.mix(PREPARE_VICAT_NONVIRAL_DATABASE.out.database.map { result -> 'vicat' })
     }
     if( flags.checkv ) {
         def userSuppliedDatabase = params.checkv_db != null
@@ -330,7 +331,7 @@ workflow DATABASE_SETUP {
             '--checkv_auto_download'
         )
 
-        ch_checkv_database_request = ready.map { ignored ->
+        ch_checkv_database_request = start.map { ignored ->
             tuple(
                 checkvDatabasePath,
                 checkvDatabaseSource,
@@ -340,7 +341,7 @@ workflow DATABASE_SETUP {
 
         PREPARE_CHECKV_DATABASE(ch_checkv_database_request)
 
-        ready = PREPARE_CHECKV_DATABASE.out.database.map { result -> true }.first()
+        completed = completed.mix(PREPARE_CHECKV_DATABASE.out.database.map { result -> 'checkv' })
     }
     if( flags.vitap ) {
         def userSuppliedDatabase = params.vitap_db != null
@@ -373,7 +374,7 @@ workflow DATABASE_SETUP {
             '--vitap_cleanup_source'
         )
 
-        ch_vitap_database_request = ready.map { ignored ->
+        ch_vitap_database_request = start.map { ignored ->
             tuple(
                 vitapDatabasePath,
                 vitapDatabaseSource,
@@ -389,7 +390,7 @@ workflow DATABASE_SETUP {
 
         PREPARE_VITAP_DATABASE(ch_vitap_database_request)
 
-        ready = PREPARE_VITAP_DATABASE.out.database.map { result -> true }.first()
+        completed = completed.mix(PREPARE_VITAP_DATABASE.out.database.map { result -> 'vitap' })
     }
     if( flags.vcontact3 ) {
         def userSuppliedDatabase = params.vcontact3_db != null
@@ -412,7 +413,7 @@ workflow DATABASE_SETUP {
             '--vcontact3_cleanup_archive'
         )
 
-        ch_vcontact3_database_request = ready.map { ignored ->
+        ch_vcontact3_database_request = start.map { ignored ->
             tuple(
                 vcontact3DatabasePath,
                 vcontact3DatabaseSource,
@@ -424,7 +425,13 @@ workflow DATABASE_SETUP {
 
         PREPARE_VCONTACT3_DATABASE(ch_vcontact3_database_request)
 
-        ready = PREPARE_VCONTACT3_DATABASE.out.database.map { result -> true }.first()
+        completed = completed.mix(PREPARE_VCONTACT3_DATABASE.out.database.map { result -> 'vcontact3' })
     }
-    ready.view { 'viSUM setup complete: all selected preparation processes passed. See outdir/database_setup for per-tool provenance. End-to-end runtime readiness still requires the small DNA/RNA analysis smoke test.' }
+    completed.collect().map { tools ->
+        def expected = flags.findAll { tool, enabled -> enabled }.keySet() as Set
+        if( tools.size() != expected.size() || tools.toSet() != expected ) {
+            error 'Setup did not complete every selected preparation process.'
+        }
+        'viSUM setup complete: all selected preparation processes passed. See outdir/database_setup for per-tool provenance. End-to-end runtime readiness still requires the small DNA/RNA analysis smoke test.'
+    }.view()
 }
