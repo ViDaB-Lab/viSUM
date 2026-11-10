@@ -289,6 +289,12 @@ PY
         }
     fi
 
+    # MMseqs chooses gzip decoding by suffix; keep the verified BGZF download intact.
+    if [[ "\$SOURCE_PROTEINS" == *.bgz ]]; then
+        ln -sf -- "\$(readlink -f "\$SOURCE_PROTEINS")" vicat_source_proteins.faa.gz
+        SOURCE_PROTEINS="\$PWD/vicat_source_proteins.faa.gz"
+    fi
+
     competitive_args=()
     if [[ "\$EXPECT_COMPETITIVE" == 'true' ]]; then
         competitive_args=(
