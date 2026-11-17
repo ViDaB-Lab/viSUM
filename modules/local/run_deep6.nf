@@ -8,6 +8,12 @@ process RUN_DEEP6 {
     memory params.deep6_memory
     time params.deep6_time
 
+    // Referenced task.ext values keep helper changes in Nextflow's task cache key.
+    ext deep6_selector_digest: {
+        def source = file("${projectDir}/bin/prepare_deep6_predictor.py").text.getBytes('UTF-8')
+        java.security.MessageDigest.getInstance('SHA-256').digest(source).encodeHex().toString()
+    }
+
     publishDir { "${params.outdir}/${prefix}_results/deep6" },
         mode: 'copy'
 
@@ -23,10 +29,12 @@ process RUN_DEEP6 {
           path("${prefix}.deep6.log"),
           path("${prefix}.deep6_run_metadata.tsv"),
           emit: results
+    path("${prefix}.deep6_model_selection.json"), emit: model_selection
 
     script:
     """
     set -euo pipefail
+    # Exact-length selector source: ${task.ext.deep6_selector_digest}
 
     if [[ "${type}" != 'rna' ]]; then
         echo "ERROR: Deep6 received non-RNA sample '${prefix}' with type '${type}'." >&2
@@ -49,7 +57,13 @@ process RUN_DEEP6 {
     export TF_NUM_INTRAOP_THREADS="${task.cpus}"
     export TF_NUM_INTEROP_THREADS='1'
 
-    if ! python "${deep6_installation}/Master/deep6.py" \
+    python "${projectDir}/bin/prepare_deep6_predictor.py" \
+        --installation "${deep6_installation}" \
+        --models "${deep6_models}" \
+        --output-dir deep6_runtime \
+        --report "${prefix}.deep6_model_selection.json"
+
+    if ! python deep6_runtime/deep6.py \
         -i "${normalized_fasta}" \
         -l ${params.deep6_minlen} \
         -m "${deep6_models}" \

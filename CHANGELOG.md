@@ -40,6 +40,13 @@ the release-cleanup pass itself does not change RC3 biological decisions.
 
 ### Taxonomy, TE interpretation and output
 
+- Deep6 now selects each pretrained model by its exact length prefix; the
+  upstream substring match could select a different model through fn500 in
+  its filename. Original installed code and weights remain unchanged, and a
+  model-selection JSON records the selected identities. Scores and qualified
+  calls can change where the previous selection was incorrect; thresholds and
+  CPU/thread settings are unchanged.
+
 - Reporting retains unselected CheckV regional assessments as explicit aggregate
   context, without changing whole-contig/child votes or completeness flags.
 - vCONTACT3's raw default value is labeled as an unassigned placeholder in the
