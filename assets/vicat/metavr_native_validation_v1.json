@@ -1,0 +1,35 @@
+{
+  "schema": "visum-metavr-native-source-evidence-v1",
+  "approval_date": "2026-10-20",
+  "scope": "All ordered protein IDs/exact sequences; all builder-consumed metadata after the pinned frozen-vOTU compatibility patch",
+  "protein": {
+    "review_archive_sha256": "c6a5264b8d05abab3baab86d5c5df0cac927ff41c73302aa67a92d2a23abfb91",
+    "report_sha256": "f8f5569ff01577996af8e20878d900f03a4a62831c4cad8458280d1c9adfb1a5",
+    "original_sha256": "e3a7b7826db5562b5a16c38f3033c0fa35a9b2d4a48ed25a4c37e516db471aa4",
+    "portal_sha256": "30ac6f74eceae3490ddd26e169d63efe66c1ae410775890ab029653afad49a8d",
+    "portal_bytes": 49996313962,
+    "fingerprint": {
+      "ordered_id_sequence_sha256": "e232cea4760c028b1290d76d25f6cc04bf752523984895c17e3d05a994019a4b",
+      "records": 369319989
+    },
+    "original_unchanged": true,
+    "portal_unchanged": true
+  },
+  "metadata": {
+    "review_archive_sha256": "d2d8bbe7a92b6ab56cbc1c0943cc315d4e75be4b616c961a1eef1e1f5afcec74",
+    "report_sha256": "a8d17ceef8a14988fbba1d0a2bf3418ac9329b57bd873a344b4824d396c03020",
+    "records": 24435662,
+    "status": "EXACT_MATCH",
+    "raw_metadata_sha256": "9136964eb5fe77f5546b12074197c88c5022d78eb5093582c5869f2059d7f692",
+    "prepared_metadata_sha256": "61e5e6f03409eb1bca942781e148a1c784191f8e0041e0534c46aa32d13900cf",
+    "patch_sha256": "2dd0e1e172898655d6c0dfed8ab6937a6f5edbcc8a2c308946254416e8bf4d26",
+    "recipe_sha256": "619c7f835250ad8f81ee725d3cdf6f1c21560f30adf76a1d56f3a443c63f864c",
+    "applied_rows": 1409,
+    "non_votu_changed_rows": 0,
+    "cache_reuse_verified": true,
+    "inputs_unchanged": true
+  },
+  "database_build_performed": false,
+  "full_fresh_install_verified": false,
+  "student_analyses_accessed": false
+}

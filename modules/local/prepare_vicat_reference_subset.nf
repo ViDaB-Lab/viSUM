@@ -12,7 +12,7 @@ process PREPARE_VICAT_REFERENCE_SUBSET {
 
     input:
     path diamonds
-    tuple path(vicat_database), path(vicat_database_metadata)
+    path vicat_database
 
     output:
     tuple path('vicat_reference_subset.parquet'),

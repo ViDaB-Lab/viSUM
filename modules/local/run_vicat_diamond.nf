@@ -13,7 +13,7 @@ process RUN_VICAT_DIAMOND {
 
     input:
     tuple val(prefix), val(type), path(orfs_faa), path(orf_map), path(header_map)
-    tuple path(vicat_database), path(vicat_database_metadata)
+    path vicat_database
 
     output:
     tuple val(prefix), val(type), path(orf_map), path(header_map),

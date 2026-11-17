@@ -28,20 +28,8 @@ process PREPARE_CHECKV_DATABASE {
 
     validate_database() {
         local candidate="\$1"
-        local hmm_file_count
-
-        [[ -d "\$candidate" && -r "\$candidate" ]] || return 1
-        [[ -s "\$candidate/genome_db/checkv_reps.faa" ]] || return 1
-        [[ -s "\$candidate/genome_db/checkv_reps.fna" ]] || return 1
-        [[ -s "\$candidate/genome_db/checkv_reps.tsv" ]] || return 1
-        [[ -s "\$candidate/genome_db/checkv_reps.dmnd" ]] || return 1
-        [[ -s "\$candidate/hmm_db/checkv_hmms.tsv" ]] || return 1
-        [[ -s "\$candidate/hmm_db/genome_lengths.tsv" ]] || return 1
-        [[ -d "\$candidate/hmm_db/checkv_hmms" ]] || return 1
-
-        hmm_file_count=\$(find "\$candidate/hmm_db/checkv_hmms" \
-            -maxdepth 1 -type f -size +0c | wc -l)
-        [[ "\$hmm_file_count" -gt 0 ]] || return 1
+        python "${projectDir}/bin/validate_reference_database.py" checkv \
+            "\$candidate" || return 1
 
         diamond dbinfo --db "\$candidate/genome_db/checkv_reps.dmnd" \
             >/dev/null 2>&1 || return 1

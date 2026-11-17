@@ -20,7 +20,7 @@ process STANDARDIZE_VITAP {
           path(uniref_fallback),
           path(vitap_log),
           path(run_metadata)
-    tuple path(vitap_database), path(vitap_database_metadata)
+    path vitap_database
 
     output:
     tuple val(prefix),

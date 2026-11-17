@@ -37,43 +37,9 @@ process PREPARE_VIRBOT_DATABASE {
         echo "Validation failed: \$1" >&2
     }
 
-    is_lfs_pointer() {
-        local candidate="\$1"
-        head -n 1 "\$candidate" 2>/dev/null \
-            | grep -q '^version https://git-lfs.github.com/spec/'
-    }
-
     validate_installation() {
         local candidate="\$1"
-        local report_errors="\${2:-false}"
-        local required_file
-        local database="\$candidate/virbot/data/ref"
-
-        if [[ ! -d "\$candidate" || ! -r "\$candidate" ]]; then
-            [[ "\$report_errors" == 'true' ]] && \
-                report_error "VirBot installation is missing or unreadable: \$candidate"
-            return 1
-        fi
-
-        for required_file in \
-            "\$candidate/virbot/VirBot.py" \
-            "\$candidate/virbot/__init__.py" \
-            "\$database/VirBot.hmm" \
-            "\$database/VirBot.dmnd" \
-            "\$database/VirBot_hmm_threshold.txt" \
-            "\$database/VirBot_hmm_taxa_full.txt" \
-            "\$database/VirBot_RNAvirus_acc.txt"; do
-            if [[ ! -s "\$required_file" ]]; then
-                [[ "\$report_errors" == 'true' ]] && \
-                    report_error "missing or empty required file: \$required_file"
-                return 1
-            fi
-            if is_lfs_pointer "\$required_file"; then
-                [[ "\$report_errors" == 'true' ]] && \
-                    report_error "Git-LFS pointer was not replaced by database content: \$required_file"
-                return 1
-            fi
-        done
+        python "${projectDir}/bin/validate_reference_database.py" virbot "\$candidate"
     }
 
     validate_runtime() {

@@ -36,23 +36,10 @@ process PREPARE_GIANTHUNTER_DATABASE {
 
     validate_database() {
         local candidate="\$1"
-        local required_file
-
-        [[ -d "\$candidate" && -r "\$candidate" ]] || return 1
-
-        for required_file in \
-            database.dmnd \
-            names.csv \
-            nodes.csv \
-            ProkaryoticGroup.pkl \
-            proteins.csv \
-            RefVirus.dmnd \
-            RefVirus.faa \
-            RefVirus_anno.pkl \
-            taxid.csv \
-            transformer.pth; do
-            [[ -s "\$candidate/\$required_file" ]] || return 1
-        done
+        local marker_args=()
+        [[ "\$DB_SOURCE" != 'user-supplied' ]] && marker_args=(--allow-installing)
+        python "${projectDir}/bin/validate_reference_database.py" gianthunter \
+            "\$candidate" "\${marker_args[@]}" || return 1
 
         diamond dbinfo --db "\$candidate/database.dmnd" >/dev/null 2>&1 || return 1
         diamond dbinfo --db "\$candidate/RefVirus.dmnd" >/dev/null 2>&1 || return 1
@@ -120,7 +107,7 @@ process PREPARE_GIANTHUNTER_DATABASE {
     exec 9>"\${DB_DEST}.install.lock"
     flock 9
 
-    if validate_database "\$DB_DEST"; then
+    if [[ ! -e "\$INSTALLING_MARKER" && ! -L "\$INSTALLING_MARKER" ]] && validate_database "\$DB_DEST"; then
         rm -f "\$INSTALLING_MARKER"
         emit_database 'skipped-existing-managed-database'
         exit 0

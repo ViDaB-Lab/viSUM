@@ -1,45 +1,55 @@
-# VITAP database selection
+# Select, reuse or update a VITAP database
 
-Normal reuse of a valid managed `current` database does not contact ICTV.
-There is no automatic update check on each analysis.
+[Database setup](database-setup.md)
 
-## Existing interfaces
+VITAP is enabled by default. Prepare its assets with the ordinary `--setup`
+command. On first installation, setup resolves the current ICTV VMR source and
+uses VITAP's preparation path, which may download additional required references.
 
-- `--vitap_db PATH`: validate and use this completed database without building
-  or downloading. User-supplied databases are not modified.
-- No explicit VMR or label, with `--vitap_update_database false`: validate and
-  reuse local `current`. If none exists, the existing first-install path remains
-  available when automatic downloading is enabled.
-- `--vitap_vmr PATH`: explicitly select source contents, even when local `current`
-  exists. No ICTV VMR download is needed, although building may download other
-  required references.
-- `--vitap_update_database true`: explicitly resolve a supplied VMR, or fetch
-  ICTV's current VMR when no file was supplied. This is not a forced rebuild.
-- `--vitap_db_label LABEL`: identify a separate release/build directory. A label
-  does not independently identify an ICTV download; pair it with a specific VMR
-  when selecting particular reference contents.
+## Reuse
 
-## Fingerprint and preservation guarantees
+Normal setup reuses a valid managed `current` database without checking for a
+new VMR. Analysis reads the selected completed database and never downloads or
+updates it. To use an existing external installation, set `--vitap_db PATH` in
+both setup and analysis; that database is not modified.
 
-A requested release can be reused only when its recorded VMR SHA256 matches.
-Missing or conflicting provenance causes an error before changing `current`.
-Use a distinct label to build separately; never relabel an existing database's
-provenance to claim it was built from a different source.
+## Select a particular VMR
 
-Source files are retained under `sources/<SHA256>/<original-filename>`, so files
-with identical names but different contents do not overwrite one another.
-Interrupted builds record their VMR fingerprint and reject mismatching or
-unrecorded build work. Legacy interrupted builds require inspection or a new
-label; they are not deleted automatically. Legacy completed databases remain
-usable through ordinary local reuse or an explicit `--vitap_db` path.
+During setup, supply a local workbook/CSV with `--vitap_vmr PATH`. A release label
+can be inferred from the filename or supplied with `--vitap_db_label LABEL`:
 
-A matching VMR fingerprint establishes VMR source identity, not full identity of
-UniRef90, taxonomy downloads, software environments or every generated file.
+```bash
+nextflow run visum_nextflow.nf --setup \
+  --vitap_vmr /references/VMR-source.xlsx --vitap_db_label my-vmr-release
+```
 
-## Separate setup/update workflow
+This explicitly selects that VMR even if managed `current` already exists.
+Building may still need other network downloads. A label alone does not specify
+the contents of an ICTV release; pair it with the intended VMR.
 
-Use `--setup` to run preparation without analysis inputs. VITAP is enabled by default; `--run_vitap true` can explicitly override a custom configuration that disables it.
-The same existing prepare process handles both modes. To explicitly check for an
-update, also set `--vitap_update_database true`; setup alone does not enable updates.
-Other enabled tools are also prepared; use the usual `--run_*` flags to select
-them. See [setup](database-setup.md). Full clean-install verification remains pending.
+## Check for an update
+
+```bash
+nextflow run visum_nextflow.nf --setup --vitap_update_database true
+```
+
+This resolves the supplied VMR, or ICTV's current endpoint if none was supplied.
+It is not a forced rebuild of a matching completed release. Other enabled tools
+are also checked by setup. Update flags are not accepted in ordinary analysis.
+
+## Preserve reference identity
+
+A requested release is reused only when its recorded VMR checksum matches.
+Conflicting/missing provenance fails rather than relabeling existing files.
+Sources are stored under `sources/<SHA256>/<original-filename>`. Matching
+interrupted work can be resumed; mismatching work requires inspection or a new
+label. Existing completed legacy databases can be supplied explicitly.
+
+Retain concrete release paths for analyses you need to reproduce. A matching
+VMR checksum identifies that VMR, not every UniRef90/taxonomy source or software
+environment used in construction. The VMR source, generated references and
+runtime identities should all be recorded.
+
+Updating VITAP does not automatically replace viSUM's separately pinned ICTV
+rank table or reconciliation bundle. Do not change reference assets used by an
+active analysis; prepare a new selection separately.

@@ -25,7 +25,7 @@ process RUN_VCONTACT3 {
           path(provirus_region_map),
           path(provirus_boundary_audit),
           path(provirus_refinement_summary)
-    tuple path(vcontact3_database), path(vcontact3_database_metadata)
+    tuple path(vcontact3_database), val(vcontact3_release)
     val database_domain_mode
 
     output:
@@ -42,6 +42,8 @@ process RUN_VCONTACT3 {
     script:
     """
     set -euo pipefail
+
+    python -B "${projectDir}/bin/check_vcontact3_parquet.py"
 
     RAW_DIRECTORY="${prefix}.vcontact3_raw"
     METADATA_FILE="${prefix}.vcontact3_run_metadata.tsv"
@@ -61,12 +63,12 @@ process RUN_VCONTACT3 {
     esac
 
     INPUT_COUNT=\$(awk '/^>/ { count++ } END { print count + 0 }' "${refined_fasta}")
-    DATABASE_VERSION=\$(awk -F '\t' 'NR == 2 { print \$6 }' "${vcontact3_database_metadata}")
+    DATABASE_VERSION="${vcontact3_release}"
     RESOLVED_DATABASE_PATH=\$(readlink -f "${vcontact3_database}")
     VCONTACT3_VERSION=\$(python -c "from importlib.metadata import version; print(version('vcontact3'))")
 
     if [[ ! "\$DATABASE_VERSION" =~ ^[0-9]{3}\$ ]]; then
-        echo "ERROR: Could not read a three-digit installed vConTACT3 database version from ${vcontact3_database_metadata}." >&2
+        echo "ERROR: Expected a three-digit prepared vConTACT3 database release." >&2
         exit 1
     fi
     if [[ -z "\$RESOLVED_DATABASE_PATH" || ! -d "\$RESOLVED_DATABASE_PATH" ]]; then

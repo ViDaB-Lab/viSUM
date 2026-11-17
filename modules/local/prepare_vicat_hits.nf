@@ -14,7 +14,7 @@ process PREPARE_VICAT_HITS {
     tuple val(prefix), val(type), path(orf_map), path(header_map),
           path(viral_diamond), path(nonviral_diamond)
     tuple path(reference_subset), path(reference_subset_metadata)
-    tuple path(vicat_nonviral_database), path(vicat_nonviral_database_metadata)
+    path vicat_nonviral_database
 
     output:
     tuple val(prefix), val(type), path(orf_map), path(header_map),

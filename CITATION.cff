@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "Cite the exact viSUM version and the tools/databases used. This beta.2 review candidate has no assigned DOI."
+type: software
+title: "viSUM: An integrated framework for viral sequence discovery, evidence harmonization, and confidence-aware taxonomic classification"
+authors:
+  - family-names: Veglia
+    given-names: "A. J."
+  - family-names: Rivera-Vicéns
+    given-names: "R. E."
+version: 0.9.0-beta.2
+license: MIT
+repository-code: "https://github.com/ViDaB-Lab/viSUM"
+url: "https://github.com/ViDaB-Lab/viSUM"
+keywords:
+  - virology
+  - metagenomics
+  - metatranscriptomics
+  - taxonomy

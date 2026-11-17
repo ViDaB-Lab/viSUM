@@ -17,7 +17,7 @@ process RUN_CHECKV {
           path(candidate_fasta),
           path(discovery_audit),
           path(discovery_summary)
-    tuple path(checkv_database), path(checkv_database_metadata)
+    path checkv_database
 
     output:
     tuple val(prefix),
@@ -123,9 +123,14 @@ process RUN_CHECKV {
         'NR > 1 && \$8 != "Not-determined" && \$8 != "" { count++ } END { print count + 0 }' \
         "\$QUALITY_SUMMARY")
     CHECKV_VERSION=\$(checkv --version 2>&1 | head -n 1)
-    DATABASE_RELEASE=\$(awk -F '\t' 'NR == 2 { print \$5 }' \
-        "${checkv_database_metadata}")
     RESOLVED_DATABASE_PATH=\$(readlink -f "${checkv_database}")
+    if [[ -s "\$RESOLVED_DATABASE_PATH/database_version" ]]; then
+        DATABASE_RELEASE=\$(head -n 1 "\$RESOLVED_DATABASE_PATH/database_version")
+    elif [[ -s "\$RESOLVED_DATABASE_PATH/.visum_database_release" ]]; then
+        DATABASE_RELEASE=\$(head -n 1 "\$RESOLVED_DATABASE_PATH/.visum_database_release")
+    else
+        DATABASE_RELEASE=\$(basename "\$RESOLVED_DATABASE_PATH")
+    fi
     if [[ -z "\$RESOLVED_DATABASE_PATH" || ! -d "\$RESOLVED_DATABASE_PATH" ]]; then
         echo "ERROR: Could not resolve the persistent CheckV database path from '${checkv_database}'." >&2
         exit 1

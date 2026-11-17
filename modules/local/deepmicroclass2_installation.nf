@@ -6,7 +6,7 @@ process PREPARE_DEEPMICROCLASS2 {
     // DeepMicroClass2 self-check a prerequisite for every accepted install.
     conda "${projectDir}/envs/deepmicroclass2.yml"
 
-    publishDir "${params.outdir}/software_setup",
+    publishDir "${params.outdir}/database_setup",
         mode: 'copy',
         pattern: 'deepmicroclass2_installation_metadata.tsv'
 
@@ -38,29 +38,7 @@ process PREPARE_DEEPMICROCLASS2 {
 
     validate_installation() {
         local candidate="\$1"
-        local report_errors="\${2:-false}"
-        local required_file
-
-        if [[ ! -d "\$candidate" || ! -r "\$candidate" ]]; then
-            [[ "\$report_errors" == 'true' ]] && \
-                report_error "DeepMicroClass2 installation is missing or unreadable: \$candidate"
-            return 1
-        fi
-
-        for required_file in \
-            "\$candidate/predict.py" \
-            "\$candidate/models.py" \
-            "\$candidate/utils.py" \
-            "\$candidate/model/300/DeepMicroClass-best.ckpt" \
-            "\$candidate/model/8-class/DeepMicroClass-best-500-8class.ckpt" \
-            "\$candidate/model/8-class/DeepMicroClass-best-1000-8class.ckpt" \
-            "\$candidate/model/8-class/DeepMicroClass-best-3000-8class.ckpt"; do
-            if [[ ! -s "\$required_file" ]]; then
-                [[ "\$report_errors" == 'true' ]] && \
-                    report_error "missing or empty required file: \$required_file"
-                return 1
-            fi
-        done
+        python "${projectDir}/bin/validate_reference_database.py" deepmicroclass2 "\$candidate"
     }
 
     validate_runtime() {

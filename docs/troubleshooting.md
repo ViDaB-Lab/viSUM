@@ -1,0 +1,83 @@
+# Troubleshooting
+
+[Usage](usage.md) · [Setup](database-setup.md) · [Resources](resources.md)
+
+## Find the relevant error
+
+Read the Nextflow error and the failed task's work directory. That directory
+contains `.command.sh`, `.command.out`, `.command.err` and `.command.log` where
+available. The launch directory has `.nextflow.log`; `<outdir>/reports/trace.txt`
+records task status. Preserve these files before changing or cleaning anything.
+
+## Conda, Mamba or Micromamba executable is not found
+
+Use `bash -c 'conda --version'` to check the default backend from the same
+shell that launches Nextflow. For `conda.useMamba = true`, check both `mamba`
+and `conda`. For `conda.useMicromamba = true`, check `micromamba`. Make the
+selected executable available on `PATH` or load the appropriate site module.
+
+`conda.cacheDir` defaults to `<installation>/.conda`; ensure that directory is
+writable and, on HPC, visible from the compute nodes. Do not delete environments
+that may be used by an active run. See [environment settings](usage.md#conda-mamba-and-micromamba).
+
+## Missing or incomplete databases
+
+Analysis never installs missing assets. Run setup with the same tool selection,
+database paths and site config as analysis. Verify paths from the execution host,
+not just the machine where you launched Nextflow. TEsorter's lack of a standalone
+setup task is expected; a nonzero exit or failed runtime import is not.
+
+Do not remove `.visum_installing` markers or edit receipts/checksums to force an
+incomplete installation to pass. Rerun matching setup or inspect the reported
+failure. Use a new destination for genuinely changed source/reference identities.
+
+## Task memory exceeds available resources
+
+The default viCAT viral reference build requests 160 GB of task memory and
+uses a 96 GB DuckDB buffer setting. The `vicat_build_high_power` profile
+requests 350 GB. Check the selected profile, task memory, and actual machine
+or queue capacity. Taxonomy parity passed with the default settings. Complete
+fresh-build validation remains pending. See [viCAT resources](vicat-database-preparation.md#resources).
+
+## Resume does not reuse expected tasks
+
+Keep `.nextflow/` from the original launch directory and the original work path.
+Repeat the same analysis command and select the correct run with `-resume RUN_NAME`
+if needed. Check `nextflow log` to distinguish setup from analysis sessions.
+Changed inputs, source, references or task parameters can invalidate a cache.
+Do not manually edit cached outputs or copy another run's database/cache into it.
+
+## Outputs look stale after a changed run
+
+Use the harmonizer manifest as the current inventory. Current emitted files
+replace same-named published copies, but publishing does not delete obsolete
+files from an older layout or optional view. Use a new output directory when
+changing versions or when you want to preserve an older report.
+
+## TEsorter reports `AF_UNIX path too long`
+
+This version gives TEsorter a short `/tmp` temporary root for multiprocessing.
+Ensure `/tmp` is writable on the execution node. Check the task's generated
+script and software version if an older environment/config override is in use.
+Do not replace code or environments underneath an active analysis.
+
+## vCONTACT3 reports a missing Parquet engine
+
+The supplied environment includes the expected pandas/pyarrow combination and
+an in-memory round-trip check. Confirm Nextflow is using this version's YAML and
+the intended Conda cache. Do not mutate a shared environment while another run
+uses it. Preserve the error and environment identity before repairing a private
+environment or choosing a new cache.
+
+## No viral sequences were exported
+
+Empty FASTAs and header-only tables are valid zero-call outputs. Verify the
+workflow completed, then inspect the summaries, dispositions, review tables and
+enabled programs. An empty export is not proof that the input contains no viruses.
+
+## Report an issue
+
+Provide the viSUM version/commit, Linux/runtime versions, input type, redacted
+command, failed task name and relevant logs. Explain expected versus observed
+behavior. Do not upload credentials, confidential sequences or private sample
+identifiers; use a small non-sensitive example when possible.

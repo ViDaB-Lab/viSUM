@@ -1,0 +1,8 @@
+{
+  "input": "/data/assembly.fasta",
+  "prefix": "sample01",
+  "type": "dna",
+  "outdir": "/data/sample01/results",
+  "max_cpus": 8,
+  "max_memory": "64 GB"
+}
