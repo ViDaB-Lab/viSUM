@@ -33,6 +33,10 @@ release. Use for research; it is not validated for clinical diagnosis.
 - **Family-default reporting.** `--harmonizer_max_rank family` limits reported
   depth; deeper predictions remain in the audits. A deeper cap permits, but
   does not create, a supported genus or species assignment.
+- **RNA homology safeguard enabled by default.** Weak Deep6/viCAT-only RNA
+  consensus becomes provisional unless a viral-supported protein match passes
+  the existing homology floor. Disable with `--rna_pair_homology_floor false`;
+  see [interpretation](docs/interpretation.md).
 - **Clearer viral and TE outputs.** Viral candidates have one combined FASTA
   with retained/provisional labels. TE candidates have a separate FASTA and
   summary. Review reasons are tables, not additional FASTA exports.

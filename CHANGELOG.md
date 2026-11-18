@@ -40,6 +40,12 @@ the release-cleanup pass itself does not change RC3 biological decisions.
 
 ### Taxonomy, TE interpretation and output
 
+- Enable the existing RNA Deep6/viCAT homology floor by default. Its scope and
+  thresholds are unchanged: eligible weak primary calls become provisional,
+  while DNA and calls outside this rule's scope are unaffected. Disable with
+  `--rna_pair_homology_floor false`. This changes the default RNA retention
+  policy; the earlier development-panel effect is not independent validation.
+
 - Deep6 now selects each pretrained model by its exact length prefix; the
   upstream substring match could select a different model through fn500 in
   its filename. Original installed code and weights remain unchanged, and a

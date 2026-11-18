@@ -23,6 +23,24 @@ The confidence label describes support, not a probability of being viral.
 No category establishes infectivity. An empty export does not necessarily mean
 the input is biologically nonviral: tools have detection limits.
 
+## RNA Deep6/viCAT homology safeguard
+
+The Nextflow pipeline enables `--rna_pair_homology_floor true` by default.
+It applies only to primary RNA calls supported by qualified Deep6 and viCAT
+without strong support or another qualifying origin tool. Review-only
+VirSorter2 hallmark evidence does not exempt a record from this rule.
+
+At least one viCAT viral-supported locus must have protein length >=100 aa,
+bitscore >=100, and query and subject coverage both >=50%. For an extracted
+region, the supporting locus must lie within that region. A failing primary
+call becomes provisional rather than being deleted; provisional records remain
+available in the combined viral export when assigned to that destination.
+The rule does not alter DNA calls, taxonomy thresholds or TE-routing rules.
+
+Set `--rna_pair_homology_floor false` to disable it. The observed reduction in
+labelled-negative primary retention came from development panels; performance
+on the new benchmark remains to be measured.
+
 ## Original sequences and extracted regions
 
 Summary fields retain original IDs, normalized parent IDs, record type and

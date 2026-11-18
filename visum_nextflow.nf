@@ -240,7 +240,7 @@ OUTPUT AND RESOURCES
   --harmonizer_max_rank RANK   Maximum reported taxonomy depth [family]; deeper calls stay in audits.
   --harmonizer_cpus INT        Bounded viHARMONY candidate workers [1]; decisions unchanged.
   --harmonizer_memory MEMORY   viHARMONY memory request [32 GB].
-  --rna_pair_homology_floor BOOL  Experimental RNA Deep6/viCAT-only homology floor [false].
+  --rna_pair_homology_floor BOOL  RNA Deep6/viCAT-only homology floor [true]; weak pairs become provisional.
   --show_channel_messages BOOL Print detailed channel emissions [false].
   --ictv_csv PATH              Canonical ICTV rank table [assets/ICTV_VMR_MSL41.csv].
   --ictv_reconciliation PATH   Matching pinned offline reconciliation bundle.
